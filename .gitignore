@@ -155,3 +155,4 @@ docker-compose.override.yml
 .temp/
 coverage/
 .nyc_output/
+src/turtlebot3_explorer/maps/*.jpg

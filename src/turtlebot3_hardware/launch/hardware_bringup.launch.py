@@ -46,7 +46,7 @@ def generate_launch_description():
         name='turtlebot3_webrtc',
         output='screen',
         arguments=[
-            '--server', 'http://10.10.14.70:3001',
+            '--server', 'http://192.168.0.2:3001',
             '--bot-id', LaunchConfiguration('bot_id'),
             '--device', LaunchConfiguration('device')
         ]

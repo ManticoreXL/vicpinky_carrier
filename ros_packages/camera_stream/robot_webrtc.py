@@ -363,7 +363,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="터틀봇 WebRTC 카메라 스트리머")
     parser.add_argument("--bot-id",  default="tb3_01",                  help="로봇 ID")
     parser.add_argument("--device",  type=int, default=0,               help="카메라 장치 번호")
-    parser.add_argument("--server",  default="http://10.10.14.70:3001", help="NestJS 서버 URL")
+    parser.add_argument("--server",  default="http://192.168.0.2:3001", help="NestJS 서버 URL")
     parser.add_argument("--width",    type=int, default=320, help="해상도 폭 (약한 WiFi면 낮게)")
     parser.add_argument("--height",   type=int, default=240, help="해상도 높이")
     parser.add_argument("--fps",      type=int, default=15,  help="프레임레이트")
