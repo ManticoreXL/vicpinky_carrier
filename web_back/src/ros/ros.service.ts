@@ -62,9 +62,10 @@ export class RosService implements OnModuleInit, OnModuleDestroy {
     const op = parsed['op'] as string;
 
     if (op === 'publish') {
-      // 구독 토픽 데이터 → 핸들러에 전달
+      const topic = parsed['topic'] as string;
+      this.logger.debug(`수신: ${topic}`);
       const msg: RosMessage = {
-        topic: parsed['topic'] as string,
+        topic,
         data: parsed['msg'] as Record<string, unknown>,
         timestamp: Date.now(),
       };

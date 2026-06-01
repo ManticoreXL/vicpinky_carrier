@@ -15,7 +15,7 @@ import type { ServiceCallPayload, TopicPublishPayload } from '../ros/ros.types';
 
 @WebSocketGateway({
   cors: { origin: '*' },   // 개발용 — 운영 시 origin 제한
-  namespace: '/ros',
+  //namespace: '/ros',
 })
 export class RosGateway
   implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect, OnModuleInit
@@ -30,8 +30,9 @@ export class RosGateway
   // ── 모듈 초기화 시 ROS 메시지 → 프론트 브로드캐스트 등록 ───────────────
   onModuleInit() {
     this.rosService.onMessage((msg) => {
-      // 모든 연결된 클라이언트에 실시간 전송
-      this.server.emit('ros_message', msg);
+      const count = this.server?.sockets?.sockets?.size ?? 0;
+      this.logger.debug(`브로드캐스트: ${msg.topic} → 클라이언트 ${count}개`);
+      this.server?.emit('ros_message', msg);
     });
   }
 
@@ -70,6 +71,22 @@ export class RosGateway
         service: payload.serviceName,
         response: res,
       });
+    });
+  }
+
+  // ── 프론트 → cmd_vel (터틀봇 이동 명령) ────────────────────────────────
+  @SubscribeMessage('cmd_vel')
+  handleCmdVel(
+    @MessageBody() payload: { botId: string; linear: number; angular: number },
+    @ConnectedSocket() _client: Socket,
+  ) {
+    this.rosService.publish({
+      topicName: `/${payload.botId}/cmd_vel`,
+      messageType: 'geometry_msgs/Twist',
+      message: {
+        linear:  { x: payload.linear,  y: 0.0, z: 0.0 },
+        angular: { x: 0.0, y: 0.0, z: payload.angular },
+      },
     });
   }
 

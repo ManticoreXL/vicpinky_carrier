@@ -28,7 +28,9 @@ export function useNestSocket() {
   const [rosMessages, setRosMessages] = useState<Record<string, RosMessage>>({});
 
   useEffect(() => {
-    const socket = io(NEST_URL, { transports: ["websocket"] });
+    const socket = io("http://localhost:3001", {
+      transports: ["polling", "websocket"],
+    });
     socketRef.current = socket;
 
     socket.on("connect", () => setNestConnected(true));
