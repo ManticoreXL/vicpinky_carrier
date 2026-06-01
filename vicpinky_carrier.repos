@@ -1,0 +1,21 @@
+repositories:
+  vic_pinky:
+    type: git
+    url: https://github.com/pinklab-art/vic_pinky.git
+    version: main
+  turtlebot3/turtlebot3:
+    type: git
+    url: https://github.com/ROBOTIS-GIT/turtlebot3.git
+    version: jazzy
+  turtlebot3/turtlebot3_msgs:
+    type: git
+    url: https://github.com/ROBOTIS-GIT/turtlebot3_msgs.git
+    version: jazzy
+  turtlebot3/turtlebot3_simulations:
+    type: git
+    url: https://github.com/ROBOTIS-GIT/turtlebot3_simulations.git
+    version: jazzy
+  DynamixelSDK:
+    type: git
+    url: https://github.com/ROBOTIS-GIT/DynamixelSDK.git
+    version: jazzy
