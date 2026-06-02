@@ -35,14 +35,14 @@ export default function OmxPanel({
 
   useEffect(() => {
     const subs = ARMS.map((id) =>
-      subscribe<StringMsg>(`/bigpinky/${id}/state`, "std_msgs/String",
+      subscribe<StringMsg>(`/vicpinky/${id}/state`, "std_msgs/String",
         (m) => setStates((p) => ({ ...p, [id]: m.data })))
     );
     return () => subs.forEach((s) => s?.unsubscribe());
   }, [subscribe]);
 
   const sendCmd = (id: ArmId, cmd: string) =>
-    publish(`/bigpinky/${id}/cmd`, "std_msgs/String", { data: cmd });
+    publish(`/vicpinky/${id}/cmd`, "std_msgs/String", { data: cmd });
 
   return (
     <div className="max-w-md flex flex-col gap-4">
@@ -63,7 +63,7 @@ export default function OmxPanel({
         ))}
         {/* Action */}
         <ActionPanel
-          robotNamespace="bigpinky"
+          robotNamespace="vicpinky"
           emitAction={emitAction}
           cancelAction={cancelAction}
           activeGoals={activeGoals}

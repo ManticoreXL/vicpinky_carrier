@@ -79,22 +79,30 @@ export class RosGateway
     });
   }
 
-  // ── 프론트 → cmd_vel (터틀봇 이동 명령) ────────────────────────────────
+  // ── 프론트 → cmd_vel ────────────────────────────────────────────────────
+  // vicpinky: geometry_msgs/Twist
+  // tb3_0X  : geometry_msgs/TwistStamped
   @SubscribeMessage('cmd_vel')
   handleCmdVel(
     @MessageBody() payload: { botId: string; linear: number; angular: number },
     @ConnectedSocket() _client: Socket,
   ) {
+    const isVicPinky = payload.botId === 'vicpinky';
     this.rosService.publish({
       topicName: `/${payload.botId}/cmd_vel`,
-      messageType: 'geometry_msgs/TwistStamped',
-      message: {
-        header: { stamp: { sec: 0, nanosec: 0 }, frame_id: '' },
-        twist: {
-          linear:  { x: payload.linear,  y: 0.0, z: 0.0 },
-          angular: { x: 0.0, y: 0.0, z: payload.angular },
-        },
-      },
+      messageType: isVicPinky ? 'geometry_msgs/Twist' : 'geometry_msgs/TwistStamped',
+      message: isVicPinky
+        ? {
+            linear:  { x: payload.linear,  y: 0.0, z: 0.0 },
+            angular: { x: 0.0, y: 0.0, z: payload.angular },
+          }
+        : {
+            header: { stamp: { sec: 0, nanosec: 0 }, frame_id: '' },
+            twist: {
+              linear:  { x: payload.linear,  y: 0.0, z: 0.0 },
+              angular: { x: 0.0, y: 0.0, z: payload.angular },
+            },
+          },
     });
   }
 

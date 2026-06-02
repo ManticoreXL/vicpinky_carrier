@@ -8,14 +8,14 @@ const FULL_THRESHOLD      = 95;               // % 이상 → 완충
 const FULL_RESET_BELOW    = 90;               // % 미만으로 떨어지면 완충 알림 초기화
 const SNOOZE_MS           = 10 * 60 * 1000;  // 10분
 
-const ALL_ROBOTS = ["bigpinky", "tb3_01", "tb3_02", "tb3_03", "tb3_04"] as const;
+// vicpinky는 battery 토픽 없음 — TB3만 배터리 모니터링
+const ALL_ROBOTS = ["tb3_01", "tb3_02", "tb3_03", "tb3_04"] as const;
 
 export const ROBOT_LABELS: Record<string, string> = {
-  bigpinky: "빅핑키",
-  tb3_01:   "터틀봇 1 (tb3_01)",
-  tb3_02:   "터틀봇 2 (tb3_02)",
-  tb3_03:   "터틀봇 3 (tb3_03)",
-  tb3_04:   "터틀봇 4 (tb3_04)",
+  tb3_01: "터틀봇 1 (tb3_01)",
+  tb3_02: "터틀봇 2 (tb3_02)",
+  tb3_03: "터틀봇 3 (tb3_03)",
+  tb3_04: "터틀봇 4 (tb3_04)",
 };
 
 // ── 타입 ──────────────────────────────────────────────────────────────────────
@@ -35,8 +35,7 @@ function getBatteryPct(
   robotId: string,
   rosMessages: Record<string, RosMessage>,
 ): number | null {
-  const topic =
-    robotId === "bigpinky" ? "/bigpinky/battery" : `/${robotId}/battery_state`;
+  const topic = `/${robotId}/battery_state`;
   const data = rosMessages[topic]?.data as { percentage?: number } | undefined;
   if (data?.percentage == null) return null;
   // TB3 펌웨어는 0~100, 일부 장치는 0~1 — 양쪽 대응

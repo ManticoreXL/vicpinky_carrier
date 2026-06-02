@@ -1,5 +1,5 @@
 export type RobotId =
-  | "bigpinky"
+  | "vicpinky"
   | "tb3_01"
   | "tb3_02"
   | "tb3_03"

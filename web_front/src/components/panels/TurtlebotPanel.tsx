@@ -304,21 +304,21 @@ export default function TurtlebotPanel({
           {batData ? (
             <div className="flex flex-col gap-2">
               <div className="flex items-center gap-3">
-                <div className="flex-1 h-2 bg-blue-950 rounded-full overflow-hidden border border-blue-900/60">
+                <div className="flex-1 h-1.5 bg-[#1a1a1a] overflow-hidden border border-[#2a2a2a]">
                   <div
-                    className={`h-full rounded-full transition-all ${
-                      (batPct ?? 0) < 20 ? "bg-red-500" : (batPct ?? 0) < 50 ? "bg-amber-500" : "bg-green-500"
+                    className={`h-full transition-all ${
+                      (batPct ?? 0) < 20 ? "bg-red-700" : (batPct ?? 0) < 50 ? "bg-[#666666]" : "bg-green-700"
                     }`}
                     style={{ width: `${batPct ?? 0}%` }}
                   />
                 </div>
-                <span className={`text-sm font-bold tabular-nums w-10 text-right ${
-                  (batPct ?? 0) < 20 ? "text-red-400" : (batPct ?? 0) < 50 ? "text-amber-400" : "text-green-400"
+                <span className={`text-xs font-black tabular-nums font-mono w-10 text-right ${
+                  (batPct ?? 0) < 20 ? "text-red-500" : (batPct ?? 0) < 50 ? "text-[#888888]" : "text-green-600"
                 }`}>{batPct ?? "—"}%</span>
               </div>
-              <div className="flex gap-4 text-xs text-gray-400">
-                {batV != null && <span>전압 <span className="text-white font-mono">{f(batV, 2)} V</span></span>}
-                {batA != null && <span>전류 <span className="text-white font-mono">{f(batA, 2)} A</span></span>}
+              <div className="flex gap-4 text-[10px] text-[#444444] font-mono">
+                {batV != null && <span>V <span className="text-[#c0c0c0]">{f(batV, 2)}</span></span>}
+                {batA != null && <span>A <span className="text-[#c0c0c0]">{f(batA, 2)}</span></span>}
               </div>
             </div>
           ) : <NoData />}
@@ -344,24 +344,24 @@ export default function TurtlebotPanel({
           <div className="flex flex-col gap-3">
             <button
               onClick={() => setKeyboardActive((v) => !v)}
-              className={`w-full py-2 rounded-lg text-sm font-semibold transition-colors ${
+              className={`w-full py-2.5 text-[11px] font-black uppercase tracking-[0.2em] transition-all border ${
                 keyboardActive
-                  ? "bg-green-600 hover:bg-green-500 text-white"
-                  : "bg-gray-700 hover:bg-gray-600 text-gray-300"
+                  ? "border-green-800/60 bg-green-950/30 text-green-500"
+                  : "border-[#222222] bg-transparent text-[#444444] hover:border-red-900/40 hover:text-[#888888]"
               }`}
             >
-              {keyboardActive ? "🟢 조종 활성 (ESC로 비활성)" : "⚫ 키보드 조종 시작"}
+              {keyboardActive ? "◉ 조종 활성 — ESC 비활성" : "◎ 키보드 조종 시작"}
             </button>
             {keyboardActive && (
               <>
-                <div className="grid grid-cols-3 gap-1 w-fit mx-auto text-xs text-center select-none">
+                <div className="grid grid-cols-3 gap-1 w-fit mx-auto select-none">
                   <div /><KeyCap label="W" sub="전진" /><div />
-                  <KeyCap label="A" sub="좌회전" />
+                  <KeyCap label="A" sub="좌" />
                   <KeyCap label="S" sub="후진" />
-                  <KeyCap label="D" sub="우회전" />
+                  <KeyCap label="D" sub="우" />
                 </div>
-                <p className="text-xs text-gray-500 text-center">
-                  누르는 동안 이동 · 떼면 정지 · 0.2 m/s · 1.0 rad/s
+                <p className="text-[9px] text-[#333333] text-center font-mono uppercase tracking-widest">
+                  누르는 동안 이동 · 0.2 m/s · 1.0 rad/s
                 </p>
               </>
             )}
@@ -371,19 +371,23 @@ export default function TurtlebotPanel({
         {/* ── YOLO 감지 ───────────────────────────────────────────────────── */}
         <Section label="YOLO 감지">
           <div className="flex items-center gap-3">
-            <div className={`w-3 h-3 rounded-full transition-colors ${
-              detected ? "bg-yellow-400 shadow-md shadow-yellow-400/50 animate-pulse" : "bg-blue-900"
+            <div className={`w-2.5 h-2.5 transition-colors ${
+              detected ? "bg-red-600 danger-pulse shadow shadow-red-600/60" : "bg-[#1e1e1e]"
             }`} />
-            <span className={`text-sm font-semibold ${detected ? "text-yellow-400" : "text-blue-400/40"}`}>
-              {detected ? "사람 감지됨" : "미감지"}
+            <span className={`text-xs font-black uppercase tracking-widest font-mono ${
+              detected ? "text-red-500" : "text-[#2a2a2a]"
+            }`}>
+              {detected ? "⚠ PERSON DETECTED" : "CLEAR"}
             </span>
           </div>
         </Section>
 
         {/* ── URDF 수신 여부 ──────────────────────────────────────────────── */}
         <Section label="robot_description">
-          <span className={`text-sm font-semibold ${rdReceived ? "text-green-400" : "text-blue-400/30"}`}>
-            {rdReceived ? "✓ URDF 수신됨" : "대기 중…"}
+          <span className={`text-[10px] font-black uppercase tracking-widest font-mono ${
+            rdReceived ? "text-green-600" : "text-[#2a2a2a]"
+          }`}>
+            {rdReceived ? "◉ URDF RECEIVED" : "WAITING…"}
           </span>
         </Section>
 
@@ -406,11 +410,9 @@ export default function TurtlebotPanel({
 
 function SensorCard({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <p className="text-[11px] font-semibold text-amber-400/50 uppercase tracking-widest">{label}</p>
-      <div className="bg-[#020e25] rounded-xl p-3 border border-blue-900/60 h-full">
-        {children}
-      </div>
+    <div className="flex flex-col gap-1">
+      <p className="text-[9px] font-bold text-[#444444] uppercase tracking-[0.25em]">{label}</p>
+      <div className="bg-[#0a0a0a] p-3 border border-[#1e1e1e] h-full">{children}</div>
     </div>
   );
 }
@@ -418,21 +420,23 @@ function SensorCard({ label, children }: { label: string; children: React.ReactN
 function TRow({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) {
   return (
     <tr>
-      <td className="text-blue-300/50 py-0.5 pr-2 whitespace-nowrap">{label}</td>
-      <td className={`font-mono text-right ${highlight ? "text-red-400 font-bold" : "text-blue-100"}`}>{value}</td>
+      <td className="text-[#444444] font-mono py-0.5 pr-2 whitespace-nowrap text-[10px]">{label}</td>
+      <td className={`font-mono text-right text-[10px] ${
+        highlight ? "text-red-500 font-black danger-pulse" : "text-[#c0c0c0]"
+      }`}>{value}</td>
     </tr>
   );
 }
 
 function VelDisplay({ label, value, unit }: { label: string; value: number | null; unit: string }) {
   const v = value ?? 0;
-  const color = v > 0.001 ? "text-green-400" : v < -0.001 ? "text-red-400" : "text-gray-400";
+  const color = v > 0.001 ? "text-green-600" : v < -0.001 ? "text-red-500" : "text-[#333333]";
   return (
-    <div className="bg-gray-900 rounded-lg px-3 py-2 flex flex-col gap-0.5">
-      <span className="text-[10px] text-gray-500 uppercase tracking-wide">{label}</span>
-      <span className={`text-lg font-mono font-bold ${color}`}>
+    <div className="bg-[#080808] border border-[#1e1e1e] px-3 py-2 flex flex-col gap-0.5">
+      <span className="text-[9px] text-[#333333] uppercase tracking-widest font-mono">{label}</span>
+      <span className={`text-lg font-mono font-black tabular-nums ${color}`}>
         {v >= 0 ? "+" : ""}{v.toFixed(3)}
-        <span className="text-xs text-gray-500 ml-1">{unit}</span>
+        <span className="text-[10px] text-[#333333] ml-1">{unit}</span>
       </span>
     </div>
   );
@@ -441,10 +445,11 @@ function VelDisplay({ label, value, unit }: { label: string; value: number | nul
 function KeyCap({ label, sub }: { label: string; sub: string }) {
   return (
     <div className="flex flex-col items-center gap-0.5">
-      <div className="w-10 h-10 bg-gray-700 border border-gray-600 rounded-md flex items-center justify-center font-bold text-white text-sm shadow">
+      <div className="w-10 h-10 bg-[#0a0a0a] border border-red-900/50 flex items-center
+                      justify-center font-black text-[#c0c0c0] text-sm font-mono">
         {label}
       </div>
-      <span className="text-gray-500 text-[10px]">{sub}</span>
+      <span className="text-[#333333] text-[9px] font-mono uppercase">{sub}</span>
     </div>
   );
 }
