@@ -1,7 +1,7 @@
 export type RobotId =
   | "bigpinky"
-  | "turtlebot1"
-  | "turtlebot2"
-  | "turtlebot3"
-  | "turtlebot4"
+  | "tb3_01"
+  | "tb3_02"
+  | "tb3_03"
+  | "tb3_04"
   | "omx";

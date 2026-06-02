@@ -1,10 +1,28 @@
 import { useEffect, useState } from "react";
 import { PanelProps } from "../../hooks/useRos";
+import ActionPanel from "../ActionPanel";
+import type {
+  ActionGoalPayload,
+  ActionFeedback,
+  ActionResult,
+  ActiveGoals,
+} from "../../hooks/useNestSocket";
 
 interface StringMsg { data: string }
 interface BatteryMsg { percentage: number }
 
-export default function BigPinkyPanel({ subscribe, publish }: PanelProps) {
+interface Props extends PanelProps {
+  emitAction: (payload: ActionGoalPayload) => void;
+  cancelAction: (actionName: string, goalId: string) => void;
+  activeGoals: ActiveGoals;
+  actionFeedbacks: Record<string, ActionFeedback>;
+  actionResults: Record<string, ActionResult>;
+}
+
+export default function BigPinkyPanel({
+  subscribe, publish,
+  emitAction, cancelAction, activeGoals, actionFeedbacks, actionResults,
+}: Props) {
   const [ramp, setRamp] = useState("unknown");
   const [battery, setBattery] = useState<number | null>(null);
 
@@ -46,6 +64,16 @@ export default function BigPinkyPanel({ subscribe, publish }: PanelProps) {
             <NoData />
           )}
         </Section>
+
+        {/* Action */}
+        <ActionPanel
+          robotNamespace="bigpinky"
+          emitAction={emitAction}
+          cancelAction={cancelAction}
+          activeGoals={activeGoals}
+          actionFeedbacks={actionFeedbacks}
+          actionResults={actionResults}
+        />
       </PanelCard>
     </div>
   );
@@ -54,11 +82,12 @@ export default function BigPinkyPanel({ subscribe, publish }: PanelProps) {
 /* ── shared UI ─────────────────────────────────────── */
 
 export function PanelCard({
-  title, icon, accent = "blue", children,
+  title, icon, accent = "blue", badge, children,
 }: {
   title: string;
   icon: string;
   accent?: "amber" | "blue" | "orange";
+  badge?: string;
   children: React.ReactNode;
 }) {
   const titleColor =
@@ -67,10 +96,17 @@ export function PanelCard({
 
   return (
     <div className="bg-[#051929] border border-blue-800/40 rounded-2xl p-5 flex flex-col gap-5 shadow-xl shadow-blue-950/50">
-      <h2 className={`text-xl font-bold flex items-center gap-2 ${titleColor}`}>
-        <span>{icon}</span>
-        {title}
-      </h2>
+      <div className="flex items-center justify-between">
+        <h2 className={`text-xl font-bold flex items-center gap-2 ${titleColor}`}>
+          <span>{icon}</span>
+          {title}
+        </h2>
+        {badge && (
+          <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded-md bg-blue-900/60 border border-blue-700/50 text-blue-300 tracking-wide">
+            {badge}
+          </span>
+        )}
+      </div>
       {children}
     </div>
   );

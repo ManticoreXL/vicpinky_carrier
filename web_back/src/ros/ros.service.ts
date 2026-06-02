@@ -4,6 +4,9 @@ import {
   RosMessage,
   ServiceCallPayload,
   TopicPublishPayload,
+  ActionGoalPayload,
+  ActionFeedbackMsg,
+  ActionResultMsg,
   SUBSCRIBED_TOPICS,
 } from './ros.types';
 
@@ -14,6 +17,10 @@ export class RosService implements OnModuleInit, OnModuleDestroy {
   private connected = false;
   private messageHandlers: ((msg: RosMessage) => void)[] = [];
   private serviceCallbacks: Map<string, (res: unknown) => void> = new Map();
+  private actionCallbacks: Map<string, {
+    onFeedback?: (msg: ActionFeedbackMsg) => void;
+    onResult?: (msg: ActionResultMsg) => void;
+  }> = new Map();
 
   private readonly ROSBRIDGE_URL =
     process.env.ROSBRIDGE_URL ?? 'ws://localhost:9090';
@@ -73,13 +80,38 @@ export class RosService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (op === 'service_response') {
-      // 서비스 응답 → 콜백 호출
       const id = parsed['id'] as string;
       const cb = this.serviceCallbacks.get(id);
       if (cb) {
         cb(parsed['values']);
         this.serviceCallbacks.delete(id);
       }
+    }
+
+    if (op === 'action_feedback') {
+      const id = parsed['id'] as string;
+      const cbs = this.actionCallbacks.get(id);
+      if (cbs?.onFeedback) {
+        cbs.onFeedback({
+          goalId: id,
+          actionName: parsed['action'] as string,
+          feedback: parsed['feedback'] as Record<string, unknown>,
+        });
+      }
+    }
+
+    if (op === 'action_result') {
+      const id = parsed['id'] as string;
+      const cbs = this.actionCallbacks.get(id);
+      if (cbs?.onResult) {
+        cbs.onResult({
+          goalId: id,
+          actionName: parsed['action'] as string,
+          result: parsed['result'] as Record<string, unknown>,
+          status: parsed['status'] as number,
+        });
+      }
+      this.actionCallbacks.delete(id);
     }
   }
 
@@ -128,6 +160,37 @@ export class RosService implements OnModuleInit, OnModuleDestroy {
       args: request,
     });
     this.logger.debug(`service call → ${serviceName}`);
+  }
+
+  // ── Action Goal 전송 ─────────────────────────────────────────────────────
+  sendActionGoal(
+    { actionName, actionType, goal }: ActionGoalPayload,
+    onFeedback?: (msg: ActionFeedbackMsg) => void,
+    onResult?: (msg: ActionResultMsg) => void,
+  ): string {
+    const id = `action_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    this.actionCallbacks.set(id, { onFeedback, onResult });
+    this.send({
+      op: 'send_action_goal',
+      id,
+      action: actionName,
+      action_type: actionType,
+      goal,
+      feedback: true,
+    });
+    this.logger.debug(`action goal → ${actionName} [${id}]`);
+    return id;
+  }
+
+  // ── Action Goal 취소 ─────────────────────────────────────────────────────
+  cancelActionGoal(actionName: string, goalId: string) {
+    this.send({
+      op: 'cancel_action_goal',
+      id: goalId,
+      action: actionName,
+    });
+    this.actionCallbacks.delete(goalId);
+    this.logger.debug(`action cancel → ${actionName} [${goalId}]`);
   }
 
   // ── 메시지 핸들러 등록 ───────────────────────────────────────────────────

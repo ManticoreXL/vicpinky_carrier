@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
 import { PanelProps } from "../../hooks/useRos";
 import { PanelCard, Section, GoldButton, BlueButton, DangerButton } from "./BigPinkyPanel";
+import ActionPanel from "../ActionPanel";
+import type {
+  ActionGoalPayload,
+  ActionFeedback,
+  ActionResult,
+  ActiveGoals,
+} from "../../hooks/useNestSocket";
 
 interface StringMsg { data: string }
 
@@ -12,7 +19,18 @@ const stateColor = (s: string) =>
   s === "unload"  ? "text-blue-400" :
   s === "home"    ? "text-green-400" : "text-blue-400/40";
 
-export default function OmxPanel({ subscribe, publish }: PanelProps) {
+interface Props extends PanelProps {
+  emitAction: (payload: ActionGoalPayload) => void;
+  cancelAction: (actionName: string, goalId: string) => void;
+  activeGoals: ActiveGoals;
+  actionFeedbacks: Record<string, ActionFeedback>;
+  actionResults: Record<string, ActionResult>;
+}
+
+export default function OmxPanel({
+  subscribe, publish,
+  emitAction, cancelAction, activeGoals, actionFeedbacks, actionResults,
+}: Props) {
   const [states, setStates] = useState<Record<ArmId, string>>({ omx1: "unknown", omx2: "unknown" });
 
   useEffect(() => {
@@ -43,6 +61,15 @@ export default function OmxPanel({ subscribe, publish }: PanelProps) {
             </div>
           </Section>
         ))}
+        {/* Action */}
+        <ActionPanel
+          robotNamespace="bigpinky"
+          emitAction={emitAction}
+          cancelAction={cancelAction}
+          activeGoals={activeGoals}
+          actionFeedbacks={actionFeedbacks}
+          actionResults={actionResults}
+        />
       </PanelCard>
     </div>
   );

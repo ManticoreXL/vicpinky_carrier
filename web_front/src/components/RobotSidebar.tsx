@@ -6,7 +6,7 @@ interface BigPinkyStatus { ramp: string; battery: number | null }
 interface BotStatus { mode: string; detected: boolean; battery: number | null }
 interface OmxStatus { omx1: string; omx2: string }
 
-const TURTLEBOTS = ["turtlebot1", "turtlebot2", "turtlebot3", "turtlebot4"] as const;
+const TURTLEBOTS = ["tb3_01", "tb3_02", "tb3_03", "tb3_04"] as const;
 
 const initBot = (): BotStatus => ({ mode: "unknown", detected: false, battery: null });
 
@@ -36,7 +36,7 @@ export default function RobotSidebar({ subscribe, selectedRobot, onSelect }: Pro
         (m) => setBots((p) => ({ ...p, [id]: { ...p[id], mode: m.data } }))));
       subs.push(subscribe<{ data: boolean }>(`/${id}/yolo/person_detected`, "std_msgs/Bool",
         (m) => setBots((p) => ({ ...p, [id]: { ...p[id], detected: m.data } }))));
-      subs.push(subscribe<{ percentage: number }>(`/${id}/battery`, "sensor_msgs/BatteryState",
+      subs.push(subscribe<{ percentage: number }>(`/${id}/battery_state`, "sensor_msgs/BatteryState",
         (m) => setBots((p) => ({ ...p, [id]: { ...p[id], battery: Math.round(m.percentage * 100) } }))));
     });
 
