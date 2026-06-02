@@ -11,7 +11,12 @@ import {
 import { Logger, OnModuleInit } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { RosService } from '../ros/ros.service';
-import type { ServiceCallPayload, TopicPublishPayload } from '../ros/ros.types';
+import type {
+  ServiceCallPayload,
+  TopicPublishPayload,
+  ActionGoalPayload,
+  ActionCancelPayload,
+} from '../ros/ros.types';
 
 @WebSocketGateway({
   cors: { origin: '*' },   // 개발용 — 운영 시 origin 제한
@@ -94,5 +99,30 @@ export class RosGateway
   @SubscribeMessage('get_status')
   handleStatus(@ConnectedSocket() client: Socket) {
     client.emit('ros_status', { connected: this.rosService.isConnected });
+  }
+
+  // ── 프론트 → Action Goal 전송 ────────────────────────────────────────────
+  @SubscribeMessage('send_action')
+  handleSendAction(
+    @MessageBody() payload: ActionGoalPayload,
+    @ConnectedSocket() client: Socket,
+  ) {
+    const goalId = this.rosService.sendActionGoal(
+      payload,
+      (fb) => client.emit('action_feedback', fb),
+      (res) => client.emit('action_result', res),
+    );
+    client.emit('action_accepted', { goalId, actionName: payload.actionName });
+    this.logger.debug(`action accepted → ${payload.actionName} [${goalId}]`);
+  }
+
+  // ── 프론트 → Action Goal 취소 ────────────────────────────────────────────
+  @SubscribeMessage('cancel_action')
+  handleCancelAction(
+    @MessageBody() payload: ActionCancelPayload,
+    @ConnectedSocket() client: Socket,
+  ) {
+    this.rosService.cancelActionGoal(payload.actionName, payload.goalId);
+    client.emit('action_cancelled', { goalId: payload.goalId });
   }
 }

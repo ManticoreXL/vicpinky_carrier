@@ -10,7 +10,11 @@ import OmxPanel from "./components/panels/OmxPanel";
 
 export default function App() {
   const { connected, error, subscribe, publish } = useRos();
-  const { emitCmdVel, emitPublish, nestConnected, rosMessages } = useNestSocket();
+  const {
+    emitCmdVel, emitPublish, emitAction, cancelAction,
+    nestConnected, rosMessages,
+    activeGoals, actionFeedbacks, actionResults,
+  } = useNestSocket();
   const [selectedRobot, setSelectedRobot] = useState<RobotId>("bigpinky");
 
   return (
@@ -51,22 +55,43 @@ export default function App() {
 
         <main className="flex-1 overflow-y-auto p-6 bg-[#010c1e]">
           {selectedRobot === "bigpinky" && (
-            <BigPinkyPanel subscribe={subscribe} publish={publish} />
+            <BigPinkyPanel
+              subscribe={subscribe}
+              publish={publish}
+              emitAction={emitAction}
+              cancelAction={cancelAction}
+              activeGoals={activeGoals}
+              actionFeedbacks={actionFeedbacks}
+              actionResults={actionResults}
+            />
           )}
-          {(selectedRobot === "turtlebot1" ||
-            selectedRobot === "turtlebot2" ||
-            selectedRobot === "turtlebot3" ||
-            selectedRobot === "turtlebot4") && (
+          {(selectedRobot === "tb3_01" ||
+            selectedRobot === "tb3_02" ||
+            selectedRobot === "tb3_03" ||
+            selectedRobot === "tb3_04") && (
             <TurtlebotPanel
               subscribe={subscribe}
               publish={publish}
               botId={selectedRobot}
               emitCmdVel={emitCmdVel}
               rosMessages={rosMessages}
+              emitAction={emitAction}
+              cancelAction={cancelAction}
+              activeGoals={activeGoals}
+              actionFeedbacks={actionFeedbacks}
+              actionResults={actionResults}
             />
           )}
           {selectedRobot === "omx" && (
-            <OmxPanel subscribe={subscribe} publish={publish} />
+            <OmxPanel
+              subscribe={subscribe}
+              publish={publish}
+              emitAction={emitAction}
+              cancelAction={cancelAction}
+              activeGoals={activeGoals}
+              actionFeedbacks={actionFeedbacks}
+              actionResults={actionResults}
+            />
           )}
         </main>
       </div>
