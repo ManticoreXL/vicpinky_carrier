@@ -37,7 +37,8 @@ export default function RobotSidebar({ subscribe, selectedRobot, onSelect }: Pro
       subs.push(subscribe<{ data: boolean }>(`/${id}/yolo/person_detected`, "std_msgs/Bool",
         (m) => setBots((p) => ({ ...p, [id]: { ...p[id], detected: m.data } }))));
       subs.push(subscribe<{ percentage: number }>(`/${id}/battery_state`, "sensor_msgs/BatteryState",
-        (m) => setBots((p) => ({ ...p, [id]: { ...p[id], battery: Math.round(m.percentage * 100) } }))));
+        // TB3 펌웨어는 percentage를 0~100으로 보냄 (ROS 스펙 0~1 아님)
+        (m) => setBots((p) => ({ ...p, [id]: { ...p[id], battery: Math.round(m.percentage > 1 ? m.percentage : m.percentage * 100) } }))));
     });
 
     subs.push(subscribe<{ data: string }>("/bigpinky/omx1/state", "std_msgs/String",

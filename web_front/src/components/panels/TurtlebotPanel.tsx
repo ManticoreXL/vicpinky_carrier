@@ -78,11 +78,19 @@ export default function TurtlebotPanel({
   const cvLinear  = cvData?.twist?.linear?.x  ?? null;
   const cvAngular = cvData?.twist?.angular?.z ?? null;
 
-  // battery_state
-  const batData = p("battery_state") as { voltage?: number; percentage?: number; current?: number } | undefined;
-  const batPct  = batData?.percentage != null ? Math.round(batData.percentage * 100) : null;
-  const batV    = batData?.voltage ?? null;
-  const batA    = batData?.current ?? null;
+  // battery_state — TB3 펌웨어는 percentage를 0~100으로 보냄 (ROS 스펙 0~1 아님)
+  const batData = p("battery_state") as {
+    voltage?: number; temperature?: number; current?: number;
+    charge?: number; capacity?: number; design_capacity?: number;
+    percentage?: number;
+    power_supply_status?: number; power_supply_health?: number; power_supply_technology?: number;
+    present?: boolean;
+  } | undefined;
+  const batPct = batData?.percentage != null
+    ? Math.round(batData.percentage > 1 ? batData.percentage : batData.percentage * 100)
+    : null;
+  const batV = batData?.voltage ?? null;
+  const batA = batData?.current ?? null;
 
   // odom
   const odomData = p("odom") as {
@@ -129,25 +137,32 @@ export default function TurtlebotPanel({
     ? ((Math.atan2(mag.y, mag.x) * 180) / Math.PI + 360) % 360
     : null;
 
-  // scan
+  // scan — range_min/range_max 기준으로 유효 포인트 필터
   const scanData = p("scan") as {
-    range_min?: number;
-    range_max?: number;
-    ranges?: number[];
+    angle_min?: number; angle_max?: number; angle_increment?: number;
+    range_min?: number; range_max?: number;
+    ranges?: number[]; intensities?: number[];
   } | undefined;
   const rawRanges   = scanData?.ranges ?? [];
-  const validRanges = rawRanges.filter((r) => isFinite(r) && r > 0);
+  const rMin = scanData?.range_min ?? 0;
+  const rMax = scanData?.range_max ?? Infinity;
+  const validRanges = rawRanges.filter((r) => isFinite(r) && r >= rMin && r <= rMax);
   const scanNearest = validRanges.length > 0 ? Math.min(...validRanges) : null;
   const scanTotal   = rawRanges.length;
   const scanValid   = validRanges.length;
 
-  // sensor_state
+  // sensor_state — turtlebot3_msgs/SensorState 전체 필드
   const ssData = p("sensor_state") as {
-    bumper?: number;
-    cliff?: number;
-    left_encoder?: number;
-    right_encoder?: number;
-    battery?: number;
+    bumper?: number;        // uint8: BUMPER_FORWARD=1, BUMPER_BACKWARD=2
+    cliff?: number;         // float32: CLIFF=1 when detected
+    sonar?: number;         // float32 (m)
+    illumination?: number;  // float32
+    led?: number;           // uint8
+    button?: number;        // uint8: BUTTON0=1, BUTTON1=2
+    torque?: boolean;       // bool
+    left_encoder?: number;  // int32
+    right_encoder?: number; // int32
+    battery?: number;       // float32 (V)
   } | undefined;
 
   // robot_description
@@ -264,11 +279,19 @@ export default function TurtlebotPanel({
             {ssData ? (
               <table className="w-full text-xs">
                 <tbody>
-                  <TRow label="Bumper"  value={ssData.bumper ? `⚠ ${ssData.bumper}` : "○ 없음"} highlight={!!ssData.bumper} />
-                  <TRow label="Cliff"   value={ssData.cliff  ? "⚠ 감지"               : "○ 없음"} highlight={!!ssData.cliff} />
-                  <TRow label="L-Enc"  value={String(ssData.left_encoder  ?? "—")} />
-                  <TRow label="R-Enc"  value={String(ssData.right_encoder ?? "—")} />
-                  {ssData.battery != null && <TRow label="센서 전압" value={`${f(ssData.battery, 1)} V`} />}
+                  <TRow label="Bumper" value={
+                    ssData.bumper === 0 ? "○ 없음" :
+                    ssData.bumper === 1 ? "⚠ 전방" :
+                    ssData.bumper === 2 ? "⚠ 후방" :
+                    ssData.bumper === 3 ? "⚠ 전+후" : "○ 없음"
+                  } highlight={!!ssData.bumper} />
+                  <TRow label="Cliff"  value={ssData.cliff ? "⚠ 감지" : "○ 없음"} highlight={!!ssData.cliff} />
+                  {ssData.sonar != null     && <TRow label="Sonar"  value={`${f(ssData.sonar, 2)} m`} />}
+                  {ssData.button != null    && <TRow label="Button" value={ssData.button === 0 ? "—" : `B${ssData.button}`} />}
+                  {ssData.torque != null    && <TRow label="Torque" value={ssData.torque ? "ON" : "OFF"} />}
+                  <TRow label="L-Enc" value={String(ssData.left_encoder  ?? "—")} />
+                  <TRow label="R-Enc" value={String(ssData.right_encoder ?? "—")} />
+                  {ssData.battery != null   && <TRow label="Batt"   value={`${f(ssData.battery, 2)} V`} />}
                 </tbody>
               </table>
             ) : <NoData />}
