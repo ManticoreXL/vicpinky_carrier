@@ -57,7 +57,7 @@ const TB3_IDS = ['tb3_01', 'tb3_02', 'tb3_03', 'tb3_04'] as const;
 
 function tb3Topics(id: string): RosTopicConfig[] {
   return [
-    { name: `/${id}/cmd_vel`,            messageType: 'geometry_msgs/Twist' },
+    { name: `/${id}/cmd_vel`,            messageType: 'geometry_msgs/TwistStamped' },
     { name: `/${id}/imu`,               messageType: 'sensor_msgs/Imu' },
     { name: `/${id}/battery_state`,     messageType: 'sensor_msgs/BatteryState' },
     { name: `/${id}/joint_states`,      messageType: 'sensor_msgs/JointState' },
