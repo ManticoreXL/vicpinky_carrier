@@ -8,7 +8,6 @@ AI 융합 로봇 SW 개발자 2기 최종 프로젝트 (4팀)
 1. 가상환경 준비
     ```bash
     python3 -m venv ~/venv/ros
-    pip install -r requirements.txt
     ```
 
 2. ROS2 환경 불러오기
@@ -31,6 +30,7 @@ AI 융합 로봇 SW 개발자 2기 최종 프로젝트 (4팀)
 5. 의존성 패키지 설치
     ```bash
     sudo apt-get update
+    pip install -r requirements.txt
     rosdep update
     rosdep install --from-paths src --ignore-src -y --rosdistro jazzy
     ```
