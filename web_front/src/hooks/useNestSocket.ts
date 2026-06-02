@@ -20,7 +20,7 @@ export interface RosMessage {
 }
 
 export interface ActionGoalPayload {
-  actionName: string;   // e.g. "/bigpinky/carrier_task"
+  actionName: string;   // e.g. "/vicpinky/carrier_task"
   actionType: string;   // e.g. "carrier_msgs/action/CarrierTask"
   goal: Record<string, unknown>;
 }

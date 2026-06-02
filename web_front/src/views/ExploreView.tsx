@@ -159,16 +159,16 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
   const totalDetected = TB3_IDS.filter(id => botSnaps[id].detected).length;
   const onlineCount   = TB3_IDS.filter(id => botSnaps[id].online).length;
 
-  // BigPinky 스냅
-  const bpBat = (rosMessages["/bigpinky/battery"]?.data as { percentage?: number } | undefined);
-  const bpBatPct = bpBat?.percentage != null
-    ? Math.round(bpBat.percentage > 1 ? bpBat.percentage : bpBat.percentage * 100) : null;
-  const bpRamp = (rosMessages["/bigpinky/ramp/state"]?.data as { data?: string } | undefined)?.data ?? "unknown";
-  const bpOnline = (rosMessages["/bigpinky/ramp/state"]?.timestamp ?? 0) > 0 &&
-    Date.now() - (rosMessages["/bigpinky/ramp/state"]?.timestamp ?? 0) < OFFLINE_THRESHOLD_MS;
+  // VicPinky 스냅
+  const vpOdom = rosMessages["/vicpinky/odom"]?.data as {
+    pose?: { pose?: { position?: { x?: number; y?: number } } }
+  } | undefined;
+  const vpPos = vpOdom?.pose?.pose?.position;
+  const vpScanTs  = rosMessages["/vicpinky/scan"]?.timestamp ?? 0;
+  const bpOnline  = vpScanTs > 0 && Date.now() - vpScanTs < OFFLINE_THRESHOLD_MS;
 
   return (
-    <div className="flex flex-col h-full bg-[#030712] text-slate-200 overflow-hidden select-none">
+    <div className="flex flex-col h-full bg-[#050505] text-slate-200 overflow-hidden select-none">
 
       {/* ── 미션 상태 바 ──────────────────────────────────────────────────── */}
       <div className="flex-none flex items-center justify-between px-4 py-2
@@ -177,8 +177,8 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
           <span className="text-red-500 font-black text-xs tracking-[0.3em] uppercase">
             ◉ MISSION ACTIVE
           </span>
-          <div className="flex items-center gap-2 text-xs text-slate-400">
-            <span className="text-slate-600">경과</span>
+          <div className="flex items-center gap-2 text-xs text-[#888888]">
+            <span className="text-[#333333]">경과</span>
             <span className="font-mono text-green-400 text-sm tabular-nums">{fmtTime(elapsed)}</span>
           </div>
         </div>
@@ -187,12 +187,12 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
           <StatChip label="온라인" value={`${onlineCount}/4`}
             color={onlineCount === 4 ? "text-green-400" : onlineCount > 0 ? "text-amber-400" : "text-red-500"} />
           <StatChip label="인명 감지" value={String(totalDetected)}
-            color={totalDetected > 0 ? "text-red-400" : "text-slate-500"} urgent={totalDetected > 0} />
+            color={totalDetected > 0 ? "text-red-400" : "text-[#555555]"} urgent={totalDetected > 0} />
           <StatChip label="경보" value={String(alertCount)}
-            color={alertCount > 0 ? "text-amber-400" : "text-slate-600"} />
+            color={alertCount > 0 ? "text-amber-400" : "text-[#333333]"} />
           {alertCount > 0 && (
             <button onClick={() => setAlertCount(0)}
-              className="text-[10px] text-slate-600 hover:text-slate-400 underline transition-colors">
+              className="text-[10px] text-[#333333] hover:text-[#888888] underline transition-colors">
               초기화
             </button>
           )}
@@ -203,33 +203,36 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
       <div className="flex flex-1 overflow-hidden gap-px bg-red-900/10">
 
         {/* ── 왼쪽: 함대 상태 ──────────────────────────────────────────── */}
-        <aside className="w-52 flex-none flex flex-col bg-[#030712] overflow-y-auto">
+        <aside className="w-52 flex-none flex flex-col bg-[#050505] overflow-y-auto">
           <PanelHeader icon="⬡" label="FLEET STATUS" />
 
-          {/* BigPinky 릴레이 */}
+          {/* VicPinky 릴레이 */}
           <div className="px-3 pb-2">
             <div className={`rounded-lg p-2.5 border ${bpOnline
               ? "bg-[#0c1a2e] border-blue-800/40"
-              : "bg-[#0c0c10] border-slate-800/30"}`}>
+              : "bg-[#0c0c10] border-[#1e1e1e]"}`}>
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-1.5">
                   <OnlineDot online={bpOnline} color="blue" />
-                  <span className="text-xs font-bold text-blue-300">BIGPINKY</span>
+                  <span className="text-xs font-bold text-blue-300">VICPINKY</span>
                 </div>
                 <span className="text-[10px] text-blue-400/60 font-mono">RELAY</span>
               </div>
-              <div className="text-[10px] text-slate-500 space-y-0.5 pl-3.5">
+              <div className="text-[10px] text-[#555555] space-y-0.5 pl-3.5">
                 <div className="flex justify-between">
-                  <span>경사로</span><span className="text-slate-300 font-mono">{bpRamp}</span>
+                  <span>X</span>
+                  <span className="text-[#c0c0c0] font-mono">{vpPos?.x != null ? `${vpPos.x.toFixed(2)} m` : "—"}</span>
                 </div>
-                {bpBatPct !== null && (
-                  <div className="flex justify-between">
-                    <span>배터리</span>
-                    <span className={`font-mono ${bpBatPct < 20 ? "text-red-400" : bpBatPct < 50 ? "text-amber-400" : "text-green-400"}`}>
-                      {bpBatPct}%
-                    </span>
-                  </div>
-                )}
+                <div className="flex justify-between">
+                  <span>Y</span>
+                  <span className="text-[#c0c0c0] font-mono">{vpPos?.y != null ? `${vpPos.y.toFixed(2)} m` : "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>LIDAR</span>
+                  <span className={bpOnline ? "text-green-400 font-mono" : "text-[#333333] font-mono"}>
+                    {bpOnline ? "수신 중" : "오프라인"}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -251,14 +254,14 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
                       ? "bg-[#1a0808] border-red-700/60 shadow-md shadow-red-900/20"
                       : s.online
                         ? "bg-[#0a1020] border-slate-700/30 hover:border-red-900/40"
-                        : "bg-[#080808] border-slate-800/20 opacity-60"
+                        : "bg-[#080808] border-[#141414] opacity-60"
                   }`}
                 >
                   <div className="flex items-center justify-between mb-1.5">
                     <div className="flex items-center gap-1.5">
                       <OnlineDot online={s.online} color={s.detected ? "red" : "green"} pulse={s.detected} />
                       <span className={`text-xs font-bold font-mono ${
-                        s.detected ? "text-red-400" : s.online ? "text-slate-200" : "text-slate-600"
+                        s.detected ? "text-red-400" : s.online ? "text-slate-200" : "text-[#333333]"
                       }`}>{TB3_LABELS[id]}</span>
                     </div>
                     {s.detected && (
@@ -269,13 +272,13 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
                   </div>
 
                   {s.online ? (
-                    <div className="text-[10px] text-slate-500 space-y-0.5 pl-3.5">
+                    <div className="text-[10px] text-[#555555] space-y-0.5 pl-3.5">
                       <div className="flex justify-between">
                         <span>모드</span>
                         <span className={`font-mono ${
                           s.mode === "explore" ? "text-blue-400" :
                           s.mode === "deliver" ? "text-amber-400" :
-                          s.mode === "stop"    ? "text-red-400" : "text-slate-500"
+                          s.mode === "stop"    ? "text-red-400" : "text-[#555555]"
                         }`}>{s.mode}</span>
                       </div>
                       {s.batPct !== null && (
@@ -296,7 +299,7 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
                       {s.nearest !== null && (
                         <div className="flex justify-between">
                           <span>최근접</span>
-                          <span className={`font-mono ${s.nearest < 0.3 ? "text-red-400 animate-pulse" : "text-slate-300"}`}>
+                          <span className={`font-mono ${s.nearest < 0.3 ? "text-red-400 animate-pulse" : "text-[#c0c0c0]"}`}>
                             {s.nearest.toFixed(2)}m
                           </span>
                         </div>
@@ -304,7 +307,7 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
                       {s.pos && (
                         <div className="flex justify-between">
                           <span>위치</span>
-                          <span className="font-mono text-slate-400">
+                          <span className="font-mono text-[#888888]">
                             ({(s.pos.x ?? 0).toFixed(1)}, {(s.pos.y ?? 0).toFixed(1)})
                           </span>
                         </div>
@@ -317,7 +320,7 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
                       )}
                     </div>
                   ) : (
-                    <p className="text-[10px] text-slate-700 pl-3.5">오프라인</p>
+                    <p className="text-[10px] text-[#222222] pl-3.5">오프라인</p>
                   )}
                 </button>
               </div>
@@ -327,7 +330,7 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
         </aside>
 
         {/* ── 중앙: LiDAR + 센서 요약 ───────────────────────────────────── */}
-        <main className="flex-1 flex flex-col bg-[#030712] overflow-y-auto min-w-0">
+        <main className="flex-1 flex flex-col bg-[#050505] overflow-y-auto min-w-0">
 
           {/* 봇 선택 탭 */}
           <div className="flex-none flex items-center gap-1 px-4 pt-3 pb-2">
@@ -341,12 +344,12 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
                     selectedBot === id
                       ? "bg-red-950/60 border-red-700/60 text-red-300"
                       : s.online
-                        ? "bg-transparent border-slate-700/30 text-slate-500 hover:border-red-900/40 hover:text-slate-400"
-                        : "bg-transparent border-slate-800/20 text-slate-700 cursor-default"
+                        ? "bg-transparent border-slate-700/30 text-[#555555] hover:border-red-900/40 hover:text-[#888888]"
+                        : "bg-transparent border-[#141414] text-[#222222] cursor-default"
                   }`}
                 >
                   {s.detected && "⚠ "}{TB3_LABELS[id]}
-                  <span className={`ml-1.5 text-[8px] ${s.online ? "text-green-500" : "text-slate-700"}`}>
+                  <span className={`ml-1.5 text-[8px] ${s.online ? "text-green-500" : "text-[#222222]"}`}>
                     {s.online ? "●" : "○"}
                   </span>
                 </button>
@@ -363,13 +366,13 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
                   <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded border ${
                     selectedSnap.nearest < 0.3
                       ? "text-red-400 border-red-700/50 bg-red-950/40 animate-pulse"
-                      : "text-slate-400 border-slate-700/30"
+                      : "text-[#888888] border-slate-700/30"
                   }`}>
                     최근접 {selectedSnap.nearest.toFixed(2)}m
                   </span>
                 )}
               </div>
-              <div className="bg-[#030712] rounded-xl border border-red-900/20 p-2 shadow-xl shadow-black/50">
+              <div className="bg-[#050505] rounded-xl border border-red-900/20 p-2 shadow-xl shadow-black/50">
                 <LidarCanvas scanData={selectedSnap.scan} size={280} />
               </div>
               <div className="grid grid-cols-4 gap-1 w-full text-center">
@@ -379,9 +382,9 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
                   { label: "상태", val: selectedSnap.online ? "ON" : "OFF" },
                   { label: "감지", val: selectedSnap.detected ? "DETECT" : "CLEAR" },
                 ].map(({ label, val }) => (
-                  <div key={label} className="bg-[#0a0f1a] rounded border border-slate-800/40 px-2 py-1.5">
-                    <p className="text-[9px] text-slate-600 uppercase">{label}</p>
-                    <p className="text-xs font-mono text-slate-300 mt-0.5">{val}</p>
+                  <div key={label} className="bg-[#0a0f1a] rounded border border-[#1e1e1e] px-2 py-1.5">
+                    <p className="text-[9px] text-[#333333] uppercase">{label}</p>
+                    <p className="text-xs font-mono text-[#c0c0c0] mt-0.5">{val}</p>
                   </div>
                 ))}
               </div>
@@ -436,7 +439,7 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
         </main>
 
         {/* ── 오른쪽: 감지 현황 + 이벤트 로그 ──────────────────────────── */}
-        <aside className="w-64 flex-none flex flex-col bg-[#030712] overflow-hidden">
+        <aside className="w-64 flex-none flex flex-col bg-[#050505] overflow-hidden">
 
           {/* 인명 감지 현황 */}
           <div className="flex-none">
@@ -447,10 +450,10 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
                 return (
                   <div key={id} className={`flex items-center justify-between px-3 py-2 rounded-lg border ${
                     !s.online
-                      ? "bg-[#08080c] border-slate-800/20"
+                      ? "bg-[#080808] border-[#141414]"
                       : s.detected
                         ? "bg-red-950/50 border-red-700/50 shadow-sm shadow-red-900/30"
-                        : "bg-[#080e18] border-slate-800/30"
+                        : "bg-[#0a0a0a] border-[#1e1e1e]"
                   }`}>
                     <div className="flex items-center gap-2">
                       <div className={`w-2 h-2 rounded-full ${
@@ -458,12 +461,12 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
                         s.detected ? "bg-red-500 animate-ping" : "bg-green-600"
                       }`} />
                       <span className={`text-xs font-mono font-semibold ${
-                        !s.online ? "text-slate-600" :
-                        s.detected ? "text-red-300" : "text-slate-300"
+                        !s.online ? "text-[#333333]" :
+                        s.detected ? "text-red-300" : "text-[#c0c0c0]"
                       }`}>{TB3_LABELS[id]}</span>
                     </div>
                     <span className={`text-[10px] font-bold ${
-                      !s.online ? "text-slate-700" :
+                      !s.online ? "text-[#222222]" :
                       s.detected ? "text-red-400" : "text-green-500"
                     }`}>
                       {!s.online ? "OFFLINE" : s.detected ? "⚠ PERSON" : "✓ CLEAR"}
@@ -476,11 +479,11 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
               <div className={`mt-1 px-3 py-2 rounded-lg border text-center ${
                 totalDetected > 0
                   ? "bg-red-950/40 border-red-800/50"
-                  : "bg-[#080e18] border-slate-800/30"
+                  : "bg-[#0a0a0a] border-[#1e1e1e]"
               }`}>
-                <p className="text-[10px] text-slate-500 uppercase tracking-widest">Total Detected</p>
+                <p className="text-[10px] text-[#555555] uppercase tracking-widest">Total Detected</p>
                 <p className={`text-2xl font-black font-mono mt-0.5 ${
-                  totalDetected > 0 ? "text-red-400" : "text-slate-600"
+                  totalDetected > 0 ? "text-red-400" : "text-[#333333]"
                 }`}>{totalDetected}</p>
               </div>
             </div>
@@ -491,10 +494,10 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
             <p className="text-[9px] text-red-900/60 uppercase tracking-widest font-semibold mb-1.5 px-0.5">
               ◑ CAMERA FEED
             </p>
-            <div className="bg-[#050810] border border-slate-800/30 rounded-lg flex items-center
+            <div className="bg-[#050810] border border-[#1e1e1e] rounded-lg flex items-center
                             justify-center aspect-video">
               <div className="text-center">
-                <p className="text-slate-700 text-xs font-mono">[ NO SIGNAL ]</p>
+                <p className="text-[#222222] text-xs font-mono">[ NO SIGNAL ]</p>
                 <p className="text-slate-800 text-[9px] mt-1">Depth Camera</p>
                 <p className="text-slate-800 text-[9px]">준비 중...</p>
               </div>
@@ -507,32 +510,32 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
               <p className="text-[9px] text-red-900/60 uppercase tracking-widest font-semibold">
                 ▤ EVENT LOG
               </p>
-              <p className="text-[9px] text-slate-700">{events.length} 건</p>
+              <p className="text-[9px] text-[#222222]">{events.length} 건</p>
             </div>
             <div ref={logRef} className="flex-1 overflow-y-auto px-3 space-y-1 pb-3">
               {events.length === 0 ? (
-                <p className="text-[10px] text-slate-700 text-center py-4">이벤트 없음</p>
+                <p className="text-[10px] text-[#222222] text-center py-4">이벤트 없음</p>
               ) : events.map((evt) => (
                 <div key={evt.id} className={`px-2.5 py-1.5 rounded border text-[10px] ${
                   evt.level === "critical"
                     ? "bg-red-950/40 border-red-800/40"
                     : evt.level === "warning"
                       ? "bg-amber-950/30 border-amber-800/30"
-                      : "bg-[#080e18] border-slate-800/30"
+                      : "bg-[#0a0a0a] border-[#1e1e1e]"
                 }`}>
                   <div className="flex items-center justify-between mb-0.5">
                     <span className={`font-mono font-bold text-[9px] ${
                       evt.level === "critical" ? "text-red-400" :
-                      evt.level === "warning"  ? "text-amber-400" : "text-slate-500"
+                      evt.level === "warning"  ? "text-amber-400" : "text-[#555555]"
                     }`}>
                       {evt.level === "critical" ? "⚠ ALERT" :
                        evt.level === "warning"  ? "△ WARN"  : "● INFO"}
                     </span>
-                    <span className="text-slate-700 font-mono text-[9px]">
+                    <span className="text-[#222222] font-mono text-[9px]">
                       {new Date(evt.ts).toLocaleTimeString()}
                     </span>
                   </div>
-                  <p className="text-slate-300">{evt.message}</p>
+                  <p className="text-[#c0c0c0]">{evt.message}</p>
                 </div>
               ))}
             </div>
@@ -577,7 +580,7 @@ function StatChip({ label, value, color, urgent }: {
 }) {
   return (
     <div className={`flex flex-col items-center ${urgent ? "animate-pulse" : ""}`}>
-      <span className="text-slate-600 text-[9px] uppercase tracking-widest">{label}</span>
+      <span className="text-[#333333] text-[9px] uppercase tracking-widest">{label}</span>
       <span className={`font-mono font-bold text-sm tabular-nums ${color}`}>{value}</span>
     </div>
   );
@@ -585,8 +588,8 @@ function StatChip({ label, value, color, urgent }: {
 
 function SensorBox({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="bg-[#0a0f1a] border border-slate-800/40 rounded-lg px-3 py-2">
-      <p className="text-[9px] text-slate-600 uppercase tracking-widest mb-1.5">{label}</p>
+    <div className="bg-[#0a0f1a] border border-[#1e1e1e] rounded-lg px-3 py-2">
+      <p className="text-[9px] text-[#333333] uppercase tracking-widest mb-1.5">{label}</p>
       <div className="space-y-1">{children}</div>
     </div>
   );
@@ -595,8 +598,8 @@ function SensorBox({ label, children }: { label: string; children: React.ReactNo
 function DataRow({ label, value, alert = false }: { label: string; value: string; alert?: boolean }) {
   return (
     <div className="flex justify-between items-center text-xs">
-      <span className="text-slate-600">{label}</span>
-      <span className={`font-mono ${alert ? "text-red-400 font-bold" : "text-slate-300"}`}>{value}</span>
+      <span className="text-[#333333]">{label}</span>
+      <span className={`font-mono ${alert ? "text-red-400 font-bold" : "text-[#c0c0c0]"}`}>{value}</span>
     </div>
   );
 }

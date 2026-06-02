@@ -78,15 +78,15 @@ const ACTION_DEFS: Record<ActionKind, ActionDef> = {
 // ── 상태 표시 헬퍼 ──────────────────────────────────────────────────────────
 
 const STATUS_LABELS: Record<number, { label: string; color: string }> = {
-  3: { label: "성공", color: "text-green-400" },
-  4: { label: "중단", color: "text-red-400" },
-  5: { label: "취소됨", color: "text-amber-400" },
+  3: { label: "SUCCESS", color: "text-green-600" },
+  4: { label: "ABORTED", color: "text-red-500" },
+  5: { label: "CANCELLED", color: "text-[#888888]" },
 };
 
 // ── Props ──────────────────────────────────────────────────────────────────
 
 interface Props {
-  robotNamespace: string;          // e.g. "bigpinky" or "turtlebot1"
+  robotNamespace: string;          // e.g. "vicpinky" or "tb3_01"
   emitAction: (payload: ActionGoalPayload) => void;
   cancelAction: (actionName: string, goalId: string) => void;
   activeGoals: ActiveGoals;
@@ -140,15 +140,15 @@ export default function ActionPanel({
   return (
     <Section label="Action">
       {/* Action 종류 선택 */}
-      <div className="flex gap-2 mb-3">
+      <div className="flex gap-1 mb-3">
         {(Object.keys(ACTION_DEFS) as ActionKind[]).map((kind) => (
           <button
             key={kind}
             onClick={() => { setSelectedKind(kind); setFields({}); }}
-            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+            className={`px-3 py-1 text-[9px] font-bold uppercase tracking-widest transition-all border font-mono ${
               selectedKind === kind
-                ? "bg-blue-700 text-white"
-                : "bg-gray-800 text-gray-400 hover:bg-gray-700"
+                ? "border-red-800/60 bg-red-950/30 text-red-400"
+                : "border-[#222222] bg-transparent text-[#333333] hover:text-[#666666]"
             }`}
           >
             {ACTION_DEFS[kind].label}
@@ -157,16 +157,18 @@ export default function ActionPanel({
       </div>
 
       {/* Goal 필드 */}
-      <div className="flex flex-col gap-2 mb-3">
+      <div className="flex flex-col gap-1.5 mb-3">
         {def.fields.map((f) => (
           <div key={f.key} className="flex items-center gap-2">
-            <span className="text-[11px] text-gray-400 w-24 shrink-0">{f.label}</span>
+            <span className="text-[9px] text-[#444444] font-mono uppercase tracking-wider w-20 shrink-0">{f.label}</span>
             <input
               type={f.type ?? "text"}
               placeholder={f.placeholder}
               value={fields[f.key] ?? ""}
               onChange={(e) => setFields((prev) => ({ ...prev, [f.key]: e.target.value }))}
-              className="flex-1 bg-gray-900 border border-blue-900/60 rounded-lg px-3 py-1.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-blue-600"
+              className="flex-1 bg-[#0a0a0a] border border-[#2a2a2a] px-3 py-1.5 text-xs
+                         text-[#c0c0c0] font-mono placeholder-[#2a2a2a]
+                         focus:outline-none focus:border-red-900/60 disabled:opacity-30"
               disabled={isRunning}
             />
           </div>
@@ -176,37 +178,37 @@ export default function ActionPanel({
       {/* 전송 / 취소 버튼 */}
       <div className="flex gap-2 mb-3">
         <GoldButton onClick={sendGoal}>
-          {isRunning ? "재전송" : "Goal 전송"}
+          {isRunning ? "RESEND" : "SEND GOAL"}
         </GoldButton>
         {isRunning && (
-          <DangerButton onClick={handleCancel}>취소</DangerButton>
+          <DangerButton onClick={handleCancel}>CANCEL</DangerButton>
         )}
       </div>
 
       {/* Feedback */}
       {isRunning && (
-        <div className="bg-gray-900 rounded-xl p-3 border border-blue-900/40 flex flex-col gap-2">
-          <p className="text-[11px] font-semibold text-blue-400/50 uppercase tracking-widest">Feedback</p>
+        <div className="bg-[#080808] border border-red-900/30 p-3 flex flex-col gap-2">
+          <p className="text-[9px] font-bold text-red-900/60 uppercase tracking-[0.25em] font-mono">◆ FEEDBACK</p>
           {statusText && (
-            <p className="text-sm text-blue-300">{statusText}</p>
+            <p className="text-[10px] text-[#888888] font-mono">{statusText}</p>
           )}
           {progress !== null && (
             <div>
-              <div className="flex justify-between text-xs text-gray-500 mb-1">
-                <span>진행률</span>
+              <div className="flex justify-between text-[9px] text-[#444444] font-mono mb-1">
+                <span>PROGRESS</span>
                 <span>{Math.round(progress * 100)}%</span>
               </div>
-              <div className="h-2 bg-blue-950 rounded-full overflow-hidden border border-blue-900/60">
+              <div className="h-1 bg-[#1a1a1a] overflow-hidden border border-[#2a2a2a]">
                 <div
-                  className="h-full bg-blue-500 rounded-full transition-all duration-300"
+                  className="h-full bg-red-700 transition-all duration-300"
                   style={{ width: `${Math.round(progress * 100)}%` }}
                 />
               </div>
             </div>
           )}
           {distRemaining !== null && distRemaining >= 0 && (
-            <p className="text-xs text-gray-400">
-              남은 거리: <span className="text-white font-mono">{distRemaining.toFixed(2)} m</span>
+            <p className="text-[10px] text-[#444444] font-mono">
+              DIST: <span className="text-[#c0c0c0]">{distRemaining.toFixed(2)} m</span>
             </p>
           )}
         </div>
@@ -214,14 +216,18 @@ export default function ActionPanel({
 
       {/* Result */}
       {latestResult && !isRunning && statusInfo && (
-        <div className="bg-gray-900 rounded-xl p-3 border border-blue-900/40 flex flex-col gap-1">
-          <p className="text-[11px] font-semibold text-blue-400/50 uppercase tracking-widest">Result</p>
-          <p className={`text-sm font-bold ${statusInfo.color}`}>{statusInfo.label}</p>
+        <div className="bg-[#080808] border border-[#1e1e1e] p-3 flex flex-col gap-1">
+          <p className="text-[9px] font-bold text-[#444444] uppercase tracking-[0.25em] font-mono">◆ RESULT</p>
+          <p className={`text-xs font-black uppercase tracking-widest font-mono ${statusInfo.color}`}>
+            {statusInfo.label}
+          </p>
           {typeof res?.message === "string" && (
-            <p className="text-xs text-gray-400">{res.message}</p>
+            <p className="text-[10px] text-[#666666] font-mono">{res.message}</p>
           )}
           {typeof res?.elapsed_sec === "number" && (
-            <p className="text-xs text-gray-500">소요 시간: {(res.elapsed_sec as number).toFixed(1)}s</p>
+            <p className="text-[9px] text-[#333333] font-mono">
+              ELAPSED: {(res.elapsed_sec as number).toFixed(1)}s
+            </p>
           )}
         </div>
       )}

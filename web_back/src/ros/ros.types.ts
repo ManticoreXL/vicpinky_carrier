@@ -29,7 +29,7 @@ export interface TopicPublishPayload {
 // ── Action 관련 타입 ─────────────────────────────────────────────────────────
 
 export interface ActionGoalPayload {
-  actionName: string;          // e.g. "/bigpinky/carrier_task"
+  actionName: string;          // e.g. "/vicpinky/carrier_task"
   actionType: string;          // e.g. "carrier_msgs/action/CarrierTask"
   goal: Record<string, unknown>;
 }
@@ -73,11 +73,15 @@ function tb3Topics(id: string): RosTopicConfig[] {
 
 // 구독할 토픽 목록
 export const SUBSCRIBED_TOPICS: RosTopicConfig[] = [
-  // BigPinky
-  { name: '/bigpinky/ramp/state',  messageType: 'std_msgs/String' },
-  { name: '/bigpinky/battery',     messageType: 'sensor_msgs/BatteryState' },
-  { name: '/bigpinky/omx1/state', messageType: 'std_msgs/String' },
-  { name: '/bigpinky/omx2/state', messageType: 'std_msgs/String' },
+  // VicPinky (geometry_msgs/Twist — TwistStamped 아님)
+  { name: '/vicpinky/cmd_vel',          messageType: 'geometry_msgs/Twist' },
+  { name: '/vicpinky/joint_states',     messageType: 'sensor_msgs/JointState' },
+  { name: '/vicpinky/odom',             messageType: 'nav_msgs/Odometry' },
+  { name: '/vicpinky/polygon',          messageType: 'geometry_msgs/PolygonStamped' },
+  { name: '/vicpinky/robot_description',messageType: 'std_msgs/String' },
+  { name: '/vicpinky/scan',             messageType: 'sensor_msgs/LaserScan' },
+  { name: '/vicpinky/scan_filtered',    messageType: 'sensor_msgs/LaserScan' },
+  { name: '/vicpinky/laser_scan_polygon_filter/transition_event', messageType: 'lifecycle_msgs/TransitionEvent' },
 
   // TurtleBot3 × 4
   ...TB3_IDS.flatMap(tb3Topics),
