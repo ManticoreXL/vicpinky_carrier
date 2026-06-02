@@ -87,10 +87,13 @@ export class RosGateway
   ) {
     this.rosService.publish({
       topicName: `/${payload.botId}/cmd_vel`,
-      messageType: 'geometry_msgs/Twist',
+      messageType: 'geometry_msgs/TwistStamped',
       message: {
-        linear:  { x: payload.linear,  y: 0.0, z: 0.0 },
-        angular: { x: 0.0, y: 0.0, z: payload.angular },
+        header: { stamp: { sec: 0, nanosec: 0 }, frame_id: '' },
+        twist: {
+          linear:  { x: payload.linear,  y: 0.0, z: 0.0 },
+          angular: { x: 0.0, y: 0.0, z: payload.angular },
+        },
       },
     });
   }

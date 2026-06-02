@@ -69,10 +69,14 @@ export default function TurtlebotPanel({
   // ── NestJS rosMessages에서 센서 데이터 추출 ──────────────────────────────
   const p = (topic: string) => rosMessages[`/${botId}/${topic}`]?.data;
 
-  // cmd_vel
-  const cvData  = p("cmd_vel") as { linear?: { x?: number }; angular?: { z?: number } } | undefined;
-  const cvLinear  = cvData?.linear?.x  ?? null;
-  const cvAngular = cvData?.angular?.z ?? null;
+  // // cmd_vel
+  // const cvData  = p("cmd_vel") as { linear?: { x?: number }; angular?: { z?: number } } | undefined;
+  // const cvLinear  = cvData?.linear?.x  ?? null;
+  // const cvAngular = cvData?.angular?.z ?? null;
+  // 수정 (TwistStamped)
+  const cvData = p("cmd_vel") as { twist?: { linear?: { x?: number }; angular?: { z?: number } } } | undefined;
+  const cvLinear  = cvData?.twist?.linear?.x  ?? null;
+  const cvAngular = cvData?.twist?.angular?.z ?? null;
 
   // battery_state
   const batData = p("battery_state") as { voltage?: number; percentage?: number; current?: number } | undefined;
