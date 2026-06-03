@@ -1,0 +1,10 @@
+# RampControl.action
+
+# Goal
+float32 target_angle
+---
+# Result
+float32 final_angle
+---
+# Feedback
+float32 current_angle
