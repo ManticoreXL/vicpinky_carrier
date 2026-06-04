@@ -13,9 +13,11 @@ class MirrorMotorControl:
         self.addr_torque_en = 64
         self.addr_profile_vel = 112
         self.addr_goal_pos = 116
+        self.addr_present_load = 126
         self.addr_present_pos = 132
 
         self.len_goal_pos = 4 
+        self.len_present_load = 2
         self.len_present_pos = 4
 
         # 포트 및 패킷 핸들러 초기화
@@ -23,7 +25,8 @@ class MirrorMotorControl:
         self.packetHandler = dynamixel_sdk.PacketHandler(self.protocol_version)
         # 동시 읽기 쓰기 객체 생성
         self.groupSyncWrite = dynamixel_sdk.GroupSyncWrite(self.portHandler, self.packetHandler, self.addr_goal_pos, self.len_goal_pos)
-        self.groupSyncRead = dynamixel_sdk.GroupSyncRead(self.portHandler, self.packetHandler, self.addr_present_pos, self.len_present_pos)
+        self.groupSyncReadPos = dynamixel_sdk.GroupSyncRead(self.portHandler, self.packetHandler, self.addr_present_pos, self.len_present_pos)
+        self.groupSyncReadLoad = dynamixel_sdk.GroupSyncRead(self.portHandler, self.packetHandler, self.addr_present_load, self.len_present_load)
 
         self._connect(baudrate)
         self.set_torque()
@@ -76,22 +79,41 @@ class MirrorMotorControl:
 
     def read_angle(self):
         # 모터의 현재 각도 읽기
-        self.groupSyncRead.addParam(self.id_l)
-        self.groupSyncRead.addParam(self.id_r)
+        self.groupSyncReadPos.addParam(self.id_l)
+        self.groupSyncReadPos.addParam(self.id_r)
 
-        dxl_comm_result = self.groupSyncRead.txRxPacket()
+        dxl_comm_result = self.groupSyncReadPos.txRxPacket()
 
         if dxl_comm_result != dynamixel_sdk.COMM_SUCCESS:
             err_msg=self.packetHandler.getTxRxResult(dxl_comm_result)
-            self.groupSyncRead.clearParam()
+            self.groupSyncReadPos.clearParam()
             raise Exception(f"Failed to read motor position!: {err_msg}")
         
-        present_pos_l = self.groupSyncRead.getData(self.id_l,self.addr_present_pos,self.len_present_pos)
-        present_pos_r = self.groupSyncRead.getData(self.id_r,self.addr_present_pos,self.len_present_pos)
+        present_pos_l = self.groupSyncReadPos.getData(self.id_l,self.addr_present_pos,self.len_present_pos)
+        present_pos_r = self.groupSyncReadPos.getData(self.id_r,self.addr_present_pos,self.len_present_pos)
 
-        self.groupSyncRead.clearParam()
+        self.groupSyncReadPos.clearParam()
 
         return present_pos_l, present_pos_r
+    
+    def read_load(self):
+        # 모터의 현재 부하 읽기
+        self.groupSyncReadLoad.addParam(self.id_l)
+        self.groupSyncReadLoad.addParam(self.id_r)
+
+        dxl_comm_result = self.groupSyncReadLoad.txRxPacket()
+
+        if dxl_comm_result != dynamixel_sdk.COMM_SUCCESS:
+            err_msg=self.packetHandler.getTxRxResult(dxl_comm_result)
+            self.groupSyncReadLoad.clearParam()
+            raise Exception(f"Failed to read motor position!: {err_msg}")
+        
+        present_load_l = self.groupSyncReadLoad.getData(self.id_l,self.addr_present_load,self.len_present_load)
+        present_load_r = self.groupSyncReadLoad.getData(self.id_r,self.addr_present_load,self.len_present_load)
+
+        self.groupSyncReadLoad.clearParam()
+
+        return present_load_l, present_load_r
 
     def close(self):
         self.set_torque(enable=False)
