@@ -68,7 +68,19 @@ def generate_launch_description():
         }]
     )
 
-    # 6. TODO: 커스텀 하드웨어 노드 추가
+    # 6. 커스텀 하드웨어 노드 추가
+    webcam_drive_node = Node(
+    package='v4l2_camera',
+    executable='v4l2_camera_node',
+    name='webcam_node',
+    namespace='vicpinky',
+    output='screen',
+    parameters=[{
+        'video_device': '/dev/video0',
+        'image_size': [640, 480],
+        'camera_frame_id': 'camera_link'
+        }]
+    )
 
     # LaunchDescription 객체 생성 및 반환
     ld = LaunchDescription()
@@ -83,5 +95,6 @@ def generate_launch_description():
     # Nodes 및 Includes 추가
     ld.add_action(upload_launch)
     ld.add_action(vicpinky_base_node)
+    ld.add_action(webcam_drive_node)
 
     return ld
