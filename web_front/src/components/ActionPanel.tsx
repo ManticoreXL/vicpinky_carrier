@@ -9,7 +9,7 @@
  */
 
 import { useState } from "react";
-import { Section, GoldButton, BlueButton, DangerButton } from "./panels/BigPinkyPanel";
+import { Section, GoldButton, DangerButton } from "./panels/BigPinkyPanel";
 import type {
   ActionGoalPayload,
   ActionFeedback,

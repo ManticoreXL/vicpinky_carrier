@@ -1,5 +1,5 @@
-import { Controller, Get, Param, Res, HttpStatus } from '@nestjs/common';
-import { Response } from 'express';
+import { Controller, Get, Post, Param, Res, HttpStatus } from '@nestjs/common';
+import type { Response } from 'express';
 import { MapService } from './map.service';
 
 @Controller('api/map')
@@ -26,6 +26,14 @@ export class MapController {
     res.set('Content-Disposition', `attachment; filename="${botId}_map.pgm"`);
     res.set('Access-Control-Allow-Origin', '*');
     return res.send(pgm);
+  }
+
+  /** Cartographer 초기화 — 캐시 삭제 + finish/start trajectory */
+  @Post(':botId/reset')
+  async resetMap(@Param('botId') botId: string, @Res() res: Response) {
+    const result = await this.mapService.resetMap(botId);
+    res.set('Access-Control-Allow-Origin', '*');
+    return res.status(result.ok ? HttpStatus.OK : HttpStatus.INTERNAL_SERVER_ERROR).json(result);
   }
 
   /** nav2 호환 YAML 다운로드 */

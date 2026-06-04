@@ -1,6 +1,10 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { RosService } from '../ros/ros.service';
 import * as zlib from 'zlib';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 // ── 타입 ─────────────────────────────────────────────────────────────────────
 
@@ -25,8 +29,10 @@ interface StoredMap {
 
 @Injectable()
 export class MapService implements OnModuleInit {
+  private readonly logger = new Logger(MapService.name);
   private readonly maps = new Map<string, StoredMap>();
   private readonly updateCbs: ((botId: string, info: MapInfo) => void)[] = [];
+  private readonly clearCbs: ((botId: string) => void)[] = [];
 
   constructor(private readonly rosService: RosService) {}
 
@@ -51,6 +57,57 @@ export class MapService implements OnModuleInit {
 
   onUpdate(cb: (botId: string, info: MapInfo) => void) {
     this.updateCbs.push(cb);
+  }
+
+  onClear(cb: (botId: string) => void) {
+    this.clearCbs.push(cb);
+  }
+
+  // ── 맵 캐시 삭제 + Cartographer 재시작 ───────────────────────────────────
+
+  clearMap(botId: string) {
+    this.maps.delete(botId);
+    this.clearCbs.forEach((cb) => cb(botId));
+  }
+
+  async resetMap(botId: string): Promise<{ ok: boolean; message: string }> {
+    // 1. 캐시 즉시 삭제 → 프론트 화면 비움
+    this.clearMap(botId);
+
+    const setup    = process.env.ROS2_SETUP         ?? '/opt/ros/humble/setup.bash';
+    const cfgDir   = process.env.CARTOGRAPHER_CONFIG_DIR  ?? '';
+    const cfgFile  = process.env.CARTOGRAPHER_CONFIG_FILE ?? 'turtlebot3_lds_2d.lua';
+    const shell    = { shell: '/bin/bash' as const, timeout: 10_000 };
+
+    try {
+      // 2. 현재 trajectory 종료
+      await execAsync(
+        `source ${setup} && ros2 service call /${botId}/cartographer_node/finish_trajectory ` +
+        `cartographer_ros_msgs/srv/FinishTrajectory "{trajectory_id: 0}"`,
+        shell,
+      );
+      this.logger.log(`[${botId}] finish_trajectory 완료`);
+
+      await new Promise((r) => setTimeout(r, 400));
+
+      // 3. 새 trajectory 시작 (config 경로가 설정된 경우)
+      if (cfgDir) {
+        await execAsync(
+          `source ${setup} && ros2 service call /${botId}/cartographer_node/start_trajectory ` +
+          `cartographer_ros_msgs/srv/StartTrajectory ` +
+          `"{configuration_directory: '${cfgDir}', configuration_basename: '${cfgFile}', ` +
+          `use_initial_pose: false, relative_to_trajectory_id: 0}"`,
+          shell,
+        );
+        this.logger.log(`[${botId}] start_trajectory 완료`);
+      }
+
+      return { ok: true, message: '초기화 완료' };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`[${botId}] 맵 초기화 실패: ${msg}`);
+      return { ok: false, message: msg };
+    }
   }
 
   getPng(botId: string): Buffer | null {

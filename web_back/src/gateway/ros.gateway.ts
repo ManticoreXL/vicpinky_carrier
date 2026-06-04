@@ -31,6 +31,9 @@ export class RosGateway
 
   private readonly logger = new Logger(RosGateway.name);
 
+  // botId → 로봇 socket.id (WebRTC 시그널링용)
+  private readonly robotSockets = new Map<string, string>();
+
   constructor(
     private readonly rosService: RosService,
     private readonly mapService: MapService,
@@ -42,6 +45,11 @@ export class RosGateway
     this.mapService.onUpdate((botId, info) => {
       this.server?.emit('map_updated', { botId, info, timestamp: Date.now() });
       this.logger.debug(`map_updated 브로드캐스트: /${botId}/map`);
+    });
+
+    this.mapService.onClear((botId) => {
+      this.server?.emit('map_cleared', { botId });
+      this.logger.log(`map_cleared 브로드캐스트: ${botId}`);
     });
 
     this.rosService.onMessage((msg) => {
@@ -65,6 +73,15 @@ export class RosGateway
 
   handleDisconnect(client: Socket) {
     this.logger.log(`클라이언트 해제: ${client.id}`);
+    // 로봇 소켓이면 오프라인 이벤트 발행
+    for (const [botId, socketId] of this.robotSockets.entries()) {
+      if (socketId === client.id) {
+        this.robotSockets.delete(botId);
+        this.server?.emit('robot_camera_offline', { botId });
+        this.logger.log(`WebRTC 로봇 오프라인: ${botId}`);
+        break;
+      }
+    }
   }
 
   // ── 프론트 → 토픽 발행 ──────────────────────────────────────────────────
@@ -137,6 +154,91 @@ export class RosGateway
     );
     client.emit('action_accepted', { goalId, actionName: payload.actionName });
     this.logger.debug(`action accepted → ${payload.actionName} [${goalId}]`);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // WebRTC 시그널링 (로봇 Python ↔ 브라우저 중계)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /** 로봇(Python) → 서버: 카메라 노드 등록 */
+  @SubscribeMessage('robot_register')
+  handleRobotRegister(
+    @MessageBody() payload: { botId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    this.robotSockets.set(payload.botId, client.id);
+    this.logger.log(`WebRTC 로봇 등록: ${payload.botId} [${client.id}]`);
+    client.emit('robot_registered', { ok: true });
+    this.server?.emit('robot_camera_online', { botId: payload.botId });
+  }
+
+  /** 브라우저 → 서버: 특정 로봇 스트림 요청 */
+  @SubscribeMessage('webrtc_request_stream')
+  handleRequestStream(
+    @MessageBody() payload: { botId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const robotSocketId = this.robotSockets.get(payload.botId);
+    if (!robotSocketId) {
+      client.emit('webrtc_error', { botId: payload.botId, message: '로봇 카메라 미연결' });
+      return;
+    }
+    // 로봇에게 "이 브라우저가 스트림을 원한다" 전달
+    this.server.to(robotSocketId).emit('browser_wants_stream', { browserId: client.id });
+    this.logger.debug(`스트림 요청: ${payload.botId} ← browser ${client.id}`);
+  }
+
+  /** 로봇(Python) → 서버: SDP Offer 전달 */
+  @SubscribeMessage('webrtc_offer')
+  handleOffer(
+    @MessageBody() payload: { browserId: string; sdp: Record<string, unknown> },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const botId = [...this.robotSockets.entries()]
+      .find(([, sid]) => sid === client.id)?.[0];
+    if (!botId) return;
+    this.server.to(payload.browserId).emit('webrtc_offer', { botId, sdp: payload.sdp });
+  }
+
+  /** 브라우저 → 서버: SDP Answer 전달 */
+  @SubscribeMessage('webrtc_answer')
+  handleAnswer(
+    @MessageBody() payload: { botId: string; sdp: Record<string, unknown> },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const robotSocketId = this.robotSockets.get(payload.botId);
+    if (!robotSocketId) return;
+    this.server.to(robotSocketId).emit('webrtc_answer', { sdp: payload.sdp, browserId: client.id });
+  }
+
+  /** ICE Candidate 양방향 중계
+   *  target='robot'  : 브라우저→로봇
+   *  target='browser': 로봇→브라우저 (browserId 필요)
+   */
+  @SubscribeMessage('webrtc_ice')
+  handleIce(
+    @MessageBody() payload: {
+      botId: string;
+      candidate: Record<string, unknown>;
+      target: string;
+      browserId?: string;
+    },
+    @ConnectedSocket() client: Socket,
+  ) {
+    if (payload.target === 'robot') {
+      const robotSocketId = this.robotSockets.get(payload.botId);
+      if (robotSocketId) {
+        this.server.to(robotSocketId).emit('webrtc_ice', {
+          candidate: payload.candidate,
+          browserId: client.id,
+        });
+      }
+    } else if (payload.browserId) {
+      this.server.to(payload.browserId).emit('webrtc_ice', {
+        botId: payload.botId,
+        candidate: payload.candidate,
+      });
+    }
   }
 
   // ── 프론트 → Action Goal 취소 ────────────────────────────────────────────
