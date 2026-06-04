@@ -23,4 +23,11 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
+ament_python_install_package(${PROJECT_NAME})
+
+install(
+  PROGRAMS scripts/ramp_action_server.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 ament_package()
