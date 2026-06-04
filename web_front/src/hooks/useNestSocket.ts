@@ -47,6 +47,18 @@ export interface ActionResult {
 // actionName → 현재 goalId (진행 중일 때만)
 export type ActiveGoals = Record<string, string>;
 
+export interface MapInfo {
+  resolution: number;
+  width: number;
+  height: number;
+  origin: { position: { x: number; y: number; z: number } };
+}
+
+// botId → 마지막 맵 업데이트 타임스탬프
+export type MapTimestamps = Record<string, number>;
+// botId → 맵 메타데이터
+export type MapInfos = Record<string, MapInfo>;
+
 export function useNestSocket() {
   const socketRef = useRef<Socket | null>(null);
   const serviceCallbacksRef = useRef<Map<string, (res: unknown) => void>>(new Map());
@@ -54,9 +66,13 @@ export function useNestSocket() {
   const [rosMessages, setRosMessages] = useState<Record<string, RosMessage>>({});
 
   // Action 상태
-  const [activeGoals, setActiveGoals]       = useState<ActiveGoals>({});
+  const [activeGoals, setActiveGoals]         = useState<ActiveGoals>({});
   const [actionFeedbacks, setActionFeedbacks] = useState<Record<string, ActionFeedback>>({});
-  const [actionResults, setActionResults]   = useState<Record<string, ActionResult>>({});
+  const [actionResults, setActionResults]     = useState<Record<string, ActionResult>>({});
+
+  // 맵 상태 (raw 데이터 대신 경량 메타만 유지)
+  const [mapTimestamps, setMapTimestamps] = useState<MapTimestamps>({});
+  const [mapInfos, setMapInfos]           = useState<MapInfos>({});
 
   useEffect(() => {
     const socket = io("http://localhost:3001", {
@@ -106,6 +122,12 @@ export function useNestSocket() {
       });
     });
 
+    // ── 맵 이벤트 (경량: raw 데이터 없음) ──────────────────────────────────
+    socket.on("map_updated", ({ botId, info, timestamp }: { botId: string; info: MapInfo; timestamp: number }) => {
+      setMapTimestamps((prev) => ({ ...prev, [botId]: timestamp }));
+      if (info) setMapInfos((prev) => ({ ...prev, [botId]: info }));
+    });
+
     socket.on("action_cancelled", ({ goalId }: { goalId: string }) => {
       setActiveGoals((prev) => {
         const next = { ...prev };
@@ -147,5 +169,6 @@ export function useNestSocket() {
     emitCmdVel, emitPublish, emitAction, cancelAction, callService,
     nestConnected, rosMessages,
     activeGoals, actionFeedbacks, actionResults,
+    mapTimestamps, mapInfos,
   };
 }

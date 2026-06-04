@@ -20,6 +20,7 @@ export default function App() {
     emitCmdVel, emitPublish, emitAction, cancelAction, callService,
     nestConnected, rosMessages,
     activeGoals, actionFeedbacks, actionResults,
+    mapTimestamps, mapInfos,
   } = useNestSocket();
   const [selectedRobot, setSelectedRobot] = useState<RobotId>("vicpinky");
   const [appMode, setAppMode]             = useState<AppMode>("control");
@@ -105,7 +106,12 @@ export default function App() {
       {/* ── 본문 ──────────────────────────────────────────────────────────── */}
       {isExplore ? (
         <div className="flex-1 overflow-hidden">
-          <ExploreView rosMessages={displayMessages} activeGoals={activeGoals} />
+          <ExploreView
+            rosMessages={displayMessages}
+            activeGoals={activeGoals}
+            mapTimestamps={mapTimestamps}
+            mapInfos={mapInfos}
+          />
         </div>
       ) : (
         <div className="flex flex-1 overflow-hidden">

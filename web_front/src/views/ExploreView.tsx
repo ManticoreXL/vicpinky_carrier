@@ -4,11 +4,10 @@
  */
 import { useState, useEffect, useRef, useCallback } from "react";
 import LidarCanvas from "../components/explore/LidarCanvas";
-import MapCanvas, {
-  MapCanvasHandle, OccupancyGridMsg,
-  triggerDownload, buildPgmBlob, buildYamlText,
-} from "../components/MapCanvas";
-import type { RosMessage, ActiveGoals } from "../hooks/useNestSocket";
+import MapCanvas, { MapCanvasHandle } from "../components/MapCanvas";
+import type { RosMessage, ActiveGoals, MapTimestamps, MapInfos } from "../hooks/useNestSocket";
+
+const BACKEND = "http://localhost:3001";
 
 // ── 상수 ───────────────────────────────────────────────────────────────────────
 
@@ -77,11 +76,13 @@ function getBotSnapshot(id: string, msgs: Record<string, RosMessage>) {
 interface Props {
   rosMessages: Record<string, RosMessage>;
   activeGoals: ActiveGoals;
+  mapTimestamps: MapTimestamps;
+  mapInfos: MapInfos;
 }
 
 // ── 컴포넌트 ──────────────────────────────────────────────────────────────────
 
-export default function ExploreView({ rosMessages, activeGoals }: Props) {
+export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, mapInfos }: Props) {
   const [selectedBot, setSelectedBot] = useState<string>("tb3_01");
   const [centerTab, setCenterTab]     = useState<"lidar" | "slam">("lidar");
   const [events, setEvents]           = useState<ExploreEvent[]>([]);
@@ -116,26 +117,35 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
     return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
   };
 
-  // ── SLAM 맵 데이터 ──────────────────────────────────────────────────────────
-  const mapMsg = rosMessages[`/${selectedBot}/map`]?.data as unknown as OccupancyGridMsg | undefined;
+  // ── SLAM 맵 (백엔드 PNG 이미지 URL 기반) ────────────────────────────────────
+  const mapTs   = mapTimestamps[selectedBot];
+  const mapInfo = mapInfos[selectedBot];
+  // 타임스탬프가 바뀔 때마다 새 URL → 브라우저 캐시 무력화
+  const mapImageUrl = mapTs
+    ? `${BACKEND}/api/map/${selectedBot}/image?t=${mapTs}`
+    : null;
 
   const downloadMapPng = useCallback(() => {
-    mapCanvasRef.current?.downloadPng(`${selectedBot}_slam_map.png`);
-  }, [selectedBot]);
+    if (!mapTs) return;
+    const a = document.createElement("a");
+    a.href = `${BACKEND}/api/map/${selectedBot}/image?t=${mapTs}`;
+    a.download = `${selectedBot}_slam_map.png`;
+    a.click();
+  }, [selectedBot, mapTs]);
 
   const downloadMapNav2 = useCallback(() => {
-    if (!mapMsg) return;
-    const pgmName = `${selectedBot}_slam_map.pgm`;
-    const yamlName = `${selectedBot}_slam_map.yaml`;
-    // PGM (바이너리)
-    const pgmUrl = URL.createObjectURL(buildPgmBlob(mapMsg));
-    triggerDownload(pgmUrl, pgmName);
-    // YAML (텍스트) — 약간의 딜레이로 두 번째 다운로드 트리거
+    if (!mapTs) return;
+    const a1 = document.createElement("a");
+    a1.href = `${BACKEND}/api/map/${selectedBot}/pgm`;
+    a1.download = `${selectedBot}_map.pgm`;
+    a1.click();
     setTimeout(() => {
-      const yamlBlob = new Blob([buildYamlText(mapMsg, pgmName)], { type: "text/plain" });
-      triggerDownload(URL.createObjectURL(yamlBlob), yamlName);
+      const a2 = document.createElement("a");
+      a2.href = `${BACKEND}/api/map/${selectedBot}/yaml`;
+      a2.download = `${selectedBot}_map.yaml`;
+      a2.click();
     }, 200);
-  }, [mapMsg, selectedBot]);
+  }, [selectedBot, mapTs]);
 
   // ── 이벤트 자동 생성 ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -495,9 +505,9 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
                   <div className="flex gap-1.5">
                     <button
                       onClick={downloadMapPng}
-                      disabled={!mapMsg}
+                      disabled={!mapTs}
                       className={`px-3 py-1 text-[10px] font-mono font-bold uppercase tracking-widest border transition-all ${
-                        mapMsg
+                        mapTs
                           ? "border-[#2a2a2a] bg-[#111111] text-[#888888] hover:border-[#444444] hover:text-[#c0c0c0]"
                           : "border-[#1a1a1a] text-[#2a2a2a] cursor-not-allowed"
                       }`}
@@ -506,9 +516,9 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
                     </button>
                     <button
                       onClick={downloadMapNav2}
-                      disabled={!mapMsg}
+                      disabled={!mapTs}
                       className={`px-3 py-1 text-[10px] font-mono font-bold uppercase tracking-widest border transition-all ${
-                        mapMsg
+                        mapTs
                           ? "border-red-900/50 bg-red-950/20 text-red-400 hover:border-red-700/70 hover:text-red-300"
                           : "border-[#1a1a1a] text-[#2a2a2a] cursor-not-allowed"
                       }`}
@@ -523,7 +533,8 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
                   <div className="border border-red-900/30 bg-[#050505] p-1 shadow-xl shadow-black/60">
                     <MapCanvas
                       ref={mapCanvasRef}
-                      mapData={mapMsg}
+                      imageUrl={mapImageUrl}
+                      mapInfo={mapInfo}
                       robotX={selectedSnap.pos?.x ?? undefined}
                       robotY={selectedSnap.pos?.y ?? undefined}
                       robotYaw={selectedSnap.yaw != null ? (selectedSnap.yaw * Math.PI) / 180 : undefined}
@@ -533,12 +544,12 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
                 </div>
 
                 {/* 맵 메타 정보 */}
-                {mapMsg ? (
+                {mapInfo ? (
                   <div className="grid grid-cols-3 gap-2">
                     {[
-                      { label: "해상도", val: `${mapMsg.info.resolution} m/cell` },
-                      { label: "크기", val: `${mapMsg.info.width} × ${mapMsg.info.height}` },
-                      { label: "영역", val: `${(mapMsg.info.width * mapMsg.info.resolution).toFixed(1)} × ${(mapMsg.info.height * mapMsg.info.resolution).toFixed(1)} m` },
+                      { label: "해상도", val: `${mapInfo.resolution} m/cell` },
+                      { label: "크기", val: `${mapInfo.width} × ${mapInfo.height}` },
+                      { label: "영역", val: `${(mapInfo.width * mapInfo.resolution).toFixed(1)} × ${(mapInfo.height * mapInfo.resolution).toFixed(1)} m` },
                     ].map(({ label, val }) => (
                       <div key={label} className="bg-[#0a0f1a] border border-[#1e1e1e] px-2 py-1.5 text-center">
                         <p className="text-[9px] text-[#333333] uppercase">{label}</p>

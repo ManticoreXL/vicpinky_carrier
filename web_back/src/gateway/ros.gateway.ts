@@ -11,6 +11,7 @@ import {
 import { Logger, OnModuleInit } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { RosService } from '../ros/ros.service';
+import { MapService } from '../map/map.service';
 import type {
   ServiceCallPayload,
   TopicPublishPayload,
@@ -30,11 +31,22 @@ export class RosGateway
 
   private readonly logger = new Logger(RosGateway.name);
 
-  constructor(private readonly rosService: RosService) {}
+  constructor(
+    private readonly rosService: RosService,
+    private readonly mapService: MapService,
+  ) {}
 
   // ── 모듈 초기화 시 ROS 메시지 → 프론트 브로드캐스트 등록 ───────────────
   onModuleInit() {
+    // 맵 토픽은 MapService가 처리 → 경량 이벤트만 발행
+    this.mapService.onUpdate((botId, info) => {
+      this.server?.emit('map_updated', { botId, info, timestamp: Date.now() });
+      this.logger.debug(`map_updated 브로드캐스트: /${botId}/map`);
+    });
+
     this.rosService.onMessage((msg) => {
+      // 맵 토픽은 socket.io로 raw 전송하지 않음 (MapService에서 PNG로 처리)
+      if (/\/map$/.test(msg.topic)) return;
       const count = this.server?.sockets?.sockets?.size ?? 0;
       this.logger.debug(`브로드캐스트: ${msg.topic} → 클라이언트 ${count}개`);
       this.server?.emit('ros_message', msg);
