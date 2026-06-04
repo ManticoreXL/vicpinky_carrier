@@ -4,6 +4,10 @@
  */
 import { useState, useEffect, useRef, useCallback } from "react";
 import LidarCanvas from "../components/explore/LidarCanvas";
+import MapCanvas, {
+  MapCanvasHandle, OccupancyGridMsg,
+  triggerDownload, buildPgmBlob, buildYamlText,
+} from "../components/MapCanvas";
 import type { RosMessage, ActiveGoals } from "../hooks/useNestSocket";
 
 // ── 상수 ───────────────────────────────────────────────────────────────────────
@@ -79,6 +83,7 @@ interface Props {
 
 export default function ExploreView({ rosMessages, activeGoals }: Props) {
   const [selectedBot, setSelectedBot] = useState<string>("tb3_01");
+  const [centerTab, setCenterTab]     = useState<"lidar" | "slam">("lidar");
   const [events, setEvents]           = useState<ExploreEvent[]>([]);
   const [missionStart]                = useState(Date.now());
   const [elapsed, setElapsed]         = useState(0);
@@ -89,6 +94,7 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
   const prevObstacle                  = useRef<Record<string, boolean>>({});
   const prevOnline                    = useRef<Record<string, boolean>>({});
   const logRef                        = useRef<HTMLDivElement>(null);
+  const mapCanvasRef                  = useRef<MapCanvasHandle>(null);
 
   const pushEvent = useCallback((botId: string, message: string, level: EventLevel) => {
     const evt: ExploreEvent = { id: eventIdRef.current++, ts: Date.now(), botId, message, level };
@@ -109,6 +115,27 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
     const sec = s % 60;
     return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(sec).padStart(2,"0")}`;
   };
+
+  // ── SLAM 맵 데이터 ──────────────────────────────────────────────────────────
+  const mapMsg = rosMessages[`/${selectedBot}/map`]?.data as unknown as OccupancyGridMsg | undefined;
+
+  const downloadMapPng = useCallback(() => {
+    mapCanvasRef.current?.downloadPng(`${selectedBot}_slam_map.png`);
+  }, [selectedBot]);
+
+  const downloadMapNav2 = useCallback(() => {
+    if (!mapMsg) return;
+    const pgmName = `${selectedBot}_slam_map.pgm`;
+    const yamlName = `${selectedBot}_slam_map.yaml`;
+    // PGM (바이너리)
+    const pgmUrl = URL.createObjectURL(buildPgmBlob(mapMsg));
+    triggerDownload(pgmUrl, pgmName);
+    // YAML (텍스트) — 약간의 딜레이로 두 번째 다운로드 트리거
+    setTimeout(() => {
+      const yamlBlob = new Blob([buildYamlText(mapMsg, pgmName)], { type: "text/plain" });
+      triggerDownload(URL.createObjectURL(yamlBlob), yamlName);
+    }, 200);
+  }, [mapMsg, selectedBot]);
 
   // ── 이벤트 자동 생성 ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -332,109 +359,201 @@ export default function ExploreView({ rosMessages, activeGoals }: Props) {
         {/* ── 중앙: LiDAR + 센서 요약 ───────────────────────────────────── */}
         <main className="flex-1 flex flex-col bg-[#050505] overflow-y-auto min-w-0">
 
-          {/* 봇 선택 탭 */}
-          <div className="flex-none flex items-center gap-1 px-4 pt-3 pb-2">
-            {TB3_IDS.map((id) => {
-              const s = botSnaps[id];
-              return (
+          {/* 봇 선택 탭 + 뷰 토글 */}
+          <div className="flex-none flex items-center justify-between gap-2 px-4 pt-3 pb-2">
+            {/* 봇 탭 */}
+            <div className="flex items-center gap-1">
+              {TB3_IDS.map((id) => {
+                const s = botSnaps[id];
+                return (
+                  <button
+                    key={id}
+                    onClick={() => setSelectedBot(id)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-mono font-bold transition-all border ${
+                      selectedBot === id
+                        ? "bg-red-950/60 border-red-700/60 text-red-300"
+                        : s.online
+                          ? "bg-transparent border-slate-700/30 text-[#555555] hover:border-red-900/40 hover:text-[#888888]"
+                          : "bg-transparent border-[#141414] text-[#222222] cursor-default"
+                    }`}
+                  >
+                    {s.detected && "⚠ "}{TB3_LABELS[id]}
+                    <span className={`ml-1.5 text-[8px] ${s.online ? "text-green-500" : "text-[#222222]"}`}>
+                      {s.online ? "●" : "○"}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* LIDAR / SLAM 뷰 토글 */}
+            <div className="flex border border-[#222222] overflow-hidden flex-none">
+              {(["lidar", "slam"] as const).map((tab) => (
                 <button
-                  key={id}
-                  onClick={() => setSelectedBot(id)}
-                  className={`px-3 py-1.5 rounded-md text-xs font-mono font-bold transition-all border ${
-                    selectedBot === id
-                      ? "bg-red-950/60 border-red-700/60 text-red-300"
-                      : s.online
-                        ? "bg-transparent border-slate-700/30 text-[#555555] hover:border-red-900/40 hover:text-[#888888]"
-                        : "bg-transparent border-[#141414] text-[#222222] cursor-default"
-                  }`}
+                  key={tab}
+                  onClick={() => setCenterTab(tab)}
+                  className={`px-3 py-1 text-[10px] font-mono font-bold uppercase tracking-widest transition-all ${
+                    centerTab === tab
+                      ? "bg-red-950/50 text-red-400 border-r-0"
+                      : "bg-transparent text-[#333333] hover:text-[#666666]"
+                  } ${tab === "lidar" ? "border-r border-[#222222]" : ""}`}
                 >
-                  {s.detected && "⚠ "}{TB3_LABELS[id]}
-                  <span className={`ml-1.5 text-[8px] ${s.online ? "text-green-500" : "text-[#222222]"}`}>
-                    {s.online ? "●" : "○"}
-                  </span>
+                  {tab === "lidar" ? "◎ LIDAR" : "▣ SLAM"}
                 </button>
-              );
-            })}
+              ))}
+            </div>
           </div>
 
           <div className="flex-1 flex flex-col gap-4 px-4 pb-4">
-            {/* LiDAR 시각화 */}
-            <div className="flex flex-col items-center gap-3">
-              <div className="flex items-center justify-between w-full max-w-xs">
-                <PanelHeader icon="◎" label={`LIDAR — ${selectedBot.toUpperCase()}`} small />
-                {selectedSnap.nearest !== null && (
-                  <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded border ${
-                    selectedSnap.nearest < 0.3
-                      ? "text-red-400 border-red-700/50 bg-red-950/40 animate-pulse"
-                      : "text-[#888888] border-slate-700/30"
-                  }`}>
-                    최근접 {selectedSnap.nearest.toFixed(2)}m
-                  </span>
+
+            {/* ── LIDAR 탭 ──────────────────────────────────────────────── */}
+            {centerTab === "lidar" && (
+              <>
+                <div className="flex flex-col items-center gap-3">
+                  <div className="flex items-center justify-between w-full max-w-xs">
+                    <PanelHeader icon="◎" label={`LIDAR — ${selectedBot.toUpperCase()}`} small />
+                    {selectedSnap.nearest !== null && (
+                      <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded border ${
+                        selectedSnap.nearest < 0.3
+                          ? "text-red-400 border-red-700/50 bg-red-950/40 animate-pulse"
+                          : "text-[#888888] border-slate-700/30"
+                      }`}>
+                        최근접 {selectedSnap.nearest.toFixed(2)}m
+                      </span>
+                    )}
+                  </div>
+                  <div className="bg-[#050505] rounded-xl border border-red-900/20 p-2 shadow-xl shadow-black/50">
+                    <LidarCanvas scanData={selectedSnap.scan} size={280} />
+                  </div>
+                  <div className="grid grid-cols-4 gap-1 w-full text-center">
+                    {[
+                      { label: "범위", val: selectedSnap.scan ? `${selectedSnap.scan.range_min?.toFixed(2) ?? "?"} ~ ${selectedSnap.scan.range_max?.toFixed(1) ?? "?"}m` : "—" },
+                      { label: "포인트", val: selectedSnap.scan?.ranges ? `${(selectedSnap.scan.ranges.filter(r => isFinite(r))).length}` : "—" },
+                      { label: "상태", val: selectedSnap.online ? "ON" : "OFF" },
+                      { label: "감지", val: selectedSnap.detected ? "DETECT" : "CLEAR" },
+                    ].map(({ label, val }) => (
+                      <div key={label} className="bg-[#0a0f1a] rounded border border-[#1e1e1e] px-2 py-1.5">
+                        <p className="text-[9px] text-[#333333] uppercase">{label}</p>
+                        <p className="text-xs font-mono text-[#c0c0c0] mt-0.5">{val}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 센서 요약 그리드 */}
+                <div>
+                  <PanelHeader icon="▣" label={`SENSOR SUMMARY — ${selectedBot.toUpperCase()}`} small />
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <SensorBox label="위치 (odom)">
+                      <DataRow label="X" value={selectedSnap.pos?.x != null ? `${selectedSnap.pos.x.toFixed(3)} m` : "—"} />
+                      <DataRow label="Y" value={selectedSnap.pos?.y != null ? `${selectedSnap.pos.y.toFixed(3)} m` : "—"} />
+                      <DataRow label="Yaw" value={selectedSnap.yaw != null ? `${selectedSnap.yaw.toFixed(1)}°` : "—"} />
+                    </SensorBox>
+                    <SensorBox label="배터리">
+                      <DataRow label="용량" value={selectedSnap.batPct != null ? `${selectedSnap.batPct}%` : "—"}
+                        alert={(selectedSnap.batPct ?? 100) < 20} />
+                      <DataRow label="전압" value={selectedSnap.batV != null ? `${selectedSnap.batV.toFixed(2)} V` : "—"} />
+                      <DataRow label="상태" value={
+                        selectedSnap.batPct == null ? "—" :
+                        selectedSnap.batPct < 20 ? "위험" :
+                        selectedSnap.batPct < 50 ? "주의" : "정상"
+                      } alert={(selectedSnap.batPct ?? 100) < 20} />
+                    </SensorBox>
+                    <SensorBox label="안전 상태">
+                      <DataRow label="장애물" value={selectedSnap.nearest != null ? `${selectedSnap.nearest.toFixed(2)} m` : "—"}
+                        alert={selectedSnap.nearest != null && selectedSnap.nearest < 0.3} />
+                      <DataRow label="충돌" value={selectedSnap.bumper === 0 ? "없음" : selectedSnap.bumper === 1 ? "전방" : "후방"}
+                        alert={selectedSnap.bumper !== 0} />
+                      <DataRow label="절벽" value={selectedSnap.cliff ? "감지" : "없음"}
+                        alert={!!selectedSnap.cliff} />
+                    </SensorBox>
+                    <SensorBox label="YOLO 인명 감지">
+                      <div className={`flex items-center gap-2 mt-1 px-2 py-1.5 rounded ${
+                        selectedSnap.detected
+                          ? "bg-red-950/60 border border-red-800/50"
+                          : "bg-green-950/30 border border-green-900/30"
+                      }`}>
+                        <div className={`w-3 h-3 rounded-full ${
+                          selectedSnap.detected ? "bg-red-500 animate-ping" : "bg-green-600"
+                        }`} />
+                        <span className={`text-sm font-bold ${selectedSnap.detected ? "text-red-400" : "text-green-400"}`}>
+                          {selectedSnap.detected ? "인명 감지" : "이상 없음"}
+                        </span>
+                      </div>
+                    </SensorBox>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {/* ── SLAM 탭 ───────────────────────────────────────────────── */}
+            {centerTab === "slam" && (
+              <div className="flex flex-col gap-3">
+                {/* 헤더 + 다운로드 버튼 */}
+                <div className="flex items-center justify-between">
+                  <PanelHeader icon="▣" label={`SLAM MAP — ${selectedBot.toUpperCase()}`} small />
+                  <div className="flex gap-1.5">
+                    <button
+                      onClick={downloadMapPng}
+                      disabled={!mapMsg}
+                      className={`px-3 py-1 text-[10px] font-mono font-bold uppercase tracking-widest border transition-all ${
+                        mapMsg
+                          ? "border-[#2a2a2a] bg-[#111111] text-[#888888] hover:border-[#444444] hover:text-[#c0c0c0]"
+                          : "border-[#1a1a1a] text-[#2a2a2a] cursor-not-allowed"
+                      }`}
+                    >
+                      PNG 저장
+                    </button>
+                    <button
+                      onClick={downloadMapNav2}
+                      disabled={!mapMsg}
+                      className={`px-3 py-1 text-[10px] font-mono font-bold uppercase tracking-widest border transition-all ${
+                        mapMsg
+                          ? "border-red-900/50 bg-red-950/20 text-red-400 hover:border-red-700/70 hover:text-red-300"
+                          : "border-[#1a1a1a] text-[#2a2a2a] cursor-not-allowed"
+                      }`}
+                    >
+                      PGM + YAML
+                    </button>
+                  </div>
+                </div>
+
+                {/* 맵 캔버스 */}
+                <div className="flex justify-center">
+                  <div className="border border-red-900/30 bg-[#050505] p-1 shadow-xl shadow-black/60">
+                    <MapCanvas
+                      ref={mapCanvasRef}
+                      mapData={mapMsg}
+                      robotX={selectedSnap.pos?.x ?? undefined}
+                      robotY={selectedSnap.pos?.y ?? undefined}
+                      robotYaw={selectedSnap.yaw != null ? (selectedSnap.yaw * Math.PI) / 180 : undefined}
+                      size={320}
+                    />
+                  </div>
+                </div>
+
+                {/* 맵 메타 정보 */}
+                {mapMsg ? (
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { label: "해상도", val: `${mapMsg.info.resolution} m/cell` },
+                      { label: "크기", val: `${mapMsg.info.width} × ${mapMsg.info.height}` },
+                      { label: "영역", val: `${(mapMsg.info.width * mapMsg.info.resolution).toFixed(1)} × ${(mapMsg.info.height * mapMsg.info.resolution).toFixed(1)} m` },
+                    ].map(({ label, val }) => (
+                      <div key={label} className="bg-[#0a0f1a] border border-[#1e1e1e] px-2 py-1.5 text-center">
+                        <p className="text-[9px] text-[#333333] uppercase">{label}</p>
+                        <p className="text-[10px] font-mono text-[#c0c0c0] mt-0.5">{val}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-[#2a2a2a] font-mono text-center py-2">
+                    /{selectedBot}/map 토픽 대기 중 — Cartographer 실행 확인
+                  </p>
                 )}
               </div>
-              <div className="bg-[#050505] rounded-xl border border-red-900/20 p-2 shadow-xl shadow-black/50">
-                <LidarCanvas scanData={selectedSnap.scan} size={280} />
-              </div>
-              <div className="grid grid-cols-4 gap-1 w-full text-center">
-                {[
-                  { label: "범위", val: selectedSnap.scan ? `${selectedSnap.scan.range_min?.toFixed(2) ?? "?"} ~ ${selectedSnap.scan.range_max?.toFixed(1) ?? "?"}m` : "—" },
-                  { label: "포인트", val: selectedSnap.scan?.ranges ? `${(selectedSnap.scan.ranges.filter(r => isFinite(r))).length}` : "—" },
-                  { label: "상태", val: selectedSnap.online ? "ON" : "OFF" },
-                  { label: "감지", val: selectedSnap.detected ? "DETECT" : "CLEAR" },
-                ].map(({ label, val }) => (
-                  <div key={label} className="bg-[#0a0f1a] rounded border border-[#1e1e1e] px-2 py-1.5">
-                    <p className="text-[9px] text-[#333333] uppercase">{label}</p>
-                    <p className="text-xs font-mono text-[#c0c0c0] mt-0.5">{val}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
+            )}
 
-            {/* 센서 요약 그리드 */}
-            <div>
-              <PanelHeader icon="▣" label={`SENSOR SUMMARY — ${selectedBot.toUpperCase()}`} small />
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <SensorBox label="위치 (odom)">
-                  <DataRow label="X" value={selectedSnap.pos?.x != null ? `${selectedSnap.pos.x.toFixed(3)} m` : "—"} />
-                  <DataRow label="Y" value={selectedSnap.pos?.y != null ? `${selectedSnap.pos.y.toFixed(3)} m` : "—"} />
-                  <DataRow label="Yaw" value={selectedSnap.yaw != null ? `${selectedSnap.yaw.toFixed(1)}°` : "—"} />
-                </SensorBox>
-                <SensorBox label="배터리">
-                  <DataRow label="용량" value={selectedSnap.batPct != null ? `${selectedSnap.batPct}%` : "—"}
-                    alert={(selectedSnap.batPct ?? 100) < 20} />
-                  <DataRow label="전압" value={selectedSnap.batV != null ? `${selectedSnap.batV.toFixed(2)} V` : "—"} />
-                  <DataRow label="상태" value={
-                    selectedSnap.batPct == null ? "—" :
-                    selectedSnap.batPct < 20 ? "위험" :
-                    selectedSnap.batPct < 50 ? "주의" : "정상"
-                  } alert={(selectedSnap.batPct ?? 100) < 20} />
-                </SensorBox>
-                <SensorBox label="안전 상태">
-                  <DataRow label="장애물" value={selectedSnap.nearest != null ? `${selectedSnap.nearest.toFixed(2)} m` : "—"}
-                    alert={selectedSnap.nearest != null && selectedSnap.nearest < 0.3} />
-                  <DataRow label="충돌" value={selectedSnap.bumper === 0 ? "없음" : selectedSnap.bumper === 1 ? "전방" : "후방"}
-                    alert={selectedSnap.bumper !== 0} />
-                  <DataRow label="절벽" value={selectedSnap.cliff ? "감지" : "없음"}
-                    alert={!!selectedSnap.cliff} />
-                </SensorBox>
-                <SensorBox label="YOLO 인명 감지">
-                  <div className={`flex items-center gap-2 mt-1 px-2 py-1.5 rounded ${
-                    selectedSnap.detected
-                      ? "bg-red-950/60 border border-red-800/50"
-                      : "bg-green-950/30 border border-green-900/30"
-                  }`}>
-                    <div className={`w-3 h-3 rounded-full ${
-                      selectedSnap.detected
-                        ? "bg-red-500 animate-ping"
-                        : "bg-green-600"
-                    }`} />
-                    <span className={`text-sm font-bold ${selectedSnap.detected ? "text-red-400" : "text-green-400"}`}>
-                      {selectedSnap.detected ? "인명 감지" : "이상 없음"}
-                    </span>
-                  </div>
-                </SensorBox>
-              </div>
-            </div>
           </div>
         </main>
 

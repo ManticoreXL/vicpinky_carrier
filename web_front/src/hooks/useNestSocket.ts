@@ -1,6 +1,12 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { io, Socket } from "socket.io-client";
 
+export interface ServiceCallPayload {
+  serviceName: string;
+  serviceType: string;
+  request: Record<string, unknown>;
+}
+
 export interface CmdVelPayload {
   botId: string;
   linear: number;
@@ -43,6 +49,7 @@ export type ActiveGoals = Record<string, string>;
 
 export function useNestSocket() {
   const socketRef = useRef<Socket | null>(null);
+  const serviceCallbacksRef = useRef<Map<string, (res: unknown) => void>>(new Map());
   const [nestConnected, setNestConnected] = useState(false);
   const [rosMessages, setRosMessages] = useState<Record<string, RosMessage>>({});
 
@@ -62,6 +69,14 @@ export function useNestSocket() {
 
     socket.on("ros_message", (msg: RosMessage) => {
       setRosMessages((prev) => ({ ...prev, [msg.topic]: msg }));
+    });
+
+    socket.on("service_response", ({ service, response }: { service: string; response: unknown }) => {
+      const cb = serviceCallbacksRef.current.get(service);
+      if (cb) {
+        cb(response);
+        serviceCallbacksRef.current.delete(service);
+      }
     });
 
     // ── Action 이벤트 ────────────────────────────────────────────────────
@@ -118,8 +133,18 @@ export function useNestSocket() {
     socketRef.current?.emit("cancel_action", { actionName, goalId });
   }, []);
 
+  const callService = useCallback((
+    serviceName: string,
+    serviceType: string,
+    request: Record<string, unknown>,
+    callback: (res: unknown) => void,
+  ) => {
+    serviceCallbacksRef.current.set(serviceName, callback);
+    socketRef.current?.emit("call_service", { serviceName, serviceType, request });
+  }, []);
+
   return {
-    emitCmdVel, emitPublish, emitAction, cancelAction,
+    emitCmdVel, emitPublish, emitAction, cancelAction, callService,
     nestConnected, rosMessages,
     activeGoals, actionFeedbacks, actionResults,
   };

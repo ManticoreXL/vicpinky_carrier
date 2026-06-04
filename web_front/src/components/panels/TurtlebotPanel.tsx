@@ -8,6 +8,13 @@ import {
   PanelCard, Section, BigStatus,
   GoldButton, BlueButton, DangerButton, NoData,
 } from "./BigPinkyPanel";
+
+type DiagStatus = "idle" | "loading" | "ok" | "error";
+interface DiagResult {
+  isOk: boolean;
+  summary: string;
+  errors: string[];
+}
 import { useKeyboardControl } from "../../hooks/useKeyboardControl";
 import ActionPanel from "../ActionPanel";
 
@@ -43,6 +50,7 @@ interface Props extends PanelProps {
   activeGoals: ActiveGoals;
   actionFeedbacks: Record<string, ActionFeedback>;
   actionResults: Record<string, ActionResult>;
+  callService: (serviceName: string, serviceType: string, request: Record<string, unknown>, callback: (res: unknown) => void) => void;
 }
 
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
@@ -50,10 +58,13 @@ interface Props extends PanelProps {
 export default function TurtlebotPanel({
   subscribe, publish, botId, emitCmdVel, rosMessages,
   emitAction, cancelAction, activeGoals, actionFeedbacks, actionResults,
+  callService,
 }: Props) {
   const [mode, setMode]               = useState("unknown");
   const [detected, setDetected]       = useState(false);
   const [keyboardActive, setKeyboardActive] = useState(false);
+  const [diagStatus, setDiagStatus]   = useState<DiagStatus>("idle");
+  const [diagResult, setDiagResult]   = useState<DiagResult | null>(null);
 
   // ── 직접 roslibjs 구독 (mode, yolo) ─────────────────────────────────────
   useEffect(() => {
@@ -177,6 +188,26 @@ export default function TurtlebotPanel({
     window.addEventListener("keydown", onEsc);
     return () => window.removeEventListener("keydown", onEsc);
   }, []);
+
+  const runDiagnosis = useCallback(() => {
+    setDiagStatus("loading");
+    setDiagResult(null);
+    callService(
+      `/${botId}/run_diagnosis`,
+      "turtlebot3_custom_msgs/srv/SelfDiagnosis",
+      { target_component: "all" },
+      (res) => {
+        const r = res as { is_ok?: boolean; summary_message?: string; error_details?: string[] };
+        const result: DiagResult = {
+          isOk: r.is_ok ?? false,
+          summary: r.summary_message ?? "",
+          errors: r.error_details ?? [],
+        };
+        setDiagResult(result);
+        setDiagStatus(result.isOk ? "ok" : "error");
+      },
+    );
+  }, [botId, callService]);
 
   const modeColor =
     mode === "explore" ? "text-blue-400" :
@@ -389,6 +420,47 @@ export default function TurtlebotPanel({
           }`}>
             {rdReceived ? "◉ URDF RECEIVED" : "WAITING…"}
           </span>
+        </Section>
+
+        {/* ── 자가진단 ─────────────────────────────────────────────────────── */}
+        <Section label="자가진단">
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-2">
+                {diagStatus === "idle"    && <span className="text-[10px] text-[#2a2a2a] font-mono uppercase tracking-widest">대기 중</span>}
+                {diagStatus === "loading" && <span className="text-[10px] text-amber-400 font-mono uppercase tracking-widest animate-pulse">진단 중…</span>}
+                {diagStatus === "ok"      && <span className="text-[10px] text-green-500 font-mono font-black uppercase tracking-widest">◉ 정상</span>}
+                {diagStatus === "error"   && <span className="text-[10px] text-red-500 font-mono font-black uppercase tracking-widest danger-pulse">⚠ 이상 감지</span>}
+              </div>
+              <button
+                onClick={runDiagnosis}
+                disabled={diagStatus === "loading"}
+                className={`px-4 py-1.5 border text-[11px] font-bold uppercase tracking-widest transition-all ${
+                  diagStatus === "loading"
+                    ? "border-[#1a1a1a] bg-transparent text-[#333333] cursor-not-allowed"
+                    : "border-[#2a2a2a] bg-[#111111] text-[#888888] hover:bg-[#1a1a1a] hover:border-[#444444] hover:text-[#c0c0c0]"
+                }`}
+              >
+                {diagStatus === "loading" ? "진단 중…" : "자가진단 시작"}
+              </button>
+            </div>
+            {diagResult && (
+              <div className={`text-[10px] font-mono p-2.5 border ${
+                diagResult.isOk
+                  ? "border-green-900/50 bg-green-950/20 text-green-400"
+                  : "border-red-900/50 bg-red-950/20 text-red-400"
+              }`}>
+                <p className="font-bold">{diagResult.summary}</p>
+                {diagResult.errors.length > 0 && (
+                  <ul className="mt-2 space-y-1">
+                    {diagResult.errors.map((e, i) => (
+                      <li key={i}>• {e}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
         </Section>
 
         {/* ── Action ──────────────────────────────────────────────────────── */}
