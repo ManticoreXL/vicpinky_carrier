@@ -68,6 +68,7 @@ function tb3Topics(id: string): RosTopicConfig[] {
     { name: `/${id}/sensor_state`,      messageType: 'turtlebot3_msgs/SensorState' },
     { name: `/${id}/mode`,              messageType: 'std_msgs/String' },
     { name: `/${id}/yolo/person_detected`, messageType: 'std_msgs/Bool' },
+    { name: `/${id}/map`,              messageType: 'nav_msgs/OccupancyGrid' },
   ];
 }
 

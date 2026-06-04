@@ -17,7 +17,7 @@ type AppMode = "control" | "explore";
 export default function App() {
   const { connected, error, subscribe, publish } = useRos();
   const {
-    emitCmdVel, emitPublish, emitAction, cancelAction,
+    emitCmdVel, emitPublish, emitAction, cancelAction, callService,
     nestConnected, rosMessages,
     activeGoals, actionFeedbacks, actionResults,
   } = useNestSocket();
@@ -126,6 +126,7 @@ export default function App() {
                 activeGoals={activeGoals}
                 actionFeedbacks={actionFeedbacks}
                 actionResults={actionResults}
+                callService={callService}
               />
             )}
             {(selectedRobot === "tb3_01" ||
@@ -143,6 +144,7 @@ export default function App() {
                 activeGoals={activeGoals}
                 actionFeedbacks={actionFeedbacks}
                 actionResults={actionResults}
+                callService={callService}
               />
             )}
             {selectedRobot === "omx" && (
@@ -154,6 +156,7 @@ export default function App() {
                 activeGoals={activeGoals}
                 actionFeedbacks={actionFeedbacks}
                 actionResults={actionResults}
+                callService={callService}
               />
             )}
           </main>

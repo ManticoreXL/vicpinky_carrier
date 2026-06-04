@@ -12,7 +12,7 @@
  *   /vicpinky/laser_scan_polygon_filter/transition_event  lifecycle_msgs/TransitionEvent
  */
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { PanelProps } from "../../hooks/useRos";
 import ActionPanel from "../ActionPanel";
 import LidarCanvas from "../explore/LidarCanvas";
@@ -34,6 +34,8 @@ function quatToYaw(q: { x: number; y: number; z: number; w: number }) {
   return Math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y ** 2 + q.z ** 2));
 }
 
+type DiagStatus = "idle" | "loading" | "ok" | "error";
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 interface Props extends PanelProps {
   rosMessages: Record<string, RosMessage>;
@@ -43,15 +45,19 @@ interface Props extends PanelProps {
   activeGoals: ActiveGoals;
   actionFeedbacks: Record<string, ActionFeedback>;
   actionResults: Record<string, ActionResult>;
+  callService: (serviceName: string, serviceType: string, request: Record<string, unknown>, callback: (res: unknown) => void) => void;
 }
 
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
 export default function VicPinkyPanel({
   rosMessages, emitCmdVel,
   emitAction, cancelAction, activeGoals, actionFeedbacks, actionResults,
+  callService,
 }: Props) {
   const [scanTab, setScanTab]           = useState<"scan" | "scan_filtered">("scan");
   const [keyboardActive, setKeyboardActive] = useState(false);
+  const [diagStatus, setDiagStatus]     = useState<DiagStatus>("idle");
+  const diagTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // rosMessages에서 데이터 추출
   const p = (topic: string) => rosMessages[`/vicpinky/${topic}`]?.data;
@@ -112,6 +118,23 @@ export default function VicPinkyPanel({
     window.addEventListener("keydown", onEsc);
     return () => window.removeEventListener("keydown", onEsc);
   }, []);
+
+  // ── 자가진단 ─────────────────────────────────────────────────────────────
+  const runDiagnosis = useCallback(() => {
+    setDiagStatus("loading");
+    if (diagTimeoutRef.current) clearTimeout(diagTimeoutRef.current);
+    callService(
+      "/vicpinky/run_diagnosis",
+      "turtlebot3_custom_msgs/srv/SelfDiagnosis",
+      { target_component: "all" },
+      (res) => {
+        const r = res as { is_ok?: boolean };
+        const next: DiagStatus = r.is_ok ? "ok" : "error";
+        setDiagStatus(next);
+        diagTimeoutRef.current = setTimeout(() => setDiagStatus("idle"), 5000);
+      },
+    );
+  }, [callService]);
 
   return (
     <div className="max-w-2xl">
@@ -291,6 +314,21 @@ export default function VicPinkyPanel({
           </div>
         </Section>
 
+        {/* ── 자가진단 ─────────────────────────────────────────────────── */}
+        <Section label="자가진단">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              {diagStatus === "idle"    && <span className="text-[10px] text-[#2a2a2a] font-mono uppercase tracking-widest">대기 중</span>}
+              {diagStatus === "loading" && <span className="text-[10px] text-amber-400 font-mono uppercase tracking-widest animate-pulse">진단 중…</span>}
+              {diagStatus === "ok"      && <span className="text-[10px] text-green-500 font-mono font-black uppercase tracking-widest">◉ 정상</span>}
+              {diagStatus === "error"   && <span className="text-[10px] text-red-500 font-mono font-black uppercase tracking-widest danger-pulse">⚠ 이상 감지</span>}
+            </div>
+            <BlueButton onClick={runDiagnosis} disabled={diagStatus === "loading"}>
+              자가진단 시작
+            </BlueButton>
+          </div>
+        </Section>
+
         {/* ── Action ─────────────────────────────────────────────────────── */}
         <ActionPanel
           robotNamespace="vicpinky"
@@ -438,12 +476,21 @@ export function GoldButton({ onClick, children }: { onClick: () => void; childre
   );
 }
 
-export function BlueButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
+export function BlueButton({ onClick, children, disabled = false }: {
+  onClick: () => void;
+  children: React.ReactNode;
+  disabled?: boolean;
+}) {
   return (
-    <button onClick={onClick}
-      className="px-4 py-1.5 border border-[#2a2a2a] bg-[#111111] hover:bg-[#1a1a1a]
-                 text-[#888888] text-[11px] font-bold uppercase tracking-widest transition-all
-                 hover:border-[#444444] hover:text-[#c0c0c0]">
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      className={`px-4 py-1.5 border text-[11px] font-bold uppercase tracking-widest transition-all ${
+        disabled
+          ? "border-[#1a1a1a] bg-transparent text-[#333333] cursor-not-allowed"
+          : "border-[#2a2a2a] bg-[#111111] hover:bg-[#1a1a1a] text-[#888888] hover:border-[#444444] hover:text-[#c0c0c0]"
+      }`}
+    >
       {children}
     </button>
   );
