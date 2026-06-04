@@ -3,9 +3,10 @@
  * 기존 관제 기능과 별개로 동작하는 탐사 전용 화면
  */
 import { useState, useEffect, useRef, useCallback } from "react";
-import LidarCanvas from "../components/explore/LidarCanvas";
 import MapCanvas, { MapCanvasHandle } from "../components/MapCanvas";
+import CameraFeed from "../components/CameraFeed";
 import type { RosMessage, ActiveGoals, MapTimestamps, MapInfos } from "../hooks/useNestSocket";
+import type { Socket } from "socket.io-client";
 
 const BACKEND = "http://localhost:3001";
 
@@ -78,13 +79,13 @@ interface Props {
   activeGoals: ActiveGoals;
   mapTimestamps: MapTimestamps;
   mapInfos: MapInfos;
+  socket: Socket | null;
 }
 
 // ── 컴포넌트 ──────────────────────────────────────────────────────────────────
 
-export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, mapInfos }: Props) {
+export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, mapInfos, socket }: Props) {
   const [selectedBot, setSelectedBot] = useState<string>("tb3_01");
-  const [centerTab, setCenterTab]     = useState<"lidar" | "slam">("lidar");
   const [events, setEvents]           = useState<ExploreEvent[]>([]);
   const [missionStart]                = useState(Date.now());
   const [elapsed, setElapsed]         = useState(0);
@@ -96,6 +97,8 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
   const prevOnline                    = useRef<Record<string, boolean>>({});
   const logRef                        = useRef<HTMLDivElement>(null);
   const mapCanvasRef                  = useRef<MapCanvasHandle>(null);
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetMsg, setResetMsg]       = useState<string | null>(null);
 
   const pushEvent = useCallback((botId: string, message: string, level: EventLevel) => {
     const evt: ExploreEvent = { id: eventIdRef.current++, ts: Date.now(), botId, message, level };
@@ -132,6 +135,21 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
     a.download = `${selectedBot}_slam_map.png`;
     a.click();
   }, [selectedBot, mapTs]);
+
+  const resetMap = useCallback(async () => {
+    setIsResetting(true);
+    setResetMsg(null);
+    try {
+      const res = await fetch(`${BACKEND}/api/map/${selectedBot}/reset`, { method: "POST" });
+      const json = await res.json() as { ok: boolean; message: string };
+      setResetMsg(json.ok ? "초기화 완료" : `실패: ${json.message}`);
+    } catch {
+      setResetMsg("요청 실패 — 백엔드 확인");
+    } finally {
+      setIsResetting(false);
+      setTimeout(() => setResetMsg(null), 4000);
+    }
+  }, [selectedBot]);
 
   const downloadMapNav2 = useCallback(() => {
     if (!mapTs) return;
@@ -366,277 +384,127 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
           <div className="flex-1" />
         </aside>
 
-        {/* ── 중앙: LiDAR + 센서 요약 ───────────────────────────────────── */}
+        {/* ── 중앙: SLAM 맵 ──────────────────────────────────────────────── */}
         <main className="flex-1 flex flex-col bg-[#050505] overflow-y-auto min-w-0">
 
-          {/* 봇 선택 탭 + 뷰 토글 */}
-          <div className="flex-none flex items-center justify-between gap-2 px-4 pt-3 pb-2">
-            {/* 봇 탭 */}
-            <div className="flex items-center gap-1">
-              {TB3_IDS.map((id) => {
-                const s = botSnaps[id];
-                return (
-                  <button
-                    key={id}
-                    onClick={() => setSelectedBot(id)}
-                    className={`px-3 py-1.5 rounded-md text-xs font-mono font-bold transition-all border ${
-                      selectedBot === id
-                        ? "bg-red-950/60 border-red-700/60 text-red-300"
-                        : s.online
-                          ? "bg-transparent border-slate-700/30 text-[#555555] hover:border-red-900/40 hover:text-[#888888]"
-                          : "bg-transparent border-[#141414] text-[#222222] cursor-default"
-                    }`}
-                  >
-                    {s.detected && "⚠ "}{TB3_LABELS[id]}
-                    <span className={`ml-1.5 text-[8px] ${s.online ? "text-green-500" : "text-[#222222]"}`}>
-                      {s.online ? "●" : "○"}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* LIDAR / SLAM 뷰 토글 */}
-            <div className="flex border border-[#222222] overflow-hidden flex-none">
-              {(["lidar", "slam"] as const).map((tab) => (
+          {/* 봇 선택 탭 */}
+          <div className="flex-none flex items-center gap-1 px-4 pt-3 pb-2">
+            {TB3_IDS.map((id) => {
+              const s = botSnaps[id];
+              return (
                 <button
-                  key={tab}
-                  onClick={() => setCenterTab(tab)}
-                  className={`px-3 py-1 text-[10px] font-mono font-bold uppercase tracking-widest transition-all ${
-                    centerTab === tab
-                      ? "bg-red-950/50 text-red-400 border-r-0"
-                      : "bg-transparent text-[#333333] hover:text-[#666666]"
-                  } ${tab === "lidar" ? "border-r border-[#222222]" : ""}`}
+                  key={id}
+                  onClick={() => setSelectedBot(id)}
+                  className={`px-3 py-1.5 text-xs font-mono font-bold transition-all border ${
+                    selectedBot === id
+                      ? "bg-red-950/60 border-red-700/60 text-red-300"
+                      : s.online
+                        ? "bg-transparent border-slate-700/30 text-[#555555] hover:border-red-900/40 hover:text-[#888888]"
+                        : "bg-transparent border-[#141414] text-[#222222] cursor-default"
+                  }`}
                 >
-                  {tab === "lidar" ? "◎ LIDAR" : "▣ SLAM"}
+                  {s.detected && "⚠ "}{TB3_LABELS[id]}
+                  <span className={`ml-1.5 text-[8px] ${s.online ? "text-green-500" : "text-[#222222]"}`}>
+                    {s.online ? "●" : "○"}
+                  </span>
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
 
-          <div className="flex-1 flex flex-col gap-4 px-4 pb-4">
+          <div className="flex-1 flex flex-col gap-3 px-4 pb-4">
 
-            {/* ── LIDAR 탭 ──────────────────────────────────────────────── */}
-            {centerTab === "lidar" && (
-              <>
-                <div className="flex flex-col items-center gap-3">
-                  <div className="flex items-center justify-between w-full max-w-xs">
-                    <PanelHeader icon="◎" label={`LIDAR — ${selectedBot.toUpperCase()}`} small />
-                    {selectedSnap.nearest !== null && (
-                      <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded border ${
-                        selectedSnap.nearest < 0.3
-                          ? "text-red-400 border-red-700/50 bg-red-950/40 animate-pulse"
-                          : "text-[#888888] border-slate-700/30"
-                      }`}>
-                        최근접 {selectedSnap.nearest.toFixed(2)}m
-                      </span>
-                    )}
-                  </div>
-                  <div className="bg-[#050505] rounded-xl border border-red-900/20 p-2 shadow-xl shadow-black/50">
-                    <LidarCanvas scanData={selectedSnap.scan} size={280} />
-                  </div>
-                  <div className="grid grid-cols-4 gap-1 w-full text-center">
-                    {[
-                      { label: "범위", val: selectedSnap.scan ? `${selectedSnap.scan.range_min?.toFixed(2) ?? "?"} ~ ${selectedSnap.scan.range_max?.toFixed(1) ?? "?"}m` : "—" },
-                      { label: "포인트", val: selectedSnap.scan?.ranges ? `${(selectedSnap.scan.ranges.filter(r => isFinite(r))).length}` : "—" },
-                      { label: "상태", val: selectedSnap.online ? "ON" : "OFF" },
-                      { label: "감지", val: selectedSnap.detected ? "DETECT" : "CLEAR" },
-                    ].map(({ label, val }) => (
-                      <div key={label} className="bg-[#0a0f1a] rounded border border-[#1e1e1e] px-2 py-1.5">
-                        <p className="text-[9px] text-[#333333] uppercase">{label}</p>
-                        <p className="text-xs font-mono text-[#c0c0c0] mt-0.5">{val}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* 센서 요약 그리드 */}
-                <div>
-                  <PanelHeader icon="▣" label={`SENSOR SUMMARY — ${selectedBot.toUpperCase()}`} small />
-                  <div className="mt-2 grid grid-cols-2 gap-2">
-                    <SensorBox label="위치 (odom)">
-                      <DataRow label="X" value={selectedSnap.pos?.x != null ? `${selectedSnap.pos.x.toFixed(3)} m` : "—"} />
-                      <DataRow label="Y" value={selectedSnap.pos?.y != null ? `${selectedSnap.pos.y.toFixed(3)} m` : "—"} />
-                      <DataRow label="Yaw" value={selectedSnap.yaw != null ? `${selectedSnap.yaw.toFixed(1)}°` : "—"} />
-                    </SensorBox>
-                    <SensorBox label="배터리">
-                      <DataRow label="용량" value={selectedSnap.batPct != null ? `${selectedSnap.batPct}%` : "—"}
-                        alert={(selectedSnap.batPct ?? 100) < 20} />
-                      <DataRow label="전압" value={selectedSnap.batV != null ? `${selectedSnap.batV.toFixed(2)} V` : "—"} />
-                      <DataRow label="상태" value={
-                        selectedSnap.batPct == null ? "—" :
-                        selectedSnap.batPct < 20 ? "위험" :
-                        selectedSnap.batPct < 50 ? "주의" : "정상"
-                      } alert={(selectedSnap.batPct ?? 100) < 20} />
-                    </SensorBox>
-                    <SensorBox label="안전 상태">
-                      <DataRow label="장애물" value={selectedSnap.nearest != null ? `${selectedSnap.nearest.toFixed(2)} m` : "—"}
-                        alert={selectedSnap.nearest != null && selectedSnap.nearest < 0.3} />
-                      <DataRow label="충돌" value={selectedSnap.bumper === 0 ? "없음" : selectedSnap.bumper === 1 ? "전방" : "후방"}
-                        alert={selectedSnap.bumper !== 0} />
-                      <DataRow label="절벽" value={selectedSnap.cliff ? "감지" : "없음"}
-                        alert={!!selectedSnap.cliff} />
-                    </SensorBox>
-                    <SensorBox label="YOLO 인명 감지">
-                      <div className={`flex items-center gap-2 mt-1 px-2 py-1.5 rounded ${
-                        selectedSnap.detected
-                          ? "bg-red-950/60 border border-red-800/50"
-                          : "bg-green-950/30 border border-green-900/30"
-                      }`}>
-                        <div className={`w-3 h-3 rounded-full ${
-                          selectedSnap.detected ? "bg-red-500 animate-ping" : "bg-green-600"
-                        }`} />
-                        <span className={`text-sm font-bold ${selectedSnap.detected ? "text-red-400" : "text-green-400"}`}>
-                          {selectedSnap.detected ? "인명 감지" : "이상 없음"}
-                        </span>
-                      </div>
-                    </SensorBox>
-                  </div>
-                </div>
-              </>
-            )}
-
-            {/* ── SLAM 탭 ───────────────────────────────────────────────── */}
-            {centerTab === "slam" && (
-              <div className="flex flex-col gap-3">
-                {/* 헤더 + 다운로드 버튼 */}
-                <div className="flex items-center justify-between">
-                  <PanelHeader icon="▣" label={`SLAM MAP — ${selectedBot.toUpperCase()}`} small />
-                  <div className="flex gap-1.5">
-                    <button
-                      onClick={downloadMapPng}
-                      disabled={!mapTs}
-                      className={`px-3 py-1 text-[10px] font-mono font-bold uppercase tracking-widest border transition-all ${
-                        mapTs
-                          ? "border-[#2a2a2a] bg-[#111111] text-[#888888] hover:border-[#444444] hover:text-[#c0c0c0]"
-                          : "border-[#1a1a1a] text-[#2a2a2a] cursor-not-allowed"
-                      }`}
-                    >
-                      PNG 저장
-                    </button>
-                    <button
-                      onClick={downloadMapNav2}
-                      disabled={!mapTs}
-                      className={`px-3 py-1 text-[10px] font-mono font-bold uppercase tracking-widest border transition-all ${
-                        mapTs
-                          ? "border-red-900/50 bg-red-950/20 text-red-400 hover:border-red-700/70 hover:text-red-300"
-                          : "border-[#1a1a1a] text-[#2a2a2a] cursor-not-allowed"
-                      }`}
-                    >
-                      PGM + YAML
-                    </button>
-                  </div>
-                </div>
-
-                {/* 맵 캔버스 */}
-                <div className="flex justify-center">
-                  <div className="border border-red-900/30 bg-[#050505] p-1 shadow-xl shadow-black/60">
-                    <MapCanvas
-                      ref={mapCanvasRef}
-                      imageUrl={mapImageUrl}
-                      mapInfo={mapInfo}
-                      robotX={selectedSnap.pos?.x ?? undefined}
-                      robotY={selectedSnap.pos?.y ?? undefined}
-                      robotYaw={selectedSnap.yaw != null ? (selectedSnap.yaw * Math.PI) / 180 : undefined}
-                      size={320}
-                    />
-                  </div>
-                </div>
-
-                {/* 맵 메타 정보 */}
-                {mapInfo ? (
-                  <div className="grid grid-cols-3 gap-2">
-                    {[
-                      { label: "해상도", val: `${mapInfo.resolution} m/cell` },
-                      { label: "크기", val: `${mapInfo.width} × ${mapInfo.height}` },
-                      { label: "영역", val: `${(mapInfo.width * mapInfo.resolution).toFixed(1)} × ${(mapInfo.height * mapInfo.resolution).toFixed(1)} m` },
-                    ].map(({ label, val }) => (
-                      <div key={label} className="bg-[#0a0f1a] border border-[#1e1e1e] px-2 py-1.5 text-center">
-                        <p className="text-[9px] text-[#333333] uppercase">{label}</p>
-                        <p className="text-[10px] font-mono text-[#c0c0c0] mt-0.5">{val}</p>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-[10px] text-[#2a2a2a] font-mono text-center py-2">
-                    /{selectedBot}/map 토픽 대기 중 — Cartographer 실행 확인
-                  </p>
+            {/* 컨트롤 바 */}
+            <div className="flex items-center justify-between">
+              <PanelHeader icon="▣" label={`SLAM MAP — ${selectedBot.toUpperCase()}`} small />
+              <div className="flex items-center gap-1.5">
+                {resetMsg && (
+                  <span className={`text-[10px] font-mono ${
+                    resetMsg.startsWith("실패") || resetMsg.startsWith("요청")
+                      ? "text-red-400" : "text-green-400"
+                  }`}>{resetMsg}</span>
                 )}
+                <button onClick={resetMap} disabled={isResetting}
+                  className={`px-3 py-1 text-[10px] font-mono font-bold uppercase tracking-widest border transition-all ${
+                    isResetting
+                      ? "border-[#1a1a1a] text-[#333333] cursor-not-allowed animate-pulse"
+                      : "border-amber-900/50 bg-amber-950/20 text-amber-400 hover:border-amber-700/70 hover:text-amber-300"
+                  }`}>
+                  {isResetting ? "초기화 중…" : "맵 초기화"}
+                </button>
+                <div className="w-px h-4 bg-[#222222]" />
+                <button onClick={downloadMapPng} disabled={!mapTs}
+                  className={`px-3 py-1 text-[10px] font-mono font-bold uppercase tracking-widest border transition-all ${
+                    mapTs ? "border-[#2a2a2a] bg-[#111111] text-[#888888] hover:border-[#444444] hover:text-[#c0c0c0]"
+                          : "border-[#1a1a1a] text-[#2a2a2a] cursor-not-allowed"
+                  }`}>PNG</button>
+                <button onClick={downloadMapNav2} disabled={!mapTs}
+                  className={`px-3 py-1 text-[10px] font-mono font-bold uppercase tracking-widest border transition-all ${
+                    mapTs ? "border-red-900/50 bg-red-950/20 text-red-400 hover:border-red-700/70 hover:text-red-300"
+                          : "border-[#1a1a1a] text-[#2a2a2a] cursor-not-allowed"
+                  }`}>PGM+YAML</button>
               </div>
+            </div>
+
+            {/* SLAM 맵 캔버스 — 가득 채움 */}
+            <div className="flex justify-center">
+              <div className="border border-red-900/30 bg-[#050505] shadow-xl shadow-black/60 w-full max-w-2xl">
+                <MapCanvas
+                  ref={mapCanvasRef}
+                  imageUrl={mapImageUrl}
+                  mapInfo={mapInfo}
+                  robotX={selectedSnap.pos?.x ?? undefined}
+                  robotY={selectedSnap.pos?.y ?? undefined}
+                  robotYaw={selectedSnap.yaw != null ? (selectedSnap.yaw * Math.PI) / 180 : undefined}
+                  size={560}
+                />
+              </div>
+            </div>
+
+            {/* 맵 메타 정보 */}
+            {mapInfo ? (
+              <div className="grid grid-cols-3 gap-2 max-w-2xl">
+                {[
+                  { label: "해상도", val: `${mapInfo.resolution} m/cell` },
+                  { label: "크기",   val: `${mapInfo.width} × ${mapInfo.height}` },
+                  { label: "영역",   val: `${(mapInfo.width * mapInfo.resolution).toFixed(1)} × ${(mapInfo.height * mapInfo.resolution).toFixed(1)} m` },
+                ].map(({ label, val }) => (
+                  <div key={label} className="bg-[#0a0f1a] border border-[#1e1e1e] px-2 py-1.5 text-center">
+                    <p className="text-[9px] text-[#333333] uppercase">{label}</p>
+                    <p className="text-[10px] font-mono text-[#c0c0c0] mt-0.5">{val}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[10px] text-[#2a2a2a] font-mono py-1">
+                /{selectedBot}/map 토픽 대기 중 — Cartographer 실행 확인
+              </p>
             )}
 
           </div>
         </main>
 
-        {/* ── 오른쪽: 감지 현황 + 이벤트 로그 ──────────────────────────── */}
-        <aside className="w-64 flex-none flex flex-col bg-[#050505] overflow-hidden">
+        {/* ── 오른쪽: 카메라 피드 + 이벤트 로그 ────────────────────────── */}
+        <aside className="w-72 flex-none flex flex-col bg-[#050505] overflow-hidden">
 
-          {/* 인명 감지 현황 */}
+          {/* 카메라 2×2 그리드 */}
           <div className="flex-none">
-            <PanelHeader icon="◈" label="DETECTION FEED" />
-            <div className="px-3 pb-3 space-y-1">
-              {TB3_IDS.map((id) => {
-                const s = botSnaps[id];
-                return (
-                  <div key={id} className={`flex items-center justify-between px-3 py-2 rounded-lg border ${
-                    !s.online
-                      ? "bg-[#080808] border-[#141414]"
-                      : s.detected
-                        ? "bg-red-950/50 border-red-700/50 shadow-sm shadow-red-900/30"
-                        : "bg-[#0a0a0a] border-[#1e1e1e]"
-                  }`}>
-                    <div className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${
-                        !s.online ? "bg-slate-700" :
-                        s.detected ? "bg-red-500 animate-ping" : "bg-green-600"
-                      }`} />
-                      <span className={`text-xs font-mono font-semibold ${
-                        !s.online ? "text-[#333333]" :
-                        s.detected ? "text-red-300" : "text-[#c0c0c0]"
-                      }`}>{TB3_LABELS[id]}</span>
-                    </div>
-                    <span className={`text-[10px] font-bold ${
-                      !s.online ? "text-[#222222]" :
-                      s.detected ? "text-red-400" : "text-green-500"
-                    }`}>
-                      {!s.online ? "OFFLINE" : s.detected ? "⚠ PERSON" : "✓ CLEAR"}
-                    </span>
-                  </div>
-                );
-              })}
-
-              {/* 감지 합계 */}
-              <div className={`mt-1 px-3 py-2 rounded-lg border text-center ${
-                totalDetected > 0
-                  ? "bg-red-950/40 border-red-800/50"
-                  : "bg-[#0a0a0a] border-[#1e1e1e]"
-              }`}>
-                <p className="text-[10px] text-[#555555] uppercase tracking-widest">Total Detected</p>
-                <p className={`text-2xl font-black font-mono mt-0.5 ${
-                  totalDetected > 0 ? "text-red-400" : "text-[#333333]"
-                }`}>{totalDetected}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* 미래: 카메라 피드 플레이스홀더 */}
-          <div className="flex-none px-3 pb-3">
-            <p className="text-[9px] text-red-900/60 uppercase tracking-widest font-semibold mb-1.5 px-0.5">
-              ◑ CAMERA FEED
-            </p>
-            <div className="bg-[#050810] border border-[#1e1e1e] rounded-lg flex items-center
-                            justify-center aspect-video">
-              <div className="text-center">
-                <p className="text-[#222222] text-xs font-mono">[ NO SIGNAL ]</p>
-                <p className="text-slate-800 text-[9px] mt-1">Depth Camera</p>
-                <p className="text-slate-800 text-[9px]">준비 중...</p>
-              </div>
+            <PanelHeader icon="◑" label="CAMERA FEEDS" />
+            <div className="px-3 pb-3 grid grid-cols-2 gap-1.5">
+              {TB3_IDS.map((id) => (
+                <CameraFeed
+                  key={id}
+                  botId={id}
+                  label={TB3_LABELS[id]}
+                  socket={socket}
+                />
+              ))}
             </div>
           </div>
 
           {/* 이벤트 로그 */}
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex-none flex items-center justify-between px-3.5 pb-1.5">
+          <div className="flex-1 flex flex-col overflow-hidden border-t border-[#1a1a1a]">
+            <div className="flex-none flex items-center justify-between px-3.5 pt-2 pb-1.5">
               <p className="text-[9px] text-red-900/60 uppercase tracking-widest font-semibold">
                 ▤ EVENT LOG
               </p>
@@ -646,12 +514,10 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
               {events.length === 0 ? (
                 <p className="text-[10px] text-[#222222] text-center py-4">이벤트 없음</p>
               ) : events.map((evt) => (
-                <div key={evt.id} className={`px-2.5 py-1.5 rounded border text-[10px] ${
-                  evt.level === "critical"
-                    ? "bg-red-950/40 border-red-800/40"
-                    : evt.level === "warning"
-                      ? "bg-amber-950/30 border-amber-800/30"
-                      : "bg-[#0a0a0a] border-[#1e1e1e]"
+                <div key={evt.id} className={`px-2.5 py-1.5 border text-[10px] ${
+                  evt.level === "critical" ? "bg-red-950/40 border-red-800/40" :
+                  evt.level === "warning"  ? "bg-amber-950/30 border-amber-800/30" :
+                                             "bg-[#0a0a0a] border-[#1e1e1e]"
                 }`}>
                   <div className="flex items-center justify-between mb-0.5">
                     <span className={`font-mono font-bold text-[9px] ${
@@ -659,7 +525,7 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
                       evt.level === "warning"  ? "text-amber-400" : "text-[#555555]"
                     }`}>
                       {evt.level === "critical" ? "⚠ ALERT" :
-                       evt.level === "warning"  ? "△ WARN"  : "● INFO"}
+                       evt.level === "warning"  ? "△ WARN" : "● INFO"}
                     </span>
                     <span className="text-[#222222] font-mono text-[9px]">
                       {new Date(evt.ts).toLocaleTimeString()}
@@ -716,20 +582,3 @@ function StatChip({ label, value, color, urgent }: {
   );
 }
 
-function SensorBox({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-[#0a0f1a] border border-[#1e1e1e] rounded-lg px-3 py-2">
-      <p className="text-[9px] text-[#333333] uppercase tracking-widest mb-1.5">{label}</p>
-      <div className="space-y-1">{children}</div>
-    </div>
-  );
-}
-
-function DataRow({ label, value, alert = false }: { label: string; value: string; alert?: boolean }) {
-  return (
-    <div className="flex justify-between items-center text-xs">
-      <span className="text-[#333333]">{label}</span>
-      <span className={`font-mono ${alert ? "text-red-400 font-bold" : "text-[#c0c0c0]"}`}>{value}</span>
-    </div>
-  );
-}

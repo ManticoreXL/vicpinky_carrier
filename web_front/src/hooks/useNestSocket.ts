@@ -63,6 +63,7 @@ export function useNestSocket() {
   const socketRef = useRef<Socket | null>(null);
   const serviceCallbacksRef = useRef<Map<string, (res: unknown) => void>>(new Map());
   const [nestConnected, setNestConnected] = useState(false);
+  const [socket, setSocket] = useState<Socket | null>(null);
   const [rosMessages, setRosMessages] = useState<Record<string, RosMessage>>({});
 
   // Action 상태
@@ -75,10 +76,12 @@ export function useNestSocket() {
   const [mapInfos, setMapInfos]           = useState<MapInfos>({});
 
   useEffect(() => {
-    const socket = io("http://localhost:3001", {
+    const s = io("http://localhost:3001", {
       transports: ["polling", "websocket"],
     });
-    socketRef.current = socket;
+    socketRef.current = s;
+    setSocket(s);
+    const socket = s;
 
     socket.on("connect",    () => setNestConnected(true));
     socket.on("disconnect", () => setNestConnected(false));
@@ -128,6 +131,11 @@ export function useNestSocket() {
       if (info) setMapInfos((prev) => ({ ...prev, [botId]: info }));
     });
 
+    socket.on("map_cleared", ({ botId }: { botId: string }) => {
+      setMapTimestamps((prev) => { const n = { ...prev }; delete n[botId]; return n; });
+      setMapInfos((prev)     => { const n = { ...prev }; delete n[botId]; return n; });
+    });
+
     socket.on("action_cancelled", ({ goalId }: { goalId: string }) => {
       setActiveGoals((prev) => {
         const next = { ...prev };
@@ -136,7 +144,7 @@ export function useNestSocket() {
       });
     });
 
-    return () => { socket.disconnect(); };
+    return () => { s.disconnect(); setSocket(null); };
   }, []);
 
   const emitCmdVel = useCallback((payload: CmdVelPayload) => {
@@ -167,7 +175,7 @@ export function useNestSocket() {
 
   return {
     emitCmdVel, emitPublish, emitAction, cancelAction, callService,
-    nestConnected, rosMessages,
+    nestConnected, rosMessages, socket,
     activeGoals, actionFeedbacks, actionResults,
     mapTimestamps, mapInfos,
   };

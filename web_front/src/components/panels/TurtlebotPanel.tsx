@@ -8,6 +8,8 @@ import {
   PanelCard, Section, BigStatus,
   GoldButton, BlueButton, DangerButton, NoData,
 } from "./BigPinkyPanel";
+import { useKeyboardControl } from "../../hooks/useKeyboardControl";
+import ActionPanel from "../ActionPanel";
 
 type DiagStatus = "idle" | "loading" | "ok" | "error";
 interface DiagResult {
@@ -15,8 +17,6 @@ interface DiagResult {
   summary: string;
   errors: string[];
 }
-import { useKeyboardControl } from "../../hooks/useKeyboardControl";
-import ActionPanel from "../ActionPanel";
 
 // ── 유틸 ──────────────────────────────────────────────────────────────────────
 

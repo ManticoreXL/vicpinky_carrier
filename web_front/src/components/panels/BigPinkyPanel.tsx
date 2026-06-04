@@ -82,10 +82,6 @@ export default function VicPinkyPanel({
   // ── joint_states ──────────────────────────────────────────────────────────
   const jsData   = p("joint_states") as { name?: string[]; position?: number[]; velocity?: number[] } | undefined;
   const jsNames  = jsData?.name ?? [];
-  const getJoint = (name: string) => {
-    const idx = jsNames.indexOf(name);
-    return idx >= 0 ? { vel: jsData?.velocity?.[idx] ?? null, pos: jsData?.position?.[idx] ?? null } : null;
-  };
 
   // ── scan (raw + filtered) ─────────────────────────────────────────────────
   const scanRaw      = p("scan") as { angle_min?:number; angle_increment?:number; range_min?:number; range_max?:number; ranges?:number[] } | undefined;

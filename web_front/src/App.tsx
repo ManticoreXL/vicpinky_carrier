@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useRos } from "./hooks/useRos";
-import { useNestSocket, RosMessage } from "./hooks/useNestSocket";
+import { useNestSocket } from "./hooks/useNestSocket";
 import { RobotId } from "./types/robots";
 import StatusBadge from "./components/StatusBadge";
 import RobotSidebar from "./components/RobotSidebar";
@@ -9,6 +9,7 @@ import TurtlebotPanel from "./components/panels/TurtlebotPanel";
 import OmxPanel from "./components/panels/OmxPanel";
 import ExploreView from "./views/ExploreView";
 import BatteryAlertModal from "./components/BatteryAlertModal";
+import ControlCameraPanel from "./components/ControlCameraPanel";
 import { useBatteryAlerts } from "./hooks/useBatteryAlerts";
 import { useThrottled } from "./hooks/useThrottled";
 
@@ -17,8 +18,8 @@ type AppMode = "control" | "explore";
 export default function App() {
   const { connected, error, subscribe, publish } = useRos();
   const {
-    emitCmdVel, emitPublish, emitAction, cancelAction, callService,
-    nestConnected, rosMessages,
+    emitCmdVel, emitAction, cancelAction, callService,
+    nestConnected, rosMessages, socket,
     activeGoals, actionFeedbacks, actionResults,
     mapTimestamps, mapInfos,
   } = useNestSocket();
@@ -111,6 +112,7 @@ export default function App() {
             activeGoals={activeGoals}
             mapTimestamps={mapTimestamps}
             mapInfos={mapInfos}
+            socket={socket}
           />
         </div>
       ) : (
@@ -120,7 +122,7 @@ export default function App() {
             selectedRobot={selectedRobot}
             onSelect={setSelectedRobot}
           />
-          <main className="flex-1 overflow-y-auto p-5 bg-[#050505]">
+          <main className="flex-1 overflow-y-auto p-5 bg-[#050505] min-w-0">
             {selectedRobot === "vicpinky" && (
               <VicPinkyPanel
                 subscribe={subscribe}
@@ -166,6 +168,7 @@ export default function App() {
               />
             )}
           </main>
+          <ControlCameraPanel selectedRobot={selectedRobot} socket={socket} />
         </div>
       )}
 
