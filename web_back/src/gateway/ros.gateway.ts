@@ -188,55 +188,58 @@ export class RosGateway
     this.logger.debug(`스트림 요청: ${payload.botId} ← browser ${client.id}`);
   }
 
-  /** 로봇(Python) → 서버: SDP Offer 전달 */
+  /** 로봇(Python) → 서버: SDP Offer 전달
+   *  Python 포맷: { botId, browserId, sdp(string), type(string) }
+   */
   @SubscribeMessage('webrtc_offer')
   handleOffer(
-    @MessageBody() payload: { browserId: string; sdp: Record<string, unknown> },
-    @ConnectedSocket() client: Socket,
+    @MessageBody() payload: { botId: string; browserId: string; sdp: string; type: string },
+    @ConnectedSocket() _client: Socket,
   ) {
-    const botId = [...this.robotSockets.entries()]
-      .find(([, sid]) => sid === client.id)?.[0];
-    if (!botId) return;
-    this.server.to(payload.browserId).emit('webrtc_offer', { botId, sdp: payload.sdp });
+    // 브라우저는 RTCSessionDescriptionInit 형태로 받아야 함 → 중첩 sdp 객체로 변환
+    this.server.to(payload.browserId).emit('webrtc_offer', {
+      botId: payload.botId,
+      sdp: { type: payload.type, sdp: payload.sdp },
+    });
+    this.logger.debug(`Offer 중계: ${payload.botId} → browser ${payload.browserId}`);
   }
 
-  /** 브라우저 → 서버: SDP Answer 전달 */
+  /** 브라우저 → 서버: SDP Answer 전달
+   *  브라우저 포맷: { botId, sdp: { type, sdp } }
+   *  Python 기대 포맷: { sdp(string), type(string), browserId }
+   */
   @SubscribeMessage('webrtc_answer')
   handleAnswer(
-    @MessageBody() payload: { botId: string; sdp: Record<string, unknown> },
+    @MessageBody() payload: { botId: string; sdp: { type: string; sdp: string } },
     @ConnectedSocket() client: Socket,
   ) {
     const robotSocketId = this.robotSockets.get(payload.botId);
     if (!robotSocketId) return;
-    this.server.to(robotSocketId).emit('webrtc_answer', { sdp: payload.sdp, browserId: client.id });
+    this.server.to(robotSocketId).emit('webrtc_answer', {
+      sdp: payload.sdp.sdp,      // 플랫 문자열
+      type: payload.sdp.type,    // 플랫 문자열
+      browserId: client.id,
+    });
+    this.logger.debug(`Answer 중계: browser ${client.id} → ${payload.botId}`);
   }
 
-  /** ICE Candidate 양방향 중계
-   *  target='robot'  : 브라우저→로봇
-   *  target='browser': 로봇→브라우저 (browserId 필요)
+  /** 브라우저 → 서버 → 로봇: ICE Candidate 중계
+   *  브라우저가 보내는 이벤트: webrtc_ice
+   *  로봇이 받는 이벤트명:    webrtc_ice_candidate  (Python 코드 기준)
    */
   @SubscribeMessage('webrtc_ice')
   handleIce(
     @MessageBody() payload: {
       botId: string;
       candidate: Record<string, unknown>;
-      target: string;
-      browserId?: string;
     },
     @ConnectedSocket() client: Socket,
   ) {
-    if (payload.target === 'robot') {
-      const robotSocketId = this.robotSockets.get(payload.botId);
-      if (robotSocketId) {
-        this.server.to(robotSocketId).emit('webrtc_ice', {
-          candidate: payload.candidate,
-          browserId: client.id,
-        });
-      }
-    } else if (payload.browserId) {
-      this.server.to(payload.browserId).emit('webrtc_ice', {
-        botId: payload.botId,
+    const robotSocketId = this.robotSockets.get(payload.botId);
+    if (robotSocketId) {
+      this.server.to(robotSocketId).emit('webrtc_ice_candidate', {
         candidate: payload.candidate,
+        browserId: client.id,
       });
     }
   }

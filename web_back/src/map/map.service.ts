@@ -74,15 +74,21 @@ export class MapService implements OnModuleInit {
     // 1. 캐시 즉시 삭제 → 프론트 화면 비움
     this.clearMap(botId);
 
-    const setup    = process.env.ROS2_SETUP         ?? '/opt/ros/humble/setup.bash';
-    const cfgDir   = process.env.CARTOGRAPHER_CONFIG_DIR  ?? '';
-    const cfgFile  = process.env.CARTOGRAPHER_CONFIG_FILE ?? 'turtlebot3_lds_2d.lua';
-    const shell    = { shell: '/bin/bash' as const, timeout: 10_000 };
+    const setup   = process.env.ROS2_SETUP          ?? '/opt/ros/jazzy/setup.bash';
+    const wsSetup = process.env.ROS2_WS_SETUP;        // workspace setup (선택)
+    const cfgDir  = process.env.CARTOGRAPHER_CONFIG_DIR  ?? '';
+    const cfgFile = process.env.CARTOGRAPHER_CONFIG_FILE ?? 'turtlebot3_lds_2d.lua';
+    const shell   = { shell: '/bin/bash' as const, timeout: 10_000 };
+
+    // ROS 환경 소싱 명령 (워크스페이스가 있으면 함께 소싱)
+    const sourceEnv = wsSetup
+      ? `source ${setup} && source ${wsSetup}`
+      : `source ${setup}`;
 
     try {
       // 2. 현재 trajectory 종료
       await execAsync(
-        `source ${setup} && ros2 service call /${botId}/cartographer_node/finish_trajectory ` +
+        `${sourceEnv} && ros2 service call /${botId}/cartographer_node/finish_trajectory ` +
         `cartographer_ros_msgs/srv/FinishTrajectory "{trajectory_id: 0}"`,
         shell,
       );
@@ -93,7 +99,7 @@ export class MapService implements OnModuleInit {
       // 3. 새 trajectory 시작 (config 경로가 설정된 경우)
       if (cfgDir) {
         await execAsync(
-          `source ${setup} && ros2 service call /${botId}/cartographer_node/start_trajectory ` +
+          `${sourceEnv} && ros2 service call /${botId}/cartographer_node/start_trajectory ` +
           `cartographer_ros_msgs/srv/StartTrajectory ` +
           `"{configuration_directory: '${cfgDir}', configuration_basename: '${cfgFile}', ` +
           `use_initial_pose: false, relative_to_trajectory_id: 0}"`,
