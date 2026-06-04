@@ -4,6 +4,7 @@
 float32 target_angle
 ---
 # Result
+bool success
 float32 final_angle
 ---
 # Feedback
