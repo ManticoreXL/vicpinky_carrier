@@ -3,9 +3,9 @@
 <package format="3">
   <name>vicpinky_carrier_interfaces</name>
   <version>0.0.0</version>
-  <description>TODO: Package description</description>
+  <description>vicpinky_carrier launch script</description>
   <maintainer email="zip3366@naver.com">minseok</maintainer>
-  <license>TODO: License declaration</license>
+  <license>mit</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
 
