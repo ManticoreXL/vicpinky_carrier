@@ -13,6 +13,7 @@ class MirrorMotorControl:
         self.addr_torque_en = 64
         self.addr_profile_vel = 112
         self.addr_goal_pos = 116
+        self.addr_moving = 122
         self.addr_present_load = 126
         self.addr_present_pos = 132
 
@@ -114,6 +115,15 @@ class MirrorMotorControl:
         self.groupSyncReadLoad.clearParam()
 
         return present_load_l, present_load_r
+    
+    def is_moving(self,motor=0):
+        # 모터가 작동중인지 확인 (모터 번호 0은 왼쪽 그 외 오른쪽)
+        if motor is 0:
+            motor_id = self.id_l
+        else:
+            motor_id=self.id_r
+        read_data, dxl_comm_result, dxl_error = self.packetHandler.read1ByteTxRx(self.portHandler, motor_id, self.addr_moving)
+        return read_data
 
     def close(self):
         self.set_torque(enable=False)

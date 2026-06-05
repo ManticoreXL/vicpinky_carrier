@@ -1,11 +1,13 @@
 # RampControl.action
 
 # Goal
-float32 target_angle
+string target_string
 ---
 # Result
 bool success
-float32 final_angle
+string final_state
+int32 final_angle
 ---
 # Feedback
-float32 current_angle
+int32 current_angle
+int32 current_load
