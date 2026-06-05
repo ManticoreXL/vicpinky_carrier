@@ -44,19 +44,15 @@ export class RosGateway
     // 맵 토픽은 MapService가 처리 → 경량 이벤트만 발행
     this.mapService.onUpdate((botId, info) => {
       this.server?.emit('map_updated', { botId, info, timestamp: Date.now() });
-      this.logger.debug(`map_updated 브로드캐스트: /${botId}/map`);
     });
 
     this.mapService.onClear((botId) => {
       this.server?.emit('map_cleared', { botId });
-      this.logger.log(`map_cleared 브로드캐스트: ${botId}`);
     });
 
     this.rosService.onMessage((msg) => {
       // 맵 토픽은 socket.io로 raw 전송하지 않음 (MapService에서 PNG로 처리)
       if (/\/map$/.test(msg.topic)) return;
-      const count = this.server?.sockets?.sockets?.size ?? 0;
-      this.logger.debug(`브로드캐스트: ${msg.topic} → 클라이언트 ${count}개`);
       this.server?.emit('ros_message', msg);
     });
   }
@@ -66,19 +62,17 @@ export class RosGateway
   }
 
   handleConnection(client: Socket) {
-    this.logger.log(`클라이언트 연결: ${client.id}`);
-    // 연결 즉시 rosbridge 상태 전송
+    // 연결 즉시 rosbridge 상태 전송 (로그 없음 — 노이즈 방지)
     client.emit('ros_status', { connected: this.rosService.isConnected });
   }
 
   handleDisconnect(client: Socket) {
-    this.logger.log(`클라이언트 해제: ${client.id}`);
     // 로봇 소켓이면 오프라인 이벤트 발행
     for (const [botId, socketId] of this.robotSockets.entries()) {
       if (socketId === client.id) {
         this.robotSockets.delete(botId);
         this.server?.emit('robot_camera_offline', { botId });
-        this.logger.log(`WebRTC 로봇 오프라인: ${botId}`);
+        this.logger.log(`📷 카메라 오프라인: ${botId}`);
         break;
       }
     }
@@ -153,7 +147,6 @@ export class RosGateway
       (res) => client.emit('action_result', res),
     );
     client.emit('action_accepted', { goalId, actionName: payload.actionName });
-    this.logger.debug(`action accepted → ${payload.actionName} [${goalId}]`);
   }
 
   // ══════════════════════════════════════════════════════════════════════════
@@ -167,7 +160,7 @@ export class RosGateway
     @ConnectedSocket() client: Socket,
   ) {
     this.robotSockets.set(payload.botId, client.id);
-    this.logger.log(`WebRTC 로봇 등록: ${payload.botId} [${client.id}]`);
+    this.logger.log(`📷 카메라 온라인: ${payload.botId}`);
     client.emit('robot_registered', { ok: true });
     this.server?.emit('robot_camera_online', { botId: payload.botId });
   }
@@ -180,12 +173,15 @@ export class RosGateway
   ) {
     const robotSocketId = this.robotSockets.get(payload.botId);
     if (!robotSocketId) {
+      this.logger.warn(`스트림 요청 실패: ${payload.botId} 미등록 (등록된 봇: ${[...this.robotSockets.keys()].join(', ') || '없음'})`);
       client.emit('webrtc_error', { botId: payload.botId, message: '로봇 카메라 미연결' });
       return;
     }
-    // 로봇에게 "이 브라우저가 스트림을 원한다" 전달
-    this.server.to(robotSocketId).emit('browser_wants_stream', { browserId: client.id });
-    this.logger.debug(`스트림 요청: ${payload.botId} ← browser ${client.id}`);
+    // 로봇에게 "이 브라우저가 스트림을 원한다" 전달 (어떤 봇 대상인지 함께 보냄)
+    this.server.to(robotSocketId).emit('browser_wants_stream', {
+      browserId: client.id,
+      botId: payload.botId,
+    });
   }
 
   /** 로봇(Python) → 서버: SDP Offer 전달
@@ -194,14 +190,22 @@ export class RosGateway
   @SubscribeMessage('webrtc_offer')
   handleOffer(
     @MessageBody() payload: { botId: string; browserId: string; sdp: string; type: string },
-    @ConnectedSocket() _client: Socket,
+    @ConnectedSocket() client: Socket,
   ) {
+    // 검증: 이 offer를 보낸 로봇 소켓이 정말 해당 botId로 등록되어 있는가?
+    const expectedSocketId = this.robotSockets.get(payload.botId);
+    if (expectedSocketId !== client.id) {
+      this.logger.error(
+        `Offer botId 불일치! payload.botId=${payload.botId} 는 socket=${expectedSocketId} 에 등록됨, ` +
+        `그러나 offer 보낸 socket=${client.id}. 라우팅 거부.`,
+      );
+      return;
+    }
     // 브라우저는 RTCSessionDescriptionInit 형태로 받아야 함 → 중첩 sdp 객체로 변환
     this.server.to(payload.browserId).emit('webrtc_offer', {
       botId: payload.botId,
       sdp: { type: payload.type, sdp: payload.sdp },
     });
-    this.logger.debug(`Offer 중계: ${payload.botId} → browser ${payload.browserId}`);
   }
 
   /** 브라우저 → 서버: SDP Answer 전달
@@ -220,7 +224,8 @@ export class RosGateway
       type: payload.sdp.type,    // 플랫 문자열
       browserId: client.id,
     });
-    this.logger.debug(`Answer 중계: browser ${client.id} → ${payload.botId}`);
+    // 핸드셰이크 완료 = 스트림 연결 성립
+    this.logger.log(`✅ WebRTC 연결: ${payload.botId} ↔ browser ${client.id}`);
   }
 
   /** 브라우저 → 서버 → 로봇: ICE Candidate 중계
