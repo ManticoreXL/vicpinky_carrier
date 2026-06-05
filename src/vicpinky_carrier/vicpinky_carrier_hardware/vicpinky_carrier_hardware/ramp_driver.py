@@ -41,7 +41,7 @@ class MirrorMotorControl:
             print("Successfully set baud rate!")
 
         except Exception as e:
-            raise Exception(f"장치의 포트를 열 수 없습니다!")
+            raise Exception("Failed to open the device port!")
     
     def set_torque(self, enable=True):
         # 모터의 토크 켜기
@@ -63,8 +63,8 @@ class MirrorMotorControl:
         goal_position_l=goal_angle_1
         goal_position_r=4095-goal_position_l
 
-        param_goal_position_l=goal_position_l.to_bytes(self.len_goal_pos, byteorder='little')
-        param_goal_position_r=goal_position_r.to_bytes(self.len_goal_pos, byteorder='little')
+        param_goal_position_l=goal_position_l.to_bytes(self.len_goal_pos, byteorder='little', signed=True)
+        param_goal_position_r=goal_position_r.to_bytes(self.len_goal_pos, byteorder='little', signed=True)
 
         self.groupSyncWrite.addParam(self.id_l, param_goal_position_l)
         self.groupSyncWrite.addParam(self.id_r, param_goal_position_r)
@@ -109,8 +109,17 @@ class MirrorMotorControl:
             self.groupSyncReadLoad.clearParam()
             raise Exception(f"Failed to read motor position!: {err_msg}")
         
-        present_load_l = self.groupSyncReadLoad.getData(self.id_l,self.addr_present_load,self.len_present_load)
-        present_load_r = self.groupSyncReadLoad.getData(self.id_r,self.addr_present_load,self.len_present_load)
+        raw_load_l = self.groupSyncReadLoad.getData(self.id_l,self.addr_present_load,self.len_present_load)
+        raw_load_r = self.groupSyncReadLoad.getData(self.id_r,self.addr_present_load,self.len_present_load)
+
+        if raw_load_l > 32767:
+            present_load_l = raw_load_l - 65536
+        else:
+            present_load_l = raw_load_l
+        if raw_load_r > 32767:
+            present_load_r = raw_load_r - 65536
+        else:
+            present_load_r = raw_load_r
 
         self.groupSyncReadLoad.clearParam()
 
@@ -118,11 +127,14 @@ class MirrorMotorControl:
     
     def is_moving(self,motor=0):
         # 모터가 작동중인지 확인 (모터 번호 0은 왼쪽 그 외 오른쪽)
-        if motor is 0:
+        if motor == 0:
             motor_id = self.id_l
         else:
             motor_id=self.id_r
         read_data, dxl_comm_result, dxl_error = self.packetHandler.read1ByteTxRx(self.portHandler, motor_id, self.addr_moving)
+        # if dxl_comm_result != dynamixel_sdk.COMM_SUCCESS:
+        #     err_msg=self.packetHandler.getTxRxResult(dxl_comm_result)
+        #     raise Exception(f"Failed to read motor status!: {err_msg}")
         return read_data
 
     def close(self):
