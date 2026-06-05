@@ -4,7 +4,7 @@
   <name>turtlebot_people_tracker</name>
   <version>0.0.0</version>
   <description>TODO: Package description</description>
-  <maintainer email="0307102bj41@gmail.com@example.com">k</maintainer>
+  <maintainer email="0307102bj41@gmail.com">k</maintainer>
   <license>TODO: License declaration</license>
 
   <depend>rclpy</depend>
