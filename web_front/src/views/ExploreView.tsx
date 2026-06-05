@@ -17,6 +17,18 @@ const TB3_LABELS: Record<string, string> = {
   tb3_01: "TB-01", tb3_02: "TB-02", tb3_03: "TB-03", tb3_04: "TB-04",
 };
 
+// 로봇별 카메라 정의
+const ROBOT_CAMERAS: Array<{ botId: string; label: string }> = [
+  { botId: "tb3_01", label: "TB-01" },
+  { botId: "tb3_02", label: "TB-02" },
+  { botId: "tb3_03", label: "TB-03" },
+  { botId: "tb3_04", label: "TB-04" },
+  { botId: "vicpinky_cam0", label: "VICPINKY-1" },
+  { botId: "vicpinky_cam1", label: "VICPINKY-2" },
+  { botId: "omx_cam0", label: "OMX-1" },
+  { botId: "omx_cam1", label: "OMX-2" },
+];
+
 const OFFLINE_THRESHOLD_MS = 8000; // 8초 이상 메시지 없으면 오프라인
 
 // ── 이벤트 타입 ───────────────────────────────────────────────────────────────
@@ -261,7 +273,7 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
         <aside className="w-52 flex-none flex flex-col bg-[#050505] overflow-y-auto">
           <PanelHeader icon="⬡" label="FLEET STATUS" />
 
-          {/* VicPinky 릴레이 */}
+          {/* VicPinky 릴레이 (2개 카메라) */}
           <div className="px-3 pb-2">
             <div className={`rounded-lg p-2.5 border ${bpOnline
               ? "bg-[#0c1a2e] border-blue-800/40"
@@ -271,7 +283,7 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
                   <OnlineDot online={bpOnline} color="blue" />
                   <span className="text-xs font-bold text-blue-300">VICPINKY</span>
                 </div>
-                <span className="text-[10px] text-blue-400/60 font-mono">RELAY</span>
+                <span className="text-[10px] text-blue-400/60 font-mono">📷×2</span>
               </div>
               <div className="text-[10px] text-[#555555] space-y-0.5 pl-3.5">
                 <div className="flex justify-between">
@@ -297,6 +309,7 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
           </div>
 
           {/* TB3 카드 */}
+          {/* TB3 탐사 로봇 */}
           {TB3_IDS.map((id) => {
             const s = botSnaps[id];
             const isSelected = id === selectedBot;
@@ -381,6 +394,23 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
               </div>
             );
           })}
+
+          {/* OMX (다중 카메라) */}
+          <div className="px-3 pb-2">
+            <div className="rounded-lg p-2.5 border bg-purple-950/30 border-purple-800/40">
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-1.5">
+                  <OnlineDot online={true} color="green" />
+                  <span className="text-xs font-bold text-purple-300">OMX</span>
+                </div>
+                <span className="text-[10px] text-purple-400/60 font-mono">📷×2+</span>
+              </div>
+              <div className="text-[10px] text-[#555555] space-y-0.5 pl-3.5">
+                <p className="text-purple-400/70">다중 카메라 시스템</p>
+              </div>
+            </div>
+          </div>
+
           <div className="flex-1" />
         </aside>
 
@@ -485,17 +515,17 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
         </main>
 
         {/* ── 오른쪽: 카메라 피드 + 이벤트 로그 ────────────────────────── */}
-        <aside className="w-72 flex-none flex flex-col bg-[#050505] overflow-hidden">
+        <aside className="w-96 flex-none flex flex-col bg-[#050505] overflow-hidden">
 
-          {/* 카메라 2×2 그리드 */}
-          <div className="flex-none">
+          {/* 카메라 그리드 (각 로봇 카메라마다 개별 표시) */}
+          <div className="flex-none max-h-80 overflow-y-auto">
             <PanelHeader icon="◑" label="CAMERA FEEDS" />
             <div className="px-3 pb-3 grid grid-cols-2 gap-1.5">
-              {TB3_IDS.map((id) => (
+              {ROBOT_CAMERAS.map(({ botId, label }) => (
                 <CameraFeed
-                  key={id}
-                  botId={id}
-                  label={TB3_LABELS[id]}
+                  key={botId}
+                  botId={botId}
+                  label={label}
                   socket={socket}
                 />
               ))}
