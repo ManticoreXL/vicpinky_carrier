@@ -17,17 +17,21 @@ const TB3_LABELS: Record<string, string> = {
   tb3_01: "TB-01", tb3_02: "TB-02", tb3_03: "TB-03", tb3_04: "TB-04",
 };
 
-// 로봇별 카메라 정의
-const ROBOT_CAMERAS: Array<{ botId: string; label: string }> = [
-  { botId: "tb3_01", label: "TB-01" },
-  { botId: "tb3_02", label: "TB-02" },
-  { botId: "tb3_03", label: "TB-03" },
-  { botId: "tb3_04", label: "TB-04" },
-  { botId: "vicpinky_cam0", label: "VICPINKY-1" },
-  { botId: "vicpinky_cam1", label: "VICPINKY-2" },
-  { botId: "omx_cam0", label: "OMX-1" },
-  { botId: "omx_cam1", label: "OMX-2" },
-];
+// 로봇 → 해당 로봇이 가진 카메라 목록 (선택한 로봇의 카메라만 표시)
+const ROBOT_CAMERA_MAP: Record<string, Array<{ botId: string; label: string }>> = {
+  tb3_01: [{ botId: "tb3_01", label: "TB-01 CAM" }],
+  tb3_02: [{ botId: "tb3_02", label: "TB-02 CAM" }],
+  tb3_03: [{ botId: "tb3_03", label: "TB-03 CAM" }],
+  tb3_04: [{ botId: "tb3_04", label: "TB-04 CAM" }],
+  vicpinky: [
+    { botId: "vicpinky_cam0", label: "VICPINKY CAM-1" },
+    { botId: "vicpinky_cam1", label: "VICPINKY CAM-2" },
+  ],
+  omx: [
+    { botId: "omx_cam0", label: "OMX CAM-1" },
+    { botId: "omx_cam1", label: "OMX CAM-2" },
+  ],
+};
 
 const OFFLINE_THRESHOLD_MS = 8000; // 8초 이상 메시지 없으면 오프라인
 
@@ -234,6 +238,9 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
   const vpScanTs  = rosMessages["/vicpinky/scan"]?.timestamp ?? 0;
   const bpOnline  = vpScanTs > 0 && Date.now() - vpScanTs < OFFLINE_THRESHOLD_MS;
 
+  // 선택한 로봇의 카메라 목록
+  const selectedCameras = ROBOT_CAMERA_MAP[selectedBot] ?? [];
+
   return (
     <div className="flex flex-col h-full bg-[#050505] text-slate-200 overflow-hidden select-none">
 
@@ -273,11 +280,17 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
         <aside className="w-52 flex-none flex flex-col bg-[#050505] overflow-y-auto">
           <PanelHeader icon="⬡" label="FLEET STATUS" />
 
-          {/* VicPinky 릴레이 (2개 카메라) */}
+          {/* VicPinky 릴레이 (2개 카메라) — 클릭하면 선택 */}
           <div className="px-3 pb-2">
-            <div className={`rounded-lg p-2.5 border ${bpOnline
-              ? "bg-[#0c1a2e] border-blue-800/40"
-              : "bg-[#0c0c10] border-[#1e1e1e]"}`}>
+            <button
+              onClick={() => setSelectedBot("vicpinky")}
+              className={`w-full text-left rounded-lg p-2.5 border transition-all ${
+                selectedBot === "vicpinky"
+                  ? "bg-[#0c1a2e] border-blue-600/70 shadow-md shadow-blue-900/20"
+                  : bpOnline
+                    ? "bg-[#0c1a2e] border-blue-800/40 hover:border-blue-600/50"
+                    : "bg-[#0c0c10] border-[#1e1e1e] hover:border-blue-900/40"
+              }`}>
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-1.5">
                   <OnlineDot online={bpOnline} color="blue" />
@@ -301,7 +314,7 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
                   </span>
                 </div>
               </div>
-            </div>
+            </button>
           </div>
 
           <div className="px-3 mb-1">
@@ -395,20 +408,26 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
             );
           })}
 
-          {/* OMX (다중 카메라) */}
+          {/* OMX (다중 카메라) — 클릭하면 선택 */}
           <div className="px-3 pb-2">
-            <div className="rounded-lg p-2.5 border bg-purple-950/30 border-purple-800/40">
+            <button
+              onClick={() => setSelectedBot("omx")}
+              className={`w-full text-left rounded-lg p-2.5 border transition-all ${
+                selectedBot === "omx"
+                  ? "bg-purple-950/50 border-purple-600/70 shadow-md shadow-purple-900/20"
+                  : "bg-purple-950/30 border-purple-800/40 hover:border-purple-600/50"
+              }`}>
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-1.5">
                   <OnlineDot online={true} color="green" />
                   <span className="text-xs font-bold text-purple-300">OMX</span>
                 </div>
-                <span className="text-[10px] text-purple-400/60 font-mono">📷×2+</span>
+                <span className="text-[10px] text-purple-400/60 font-mono">📷×2</span>
               </div>
               <div className="text-[10px] text-[#555555] space-y-0.5 pl-3.5">
                 <p className="text-purple-400/70">다중 카메라 시스템</p>
               </div>
-            </div>
+            </button>
           </div>
 
           <div className="flex-1" />
@@ -517,18 +536,32 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
         {/* ── 오른쪽: 카메라 피드 + 이벤트 로그 ────────────────────────── */}
         <aside className="w-96 flex-none flex flex-col bg-[#050505] overflow-hidden">
 
-          {/* 카메라 그리드 (각 로봇 카메라마다 개별 표시) */}
-          <div className="flex-none max-h-80 overflow-y-auto">
-            <PanelHeader icon="◑" label="CAMERA FEEDS" />
-            <div className="px-3 pb-3 grid grid-cols-2 gap-1.5">
-              {ROBOT_CAMERAS.map(({ botId, label }) => (
-                <CameraFeed
-                  key={botId}
-                  botId={botId}
-                  label={label}
-                  socket={socket}
-                />
-              ))}
+          {/* 카메라 그리드 — 선택한 로봇의 카메라만 표시 (다중 카메라는 모두 동시 표시) */}
+          <div className="flex-none">
+            <PanelHeader
+              icon="◑"
+              label={`CAMERA — ${selectedBot.toUpperCase()}${
+                selectedCameras.length > 1 ? ` (${selectedCameras.length})` : ""
+              }`}
+            />
+            <div className="px-3 pb-3 flex flex-col gap-1.5">
+              {selectedCameras.length === 0 ? (
+                <div className="aspect-video flex items-center justify-center
+                                bg-[#050810] border border-[#1e1e1e]">
+                  <p className="text-[10px] text-[#2a2a2a] font-mono uppercase tracking-widest">
+                    카메라 없음
+                  </p>
+                </div>
+              ) : (
+                selectedCameras.map(({ botId, label }) => (
+                  <CameraFeed
+                    key={botId}
+                    botId={botId}
+                    label={label}
+                    socket={socket}
+                  />
+                ))
+              )}
             </div>
           </div>
 

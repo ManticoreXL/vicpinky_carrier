@@ -28,7 +28,8 @@ export default function CameraFeed({ botId, label, socket }: Props) {
 
   // ── 연결 시작 ─────────────────────────────────────────────────────────────
   const connect = useCallback(() => {
-    if (!socket || status !== "idle") return;
+    // 이미 연결 중이거나 연결됨 → 중복 방지 (status 대신 pcRef로 판단)
+    if (!socket || pcRef.current) return;
     setStatus("requesting");
 
     const pc = new RTCPeerConnection({
@@ -64,7 +65,7 @@ export default function CameraFeed({ botId, label, socket }: Props) {
 
     // 서버에 스트림 요청
     socket.emit("webrtc_request_stream", { botId });
-  }, [botId, socket, status]);
+  }, [botId, socket]);
 
   // ── 시그널링 이벤트 수신 ─────────────────────────────────────────────────
   useEffect(() => {
@@ -127,6 +128,21 @@ export default function CameraFeed({ botId, label, socket }: Props) {
       socket.off("robot_camera_offline", onOffline);
     };
   }, [socket, botId, cleanup]);
+
+  // ── 마운트 시 자동 연결 (socket 준비되면 바로 스트림 요청) ──────────────────
+  useEffect(() => {
+    if (socket) connect();
+  }, [socket, connect]);
+
+  // ── 연결 실패/끊김 시 자동 재연결 (3초 후 재시도) ──────────────────────────
+  useEffect(() => {
+    if (status !== "error") return;
+    const t = setTimeout(() => {
+      cleanup();   // pcRef 정리 → idle
+      connect();   // 즉시 재연결
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [status, cleanup, connect]);
 
   // 언마운트 시 정리
   useEffect(() => () => { pcRef.current?.close(); }, []);
