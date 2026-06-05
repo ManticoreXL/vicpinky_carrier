@@ -226,7 +226,8 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
   const botSnaps = Object.fromEntries(
     TB3_IDS.map(id => [id, getBotSnapshot(id, rosMessages)])
   );
-  const selectedSnap = botSnaps[selectedBot];
+  // selectedBot이 TB3가 아니면(vicpinky/omx) 직접 스냅샷 생성 — undefined 방지
+  const selectedSnap = botSnaps[selectedBot] ?? getBotSnapshot(selectedBot, rosMessages);
   const totalDetected = TB3_IDS.filter(id => botSnaps[id].detected).length;
   const onlineCount   = TB3_IDS.filter(id => botSnaps[id].online).length;
 

@@ -2,15 +2,21 @@ import { useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
 import CameraFeed from "./CameraFeed";
 
-// ── 로봇별 카메라 botId 매핑 ─────────────────────────────────────────────────
-// omx는 vicpinky에 장착되어 있으므로 vicpinky 카메라 사용
-const CAMERA_BOT: Record<string, string> = {
-  tb3_01:   "tb3_01",
-  tb3_02:   "tb3_02",
-  tb3_03:   "tb3_03",
-  tb3_04:   "tb3_04",
-  vicpinky: "vicpinky",
-  omx:      "vicpinky",
+// ── 로봇별 카메라 목록 매핑 ─────────────────────────────────────────────────
+// 터틀봇 1개 / 빅핑키 2개 / omx 2개
+const ROBOT_CAMERAS: Record<string, Array<{ botId: string; label: string }>> = {
+  tb3_01:   [{ botId: "tb3_01", label: "터틀봇 1" }],
+  tb3_02:   [{ botId: "tb3_02", label: "터틀봇 2" }],
+  tb3_03:   [{ botId: "tb3_03", label: "터틀봇 3" }],
+  tb3_04:   [{ botId: "tb3_04", label: "터틀봇 4" }],
+  vicpinky: [
+    { botId: "vicpinky_cam0", label: "VicPinky CAM-1" },
+    { botId: "vicpinky_cam1", label: "VicPinky CAM-2" },
+  ],
+  omx: [
+    { botId: "omx_cam0", label: "OMX CAM-1" },
+    { botId: "omx_cam1", label: "OMX CAM-2" },
+  ],
 };
 
 const ROBOT_LABEL: Record<string, string> = {
@@ -19,7 +25,7 @@ const ROBOT_LABEL: Record<string, string> = {
   tb3_03:   "터틀봇 3",
   tb3_04:   "터틀봇 4",
   vicpinky: "VicPinky",
-  omx:      "VicPinky (OMX)",
+  omx:      "OMX",
 };
 
 interface Props {
@@ -28,7 +34,7 @@ interface Props {
 }
 
 export default function ControlCameraPanel({ selectedRobot, socket }: Props) {
-  const botId = CAMERA_BOT[selectedRobot] ?? selectedRobot;
+  const cameras = ROBOT_CAMERAS[selectedRobot] ?? [{ botId: selectedRobot, label: selectedRobot }];
   const label = ROBOT_LABEL[selectedRobot] ?? selectedRobot;
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -55,7 +61,7 @@ export default function ControlCameraPanel({ selectedRobot, socket }: Props) {
         </div>
         <div className="flex items-center gap-3">
           <span className="text-[10px] font-mono text-red-500/70 uppercase tracking-widest">
-            {label}
+            {label}{cameras.length > 1 ? ` · ${cameras.length}CH` : ""}
           </span>
           <button
             onClick={toggleFullscreen}
@@ -67,16 +73,18 @@ export default function ControlCameraPanel({ selectedRobot, socket }: Props) {
         </div>
       </div>
 
-      {/* ── 메인 카메라 (크게) ────────────────────────────────────────────── */}
-      <div ref={containerRef} className="flex-none p-3 bg-[#050505]">
-        <CameraFeed botId={botId} label={label} socket={socket} />
+      {/* ── 카메라 (선택 로봇의 모든 채널) ──────────────────────────────── */}
+      <div ref={containerRef} className="flex-none p-3 bg-[#050505] flex flex-col gap-3 overflow-y-auto">
+        {cameras.map(({ botId, label: camLabel }) => (
+          <CameraFeed key={botId} botId={botId} label={camLabel} socket={socket} />
+        ))}
       </div>
 
       {/* ── 카메라 정보 ───────────────────────────────────────────────────── */}
       <div className="flex-none px-4 py-2 border-t border-[#111111]">
         <div className="grid grid-cols-2 gap-x-4 gap-y-1">
           {[
-            { label: "로봇 ID",  val: botId },
+            { label: "채널 수",  val: `${cameras.length}` },
             { label: "프로토콜", val: "WebRTC" },
             { label: "코덱",     val: "H.264" },
             { label: "지연",     val: "Low-Latency" },
