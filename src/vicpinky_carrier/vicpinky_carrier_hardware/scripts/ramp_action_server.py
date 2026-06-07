@@ -85,12 +85,12 @@ class RampControlServer(Node):
 
         # 액션 수행중
         while self.is_moving:
-            time.sleep(0.01)
+            time.sleep(0.05)
             feedback_msg.current_angle = self.current_angle
             feedback_msg.current_load = self.current_load
-            if abs(feedback_msg.current_load) > 80:
+            if self.current_load > 80:
                 load_count = load_count + 1
-                if load_count > 30 :
+                if load_count > 7 :
                     self.get_logger().info("Motor overload. Stop motor.")
                     target_angle = self.current_angle
                     self.goal_angle = target_angle-self.current_load
