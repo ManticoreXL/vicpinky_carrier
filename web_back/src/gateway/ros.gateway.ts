@@ -192,14 +192,13 @@ export class RosGateway
     @MessageBody() payload: { botId: string; browserId: string; sdp: string; type: string },
     @ConnectedSocket() client: Socket,
   ) {
-    // 검증: 이 offer를 보낸 로봇 소켓이 정말 해당 botId로 등록되어 있는가?
+    // 검증(경고만): 보낸 로봇 소켓이 해당 botId로 등록됐는지 — 불일치해도 중계는 함
+    // (browserId로 정확히 라우팅되고, 브라우저가 botId로 다시 필터링하므로 안전)
     const expectedSocketId = this.robotSockets.get(payload.botId);
     if (expectedSocketId !== client.id) {
-      this.logger.error(
-        `Offer botId 불일치! payload.botId=${payload.botId} 는 socket=${expectedSocketId} 에 등록됨, ` +
-        `그러나 offer 보낸 socket=${client.id}. 라우팅 거부.`,
+      this.logger.warn(
+        `Offer botId 확인: ${payload.botId} 등록소켓=${expectedSocketId} ≠ 보낸소켓=${client.id} (재연결 직후일 수 있음)`,
       );
-      return;
     }
     // 브라우저는 RTCSessionDescriptionInit 형태로 받아야 함 → 중첩 sdp 객체로 변환
     this.server.to(payload.browserId).emit('webrtc_offer', {

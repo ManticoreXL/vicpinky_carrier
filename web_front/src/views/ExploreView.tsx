@@ -242,6 +242,12 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
   // 선택한 로봇의 카메라 목록
   const selectedCameras = ROBOT_CAMERA_MAP[selectedBot] ?? [];
 
+  // 한 번 연 로봇은 계속 mount 유지 → 탭 전환해도 연결 끊기지 않음
+  const [activatedBots, setActivatedBots] = useState<Set<string>>(() => new Set([selectedBot]));
+  useEffect(() => {
+    setActivatedBots(prev => (prev.has(selectedBot) ? prev : new Set(prev).add(selectedBot)));
+  }, [selectedBot]);
+
   return (
     <div className="flex flex-col h-full bg-[#050505] text-slate-200 overflow-hidden select-none">
 
@@ -545,24 +551,30 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
                 selectedCameras.length > 1 ? ` (${selectedCameras.length})` : ""
               }`}
             />
-            <div className="px-3 pb-3 flex flex-col gap-1.5">
-              {selectedCameras.length === 0 ? (
+            <div className="px-3 pb-3">
+              {selectedCameras.length === 0 && (
                 <div className="aspect-video flex items-center justify-center
                                 bg-[#050810] border border-[#1e1e1e]">
                   <p className="text-[10px] text-[#2a2a2a] font-mono uppercase tracking-widest">
                     카메라 없음
                   </p>
                 </div>
-              ) : (
-                selectedCameras.map(({ botId, label }) => (
-                  <CameraFeed
-                    key={botId}
-                    botId={botId}
-                    label={label}
-                    socket={socket}
-                  />
-                ))
               )}
+              {/* 방문한 모든 로봇의 카메라를 mount 유지 — 선택된 것만 표시 */}
+              {[...activatedBots].map((bot) => {
+                const cams = ROBOT_CAMERA_MAP[bot] ?? [];
+                if (cams.length === 0) return null;
+                return (
+                  <div
+                    key={bot}
+                    className={bot === selectedBot ? "flex flex-col gap-1.5" : "hidden"}
+                  >
+                    {cams.map(({ botId, label }) => (
+                      <CameraFeed key={botId} botId={botId} label={label} socket={socket} />
+                    ))}
+                  </div>
+                );
+              })}
             </div>
           </div>
 
