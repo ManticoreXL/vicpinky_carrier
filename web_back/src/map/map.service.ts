@@ -38,9 +38,16 @@ export class MapService implements OnModuleInit {
 
   onModuleInit() {
     this.rosService.onMessage((msg) => {
-      const m = msg.topic.match(/^\/([^/]+)\/map$/);
-      if (!m) return;
-      const botId = m[1];
+      // 글로벌 /map (project_slam / slam_toolbox) → 'project_slam' 키
+      // 네임스페이스 맵 /{botId}/map → 해당 botId 키
+      let botId: string;
+      if (msg.topic === '/map') {
+        botId = 'project_slam';
+      } else {
+        const m = msg.topic.match(/^\/([^/]+)\/map$/);
+        if (!m) return;
+        botId = m[1];
+      }
       const raw = msg.data as { info?: MapInfo; data?: number[] };
       if (!raw?.info || !raw?.data?.length) return;
 

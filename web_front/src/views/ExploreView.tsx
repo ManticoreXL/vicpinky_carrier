@@ -2,8 +2,8 @@
  * ExploreView — 재난 탐사 대시보드
  * 기존 관제 기능과 별개로 동작하는 탐사 전용 화면
  */
-import { useState, useEffect, useRef, useCallback } from "react";
-import MapCanvas, { MapCanvasHandle } from "../components/MapCanvas";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import MapCanvas, { MapCanvasHandle, Point2D } from "../components/MapCanvas";
 import CameraFeed from "../components/CameraFeed";
 import NlCommandPanel from "../components/NlCommandPanel";
 import type { RosMessage, ActiveGoals, MapTimestamps, MapInfos } from "../hooks/useNestSocket";
@@ -240,6 +240,63 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
   const vpScanTs  = rosMessages["/vicpinky/scan"]?.timestamp ?? 0;
   const bpOnline  = vpScanTs > 0 && Date.now() - vpScanTs < OFFLINE_THRESHOLD_MS;
 
+  // project_slam: 로봇 위치는 /pose (map 프레임, slam_toolbox 발행)
+  const isSlam = selectedBot === "project_slam";
+  const slamPose = rosMessages["/pose"]?.data as {
+    pose?: { pose?: {
+      position?: { x?: number; y?: number };
+      orientation?: { x?: number; y?: number; z?: number; w?: number };
+    } }
+  } | undefined;
+  const slamP = slamPose?.pose?.pose?.position;
+  const slamO = slamPose?.pose?.pose?.orientation;
+  const slamYaw = slamO
+    ? Math.atan2(2*(slamO.w!*slamO.z! + slamO.x!*slamO.y!), 1 - 2*(slamO.y!**2 + slamO.z!**2))
+    : undefined;
+
+  // 맵 오버레이용 로봇 좌표/방향 (slam이면 /pose, 아니면 odom 스냅)
+  const overlayX   = isSlam ? slamP?.x : selectedSnap.pos?.x;
+  const overlayY   = isSlam ? slamP?.y : selectedSnap.pos?.y;
+  const overlayYaw = isSlam
+    ? slamYaw
+    : (selectedSnap.yaw != null ? (selectedSnap.yaw * Math.PI) / 180 : undefined);
+
+  // ── 라이다 스캔 → map 프레임 점 (slam 뷰에서만) ──────────────────────────────
+  const scanPoints = useMemo<Point2D[]>(() => {
+    if (!isSlam || overlayX == null || overlayY == null || overlayYaw == null) return [];
+    const scan = rosMessages["/tb3_01/scan"]?.data as {
+      ranges?: number[]; angle_min?: number; angle_increment?: number;
+      range_min?: number; range_max?: number;
+    } | undefined;
+    const ranges = scan?.ranges;
+    if (!ranges?.length) return [];
+    const angMin = scan!.angle_min ?? 0;
+    const angInc = scan!.angle_increment ?? 0;
+    const rMin   = scan!.range_min ?? 0.1;
+    const rMax   = scan!.range_max ?? 12;
+    const step = Math.max(1, Math.floor(ranges.length / 600)); // 데시메이션
+    const pts: Point2D[] = [];
+    for (let i = 0; i < ranges.length; i += step) {
+      const r = ranges[i];
+      if (!Number.isFinite(r) || r < rMin || r > rMax) continue;
+      const ang = angMin + i * angInc + overlayYaw;
+      pts.push({ x: overlayX + r * Math.cos(ang), y: overlayY + r * Math.sin(ang) });
+    }
+    return pts;
+  }, [isSlam, rosMessages, overlayX, overlayY, overlayYaw]);
+
+  // ── 경로(/plan) → map 프레임 점 (slam 뷰에서만) ─────────────────────────────
+  const pathPoints = useMemo<Point2D[]>(() => {
+    if (!isSlam) return [];
+    const plan = rosMessages["/plan"]?.data as {
+      poses?: Array<{ pose?: { position?: { x?: number; y?: number } } }>;
+    } | undefined;
+    if (!plan?.poses?.length) return [];
+    return plan.poses
+      .map((p) => ({ x: p.pose?.position?.x, y: p.pose?.position?.y }))
+      .filter((p): p is Point2D => p.x != null && p.y != null);
+  }, [isSlam, rosMessages]);
+
   // 선택한 로봇의 카메라 목록
   const selectedCameras = ROBOT_CAMERA_MAP[selectedBot] ?? [];
 
@@ -287,6 +344,43 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
         {/* ── 왼쪽: 함대 상태 ──────────────────────────────────────────── */}
         <aside className="w-52 flex-none flex flex-col bg-[#050505] overflow-y-auto">
           <PanelHeader icon="⬡" label="FLEET STATUS" />
+
+          {/* PROJECT SLAM — 주력 SLAM (글로벌 /map) */}
+          <div className="px-3 pb-2">
+            <button
+              onClick={() => setSelectedBot("project_slam")}
+              className={`w-full text-left rounded-lg p-2.5 border transition-all ${
+                isSlam
+                  ? "bg-[#0a1f14] border-green-600/70 shadow-md shadow-green-900/20"
+                  : slamP
+                    ? "bg-[#0a1f14] border-green-800/40 hover:border-green-600/50"
+                    : "bg-[#0c0c10] border-[#1e1e1e] hover:border-green-900/40"
+              }`}>
+              <div className="flex items-center justify-between mb-1">
+                <div className="flex items-center gap-1.5">
+                  <OnlineDot online={!!slamP} color="green" />
+                  <span className="text-xs font-bold text-green-300">PROJECT SLAM</span>
+                </div>
+                <span className="text-[10px] text-green-400/60 font-mono">RVIZ</span>
+              </div>
+              <div className="text-[10px] text-[#555555] space-y-0.5 pl-3.5">
+                <div className="flex justify-between">
+                  <span>X</span>
+                  <span className="text-[#c0c0c0] font-mono">{slamP?.x != null ? `${slamP.x.toFixed(2)} m` : "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Y</span>
+                  <span className="text-[#c0c0c0] font-mono">{slamP?.y != null ? `${slamP.y.toFixed(2)} m` : "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>MAP</span>
+                  <span className={mapTimestamps["project_slam"] ? "text-green-400 font-mono" : "text-[#333333] font-mono"}>
+                    {mapTimestamps["project_slam"] ? "수신 중" : "대기"}
+                  </span>
+                </div>
+              </div>
+            </button>
+          </div>
 
           {/* VicPinky 릴레이 (2개 카메라) — 클릭하면 선택 */}
           <div className="px-3 pb-2">
@@ -510,13 +604,30 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
                   ref={mapCanvasRef}
                   imageUrl={mapImageUrl}
                   mapInfo={mapInfo}
-                  robotX={selectedSnap.pos?.x ?? undefined}
-                  robotY={selectedSnap.pos?.y ?? undefined}
-                  robotYaw={selectedSnap.yaw != null ? (selectedSnap.yaw * Math.PI) / 180 : undefined}
+                  robotX={overlayX ?? undefined}
+                  robotY={overlayY ?? undefined}
+                  robotYaw={overlayYaw ?? undefined}
+                  scanPoints={scanPoints}
+                  pathPoints={pathPoints}
                   size={560}
                 />
               </div>
             </div>
+
+            {/* SLAM 뷰 범례 */}
+            {isSlam && (
+              <div className="flex items-center gap-4 max-w-2xl px-1 text-[9px] font-mono text-[#666666]">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> 로봇(/pose)
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 bg-green-500 inline-block" /> 라이다(/tb3_01/scan) {scanPoints.length}pt
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <span className="w-3 h-0.5 bg-cyan-400 inline-block" /> 경로(/plan) {pathPoints.length}pt
+                </span>
+              </div>
+            )}
 
             {/* 맵 메타 정보 */}
             {mapInfo ? (

@@ -7,19 +7,26 @@ export interface MapCanvasHandle {
   downloadPng: (filename?: string) => void;
 }
 
+export interface Point2D {
+  x: number;
+  y: number;
+}
+
 interface Props {
   imageUrl: string | null;   // 백엔드 /api/map/:botId/image URL
   mapInfo?: MapInfo;          // 로봇 오버레이용 메타데이터
   robotX?: number;            // map 프레임 좌표 (m)
   robotY?: number;
   robotYaw?: number;          // rad
+  scanPoints?: Point2D[];     // 라이다 스캔 점 (map 프레임, m)
+  pathPoints?: Point2D[];     // 경로 (map 프레임, m)
   size?: number;
 }
 
 // ── 컴포넌트 ──────────────────────────────────────────────────────────────────
 
 const MapCanvas = forwardRef<MapCanvasHandle, Props>(
-  ({ imageUrl, mapInfo, robotX, robotY, robotYaw, size = 320 }, ref) => {
+  ({ imageUrl, mapInfo, robotX, robotY, robotYaw, scanPoints, pathPoints, size = 320 }, ref) => {
     const canvasRef = useRef<HTMLCanvasElement>(null);
 
     // PNG 다운로드: canvas에 이미 그려진 내용을 blob으로 추출
@@ -67,6 +74,37 @@ const MapCanvas = forwardRef<MapCanvasHandle, Props>(
         c.fillRect(0, 0, size, size);
         c.imageSmoothingEnabled = false;
         c.drawImage(img, 0, 0, size, size);
+
+        // world(map 프레임, m) → canvas 픽셀 변환 헬퍼
+        const toPx = (wx: number, wy: number, info: MapInfo): [number, number] => {
+          const sx = size / info.width;
+          const sy = size / info.height;
+          const cellX = (wx - info.origin.position.x) / info.resolution;
+          const cellY = (wy - info.origin.position.y) / info.resolution;
+          return [cellX * sx, (info.height - cellY) * sy]; // Y 반전
+        };
+
+        // ── 경로(/plan) 오버레이 — 맨 아래 ──
+        if (pathPoints && pathPoints.length > 1 && mapInfo) {
+          c.beginPath();
+          pathPoints.forEach((p, i) => {
+            const [px, py] = toPx(p.x, p.y, mapInfo);
+            if (i === 0) c.moveTo(px, py);
+            else c.lineTo(px, py);
+          });
+          c.strokeStyle = "rgba(56,189,248,0.9)"; // cyan
+          c.lineWidth = 2;
+          c.stroke();
+        }
+
+        // ── 라이다 스캔 오버레이 ──
+        if (scanPoints && scanPoints.length && mapInfo) {
+          c.fillStyle = "rgba(34,197,94,0.85)"; // green
+          for (const p of scanPoints) {
+            const [px, py] = toPx(p.x, p.y, mapInfo);
+            c.fillRect(px - 0.75, py - 0.75, 1.5, 1.5);
+          }
+        }
 
         // 로봇 위치 오버레이
         if (robotX !== undefined && robotY !== undefined && mapInfo) {
@@ -118,7 +156,7 @@ const MapCanvas = forwardRef<MapCanvasHandle, Props>(
         c.textAlign = "left";
       };
       img.src = imageUrl;
-    }, [imageUrl, robotX, robotY, robotYaw, mapInfo, size]);
+    }, [imageUrl, robotX, robotY, robotYaw, scanPoints, pathPoints, mapInfo, size]);
 
     return <canvas ref={canvasRef} width={size} height={size} className="block" />;
   },
