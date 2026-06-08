@@ -21,7 +21,7 @@
 ## 전원 및 채널 설정
 - 마이크 VDD    : 3.3V (Pin 1)
 - 스피커 VIN    : 5V (OpenCR 5V)
-- 마이크 L/R    : GND (Pin 14)
+- 마이크 L/R    : GND (OpenCR GND)
 - GNDs (Pin 20, Pin 25, Pin 30, Pin 34, Pin 39)
 
 # 사전 설정
@@ -43,3 +43,4 @@ sudo pip3 install rpi_ws281x gTTS SpeechRecognition --break-system-packages
 
 # 기타
 - 하드웨어 패키지는 반드시 관리자 권한으로 실행해야 함
+- `sudo -E /opt/ros/jazzy/bin/ros2 ~`
