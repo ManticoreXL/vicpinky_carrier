@@ -37,7 +37,7 @@ dtoverlay=googlevoicehat-soundcard
 
 # 필요 패키지 정리
 ```bash
-sudo apt-get install python3-pyaudio mpg123 scons build-essentials
+sudo apt-get install python3-pyaudio mpg123 scons build-essential
 sudo pip3 install rpi_ws281x gTTS SpeechRecognition --break-system-packages
 ```
 
