@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import type { Socket } from "socket.io-client";
 import CameraFeed from "./CameraFeed";
 
@@ -39,6 +39,12 @@ export default function ControlCameraPanel({ selectedRobot, socket }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
+  // 한 번 연 로봇은 계속 mount 유지 → 로봇 전환해도 연결 끊기지 않음
+  const [activatedRobots, setActivatedRobots] = useState<Set<string>>(() => new Set([selectedRobot]));
+  useEffect(() => {
+    setActivatedRobots(prev => (prev.has(selectedRobot) ? prev : new Set(prev).add(selectedRobot)));
+  }, [selectedRobot]);
+
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
     if (!document.fullscreenElement) {
@@ -73,11 +79,21 @@ export default function ControlCameraPanel({ selectedRobot, socket }: Props) {
         </div>
       </div>
 
-      {/* ── 카메라 (선택 로봇의 모든 채널) ──────────────────────────────── */}
-      <div ref={containerRef} className="flex-none p-3 bg-[#050505] flex flex-col gap-3 overflow-y-auto">
-        {cameras.map(({ botId, label: camLabel }) => (
-          <CameraFeed key={botId} botId={botId} label={camLabel} socket={socket} />
-        ))}
+      {/* ── 카메라 (방문한 로봇은 mount 유지, 선택된 것만 표시) ──────────── */}
+      <div ref={containerRef} className="flex-none p-3 bg-[#050505] overflow-y-auto">
+        {[...activatedRobots].map((robot) => {
+          const cams = ROBOT_CAMERAS[robot] ?? [{ botId: robot, label: robot }];
+          return (
+            <div
+              key={robot}
+              className={robot === selectedRobot ? "flex flex-col gap-3" : "hidden"}
+            >
+              {cams.map(({ botId, label: camLabel }) => (
+                <CameraFeed key={botId} botId={botId} label={camLabel} socket={socket} />
+              ))}
+            </div>
+          );
+        })}
       </div>
 
       {/* ── 카메라 정보 ───────────────────────────────────────────────────── */}

@@ -1,6 +1,8 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import type { Socket } from "socket.io-client";
 
+const BACKEND = "http://localhost:3001";
+
 // ── 타입 ──────────────────────────────────────────────────────────────────────
 
 type Status = "idle" | "requesting" | "connecting" | "streaming" | "error";
@@ -18,6 +20,10 @@ export default function CameraFeed({ botId, label, socket }: Props) {
   const pcRef    = useRef<RTCPeerConnection | null>(null);
   const [status, setStatus] = useState<Status>("idle");
 
+  // 비전 분석 상태
+  const [analyzing, setAnalyzing]       = useState(false);
+  const [analysisText, setAnalysisText] = useState<string | null>(null);
+
   // ── PeerConnection 정리 ───────────────────────────────────────────────────
   const cleanup = useCallback(() => {
     pcRef.current?.close();
@@ -28,8 +34,13 @@ export default function CameraFeed({ botId, label, socket }: Props) {
 
   // ── 연결 시작 ─────────────────────────────────────────────────────────────
   const connect = useCallback(() => {
-    // 이미 연결 중이거나 연결됨 → 중복 방지 (status 대신 pcRef로 판단)
-    if (!socket || pcRef.current) return;
+    if (!socket) return;
+    // 살아있는 pc가 있으면 중복 방지. 닫힌 pc면 정리 후 재생성 (StrictMode 대응)
+    if (pcRef.current) {
+      if (pcRef.current.connectionState !== "closed") return;
+      pcRef.current.close();
+      pcRef.current = null;
+    }
     setStatus("requesting");
 
     const pc = new RTCPeerConnection({
@@ -144,8 +155,39 @@ export default function CameraFeed({ botId, label, socket }: Props) {
     return () => clearTimeout(t);
   }, [status, cleanup, connect]);
 
-  // 언마운트 시 정리
-  useEffect(() => () => { pcRef.current?.close(); }, []);
+  // 언마운트 시 정리 (close + null — 재마운트 시 깨끗하게 재연결)
+  useEffect(() => () => { pcRef.current?.close(); pcRef.current = null; }, []);
+
+  // ── 현재 프레임 캡처 → LLaVA 분석 ──────────────────────────────────────────
+  const captureAndAnalyze = useCallback(async () => {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) return;
+
+    // 비디오 현재 프레임을 캔버스에 그려 JPEG base64로 변환
+    const canvas = document.createElement("canvas");
+    canvas.width  = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+
+    setAnalyzing(true);
+    setAnalysisText(null);
+    try {
+      const res = await fetch(`${BACKEND}/api/vision/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: dataUrl, botId }),
+      });
+      const json = (await res.json()) as { ok: boolean; text: string; message?: string };
+      setAnalysisText(json.ok ? json.text : `분석 실패: ${json.message ?? "알 수 없음"}`);
+    } catch {
+      setAnalysisText("분석 요청 실패 — 백엔드/Ollama 확인");
+    } finally {
+      setAnalyzing(false);
+    }
+  }, [botId]);
 
   // ── 렌더 ─────────────────────────────────────────────────────────────────
   return (
@@ -208,15 +250,51 @@ export default function CameraFeed({ botId, label, socket }: Props) {
         <span className="text-[8px] font-mono text-[#555555] uppercase tracking-widest">{label}</span>
       </div>
 
-      {/* 스트리밍 중 연결 해제 버튼 */}
+      {/* 스트리밍 중 우상단 버튼들 (분석 / 해제) */}
       {status === "streaming" && (
-        <button
-          onClick={cleanup}
-          className="absolute top-1 right-1 w-5 h-5 flex items-center justify-center
-                     text-[9px] text-[#333333] hover:text-[#888888] transition-colors"
-        >
-          ✕
-        </button>
+        <div className="absolute top-1 right-1 flex items-center gap-1">
+          <button
+            onClick={captureAndAnalyze}
+            disabled={analyzing}
+            title="현재 프레임 AI 분석"
+            className={`px-1.5 h-5 flex items-center justify-center text-[9px] font-mono font-bold
+                       border transition-all ${
+              analyzing
+                ? "border-amber-700/50 text-amber-400 animate-pulse cursor-wait"
+                : "border-cyan-800/50 bg-cyan-950/30 text-cyan-400 hover:border-cyan-600/70 hover:text-cyan-300"
+            }`}
+          >
+            {analyzing ? "분석중…" : "🔍 분석"}
+          </button>
+          <button
+            onClick={cleanup}
+            className="w-5 h-5 flex items-center justify-center
+                       text-[9px] text-[#333333] hover:text-[#888888] transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* AI 분석 결과 오버레이 (하단) */}
+      {analysisText !== null && (
+        <div className="absolute bottom-0 left-0 right-0 max-h-[55%] overflow-y-auto
+                        bg-[#04060a]/95 border-t border-cyan-900/40 p-2">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[8px] font-mono font-bold text-cyan-500 uppercase tracking-widest">
+              ◈ AI 분석 — {label}
+            </span>
+            <button
+              onClick={() => setAnalysisText(null)}
+              className="text-[9px] text-[#444444] hover:text-[#888888] transition-colors leading-none"
+            >
+              ✕
+            </button>
+          </div>
+          <p className="text-[10px] text-cyan-100/90 leading-relaxed whitespace-pre-wrap">
+            {analysisText}
+          </p>
+        </div>
       )}
     </div>
   );
