@@ -29,7 +29,7 @@ def generate_launch_description():
     map_save_path = LaunchConfiguration('map_save_path')
     use_rviz = LaunchConfiguration('rviz')
 
-    pkg_share = FindPackageShare('vicpinky_carrier')
+    pkg_share = FindPackageShare('turtlebot3_explorer')
     nav2_params = PathJoinSubstitution([pkg_share, 'config', f'nav2_params_{NS}.yaml'])
     slam_params = PathJoinSubstitution([pkg_share, 'config', f'slam_params_{NS}.yaml'])
     rviz_config = PathJoinSubstitution([pkg_share, 'config', f'{NS}_view.rviz'])
@@ -76,7 +76,7 @@ def generate_launch_description():
         period=30.0,
         actions=[
             Node(
-                package='vicpinky_carrier',
+                package='turtlebot3_explorer',
                 executable='mission_coordinator',
                 name='mission_coordinator',
                 output='screen',
@@ -92,7 +92,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument('use_sim_time', default_value='false'),
-        DeclareLaunchArgument('map_save_path', default_value=os.path.expanduser('~/maps/disaster_map_01')),
+        DeclareLaunchArgument('map_save_path', default_value=os.path.expanduser('~/maps/disaster_map')),
         DeclareLaunchArgument('rviz', default_value='true'),
         slam,
         rviz,

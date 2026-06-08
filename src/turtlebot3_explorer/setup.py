@@ -2,7 +2,7 @@ import os
 from glob import glob
 from setuptools import find_packages, setup
 
-package_name = 'vicpinky_carrier'
+package_name = 'turtlebot3_explorer'
 
 setup(
     name=package_name,
@@ -28,7 +28,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'mission_coordinator = vicpinky_carrier.mission_coordinator:main'
+            'mission_coordinator = turtlebot3_explorer.mission_coordinator:main'
         ],
     },
 )
