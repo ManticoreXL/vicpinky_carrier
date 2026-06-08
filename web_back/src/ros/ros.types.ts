@@ -74,6 +74,11 @@ function tb3Topics(id: string): RosTopicConfig[] {
 
 // 구독할 토픽 목록
 export const SUBSCRIBED_TOPICS: RosTopicConfig[] = [
+  // project_slam (turtlebot3_explorer) — slam_toolbox가 네임스페이스 없이 발행
+  { name: '/map',                       messageType: 'nav_msgs/OccupancyGrid' },
+  { name: '/pose',                      messageType: 'geometry_msgs/PoseWithCovarianceStamped' },
+  { name: '/plan',                      messageType: 'nav_msgs/Path' },
+
   // VicPinky (geometry_msgs/Twist — TwistStamped 아님)
   { name: '/vicpinky/cmd_vel',          messageType: 'geometry_msgs/Twist' },
   { name: '/vicpinky/joint_states',     messageType: 'sensor_msgs/JointState' },
