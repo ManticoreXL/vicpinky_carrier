@@ -14,7 +14,7 @@ export class VisionService {
   private readonly logger = new Logger(VisionService.name);
 
   private readonly ollamaUrl =
-    process.env.OLLAMA_URL ?? 'http://localhost:11434';
+    process.env.OLLAMA_URL ?? 'http://127.0.0.1:11434';
   private readonly model = process.env.OLLAMA_VISION_MODEL ?? 'llava';
 
   private readonly defaultPrompt =
@@ -37,11 +37,20 @@ export class VisionService {
     };
 
     const started = Date.now();
-    const res = await fetch(`${this.ollamaUrl}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${this.ollamaUrl}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    } catch (err: unknown) {
+      // fetch 자체 실패 — 실제 원인(cause) 노출
+      const cause = (err as { cause?: unknown })?.cause;
+      const detail = cause instanceof Error ? cause.message : String(cause ?? err);
+      this.logger.error(`Ollama 연결 실패 (${this.ollamaUrl}): ${detail}`);
+      throw new Error(`Ollama 연결 실패 (${this.ollamaUrl}): ${detail}`);
+    }
 
     if (!res.ok) {
       const text = await res.text().catch(() => '');
