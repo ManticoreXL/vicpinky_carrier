@@ -5,6 +5,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import MapCanvas, { MapCanvasHandle } from "../components/MapCanvas";
 import CameraFeed from "../components/CameraFeed";
+import NlCommandPanel from "../components/NlCommandPanel";
 import type { RosMessage, ActiveGoals, MapTimestamps, MapInfos } from "../hooks/useNestSocket";
 import type { Socket } from "socket.io-client";
 
@@ -536,6 +537,11 @@ export default function ExploreView({ rosMessages, activeGoals, mapTimestamps, m
                 /{selectedBot}/map 토픽 대기 중 — Cartographer 실행 확인
               </p>
             )}
+
+            {/* 자연어 명령 패널 — 선택 로봇 (전환 시 상태 초기화) */}
+            <div className="max-w-2xl">
+              <NlCommandPanel key={selectedBot} botId={selectedBot} socket={socket} />
+            </div>
 
           </div>
         </main>

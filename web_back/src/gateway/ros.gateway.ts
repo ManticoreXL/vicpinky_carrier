@@ -12,6 +12,7 @@ import { Logger, OnModuleInit } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { RosService } from '../ros/ros.service';
 import { MapService } from '../map/map.service';
+import { CommandService } from '../command/command.service';
 import type {
   ServiceCallPayload,
   TopicPublishPayload,
@@ -21,6 +22,10 @@ import type {
 
 @WebSocketGateway({
   cors: { origin: '*' },   // 개발용 — 운영 시 origin 제한
+  // 핑 허용시간 확대 — 로봇 영상 인코딩으로 핑이 잠깐 늦어도 끊기지 않게
+  // (클라이언트 타임아웃 = pingInterval + pingTimeout = 25s + 60s = 85s)
+  pingInterval: 25000,
+  pingTimeout: 60000,
   //namespace: '/ros',
 })
 export class RosGateway
@@ -37,6 +42,7 @@ export class RosGateway
   constructor(
     private readonly rosService: RosService,
     private readonly mapService: MapService,
+    private readonly commandService: CommandService,
   ) {}
 
   // ── 모듈 초기화 시 ROS 메시지 → 프론트 브로드캐스트 등록 ───────────────
@@ -256,5 +262,61 @@ export class RosGateway
   ) {
     this.rosService.cancelActionGoal(payload.actionName, payload.goalId);
     client.emit('action_cancelled', { goalId: payload.goalId });
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // 자연어 명령 (LLM → cmd_vel 시퀀스)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /** 프론트 → 서버: 자연어 명령 실행 */
+  @SubscribeMessage('nl_command')
+  async handleNlCommand(
+    @MessageBody() payload: { botId: string; text: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const { botId, text } = payload;
+    if (!botId || !text?.trim()) {
+      client.emit('nl_command_error', { botId, message: '명령이 비어 있습니다' });
+      return;
+    }
+
+    // 1) 자연어 → 시퀀스 파싱
+    let steps;
+    try {
+      steps = await this.commandService.parsePlan(text);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      client.emit('nl_command_error', { botId, message });
+      return;
+    }
+
+    // 2) 순차 실행 — 진행상황을 모든 클라이언트에 브로드캐스트
+    void this.commandService.execute(botId, steps, (ev) => {
+      switch (ev.type) {
+        case 'plan':
+          this.server.emit('nl_command_plan', { botId, text, steps: ev.steps });
+          break;
+        case 'step':
+          this.server.emit('nl_command_progress', {
+            botId, index: ev.index, total: ev.total, step: ev.step,
+          });
+          break;
+        case 'done':
+          this.server.emit('nl_command_done', { botId });
+          break;
+        case 'stopped':
+          this.server.emit('nl_command_stopped', { botId });
+          break;
+        case 'error':
+          this.server.emit('nl_command_error', { botId, message: ev.message });
+          break;
+      }
+    });
+  }
+
+  /** 프론트 → 서버: 자연어 명령 중단(긴급정지) */
+  @SubscribeMessage('nl_command_stop')
+  handleNlCommandStop(@MessageBody() payload: { botId: string }) {
+    this.commandService.stop(payload.botId);
   }
 }
