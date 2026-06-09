@@ -13,6 +13,7 @@ import { Server, Socket } from 'socket.io';
 import { RosService } from '../ros/ros.service';
 import { MapService } from '../map/map.service';
 import { CommandService } from '../command/command.service';
+import { LogsService } from '../logs/logs.service';
 import type {
   ServiceCallPayload,
   TopicPublishPayload,
@@ -43,6 +44,7 @@ export class RosGateway
     private readonly rosService: RosService,
     private readonly mapService: MapService,
     private readonly commandService: CommandService,
+    private readonly logsService: LogsService,
   ) {}
 
   // ── 모듈 초기화 시 ROS 메시지 → 프론트 브로드캐스트 등록 ───────────────
@@ -79,6 +81,10 @@ export class RosGateway
         this.robotSockets.delete(botId);
         this.server?.emit('robot_camera_offline', { botId });
         this.logger.log(`📷 카메라 오프라인: ${botId}`);
+        void this.logsService.write({
+          level: 'warn', category: 'camera', botId,
+          message: '카메라 오프라인',
+        });
         break;
       }
     }
@@ -167,6 +173,10 @@ export class RosGateway
   ) {
     this.robotSockets.set(payload.botId, client.id);
     this.logger.log(`📷 카메라 온라인: ${payload.botId}`);
+    void this.logsService.write({
+      level: 'info', category: 'camera', botId: payload.botId,
+      message: '카메라 온라인',
+    });
     client.emit('robot_registered', { ok: true });
     this.server?.emit('robot_camera_online', { botId: payload.botId });
   }
@@ -231,6 +241,10 @@ export class RosGateway
     });
     // 핸드셰이크 완료 = 스트림 연결 성립
     this.logger.log(`✅ WebRTC 연결: ${payload.botId} ↔ browser ${client.id}`);
+    void this.logsService.write({
+      level: 'info', category: 'webrtc', botId: payload.botId,
+      message: 'WebRTC 스트림 연결', meta: { browserId: client.id },
+    });
   }
 
   /** 브라우저 → 서버 → 로봇: ICE Candidate 중계

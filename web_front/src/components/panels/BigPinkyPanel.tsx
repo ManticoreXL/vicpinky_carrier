@@ -15,6 +15,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { PanelProps } from "../../hooks/useRos";
 import ActionPanel from "../ActionPanel";
+import RampControl from "../RampControl";
 import LidarCanvas from "../explore/LidarCanvas";
 import { useKeyboardControl } from "../../hooks/useKeyboardControl";
 import type {
@@ -323,6 +324,18 @@ export default function VicPinkyPanel({
               자가진단 시작
             </BlueButton>
           </div>
+        </Section>
+
+        {/* ── 램프 제어 (RampControl 액션 + ramp_state 토픽) ───────────── */}
+        <Section label="램프 제어 (RampControl)">
+          <RampControl
+            emitAction={emitAction}
+            cancelAction={cancelAction}
+            activeGoals={activeGoals}
+            actionFeedbacks={actionFeedbacks}
+            actionResults={actionResults}
+            rampState={p("ramp_state") as { ramp_state?: string; ramp_angle?: string } | undefined}
+          />
         </Section>
 
         {/* ── Action ─────────────────────────────────────────────────────── */}
