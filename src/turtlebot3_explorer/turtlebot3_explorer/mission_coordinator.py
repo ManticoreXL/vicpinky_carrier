@@ -26,6 +26,7 @@ from rclpy.qos import (
     QoSHistoryPolicy,
 )
 
+from std_msgs.msg import Empty
 from nav_msgs.msg import OccupancyGrid
 from nav2_msgs.action import NavigateToPose
 from action_msgs.msg import GoalStatus
@@ -62,6 +63,8 @@ class ExplorationCoordinator(Node):
         self.declare_parameter('localization_timeout', 3.0)      # map->base TF가 이보다 오래되면 localization 미준비로 보고 대기(초)
         self.declare_parameter('localization_lost_timeout', 60.0)  # localization이 이만큼 안 돌아오면 미션 종료(초)
         self.declare_parameter('min_goal_runtime', 2.0)          # 골이 이보다 빨리 중단되면 '즉시 실패'(타이밍 문제)로 보고 블랙리스트 미집계(초)
+        # ---- 온디맨드 마무리 ----
+        self.declare_parameter('finish_topic', '/tb3_01/mission/finish_now')  # 이 토픽(std_msgs/Empty) 수신 시 현재 맵 저장 후 복귀
 
         self.map_save_path = self.get_parameter('map_save_path').value
         self.min_frontier_size = int(self.get_parameter('min_frontier_size').value)
@@ -76,6 +79,7 @@ class ExplorationCoordinator(Node):
         self.localization_timeout = float(self.get_parameter('localization_timeout').value)
         self.localization_lost_timeout = float(self.get_parameter('localization_lost_timeout').value)
         self.min_goal_runtime = float(self.get_parameter('min_goal_runtime').value)
+        self.finish_topic = self.get_parameter('finish_topic').value
 
         # ---- 상태 변수 ----
         self.state = self.INIT
@@ -83,6 +87,9 @@ class ExplorationCoordinator(Node):
         self.is_navigating = False
         self.home_pose = None        # 탐색 시작 시점의 로봇 위치 (x, y)
         self._finished = False       # True 가 되면 제어 루프에서 노드를 종료
+        self._finish_requested = False   # 외부에서 '지금 마무리' 요청이 오면 True
+        self._ignore_next_result = False # 마무리로 취소한 골의 결과를 한 번 무시
+        self._goal_handle = None         # 현재 골 핸들 (취소용)
 
         # 루프 방지용 (탐색)
         self.current_goal = None     # 현재 추구 중인 목표 (x, y)
@@ -122,6 +129,11 @@ class ExplorationCoordinator(Node):
         # ---- 맵 저장 서비스 클라이언트 ----
         self._save_map_client = self.create_client(SaveMap, 'slam_toolbox/save_map')
 
+        # ---- '지금 마무리' 트리거 구독 (부분 맵 저장 + 복귀) ----
+        self._finish_sub = self.create_subscription(
+            Empty, self.finish_topic, self._finish_now_callback, 10
+        )
+
         # ---- 제어 루프(1Hz) ----
         self._control_timer = self.create_timer(1.0, self.control_loop)
 
@@ -136,6 +148,16 @@ class ExplorationCoordinator(Node):
     def control_loop(self):
         if self._finished:
             raise SystemExit   # 타이머 콜백에서 SystemExit → rclpy.spin() 탈출(권장 종료 패턴)
+
+        # ---- '지금 마무리' 요청 처리 (주행 중이든 아니든 최우선) ----
+        if self._finish_requested:
+            if self.state == self.EXPLORING:
+                self._begin_finish_now()
+                return
+            elif self.state in (self.RETURNING, self.DONE):
+                # 이미 복귀/종료 중 → 중복 요청 무시
+                self._finish_requested = False
+            # INIT 이면 탐색이 시작될 때까지 요청을 보류(플래그 유지)
 
         # 주행 중이면 결과를 기다림 (콜백이 처리)
         if self.is_navigating:
@@ -387,18 +409,27 @@ class ExplorationCoordinator(Node):
         if not handle.accepted:
             self.get_logger().warn('Nav2 가 목표를 거부했습니다.')
             self.is_navigating = False
+            self._goal_handle = None
             # 거부는 보통 일시적 → 즉시 실패로 보고 블랙리스트 미집계, 쿨다운 후 재시도(control_loop)
             if self.state == self.EXPLORING:
                 self._register_failure(instant=True)
             self._set_cooldown()
             return
 
+        self._goal_handle = handle
         self.result_future = handle.get_result_async()
         self.result_future.add_done_callback(self.get_result_callback)
 
     def get_result_callback(self, future):
         status = future.result().status
         self.is_navigating = False
+        self._goal_handle = None
+
+        # 마무리 요청으로 취소한 탐색 골의 결과 → 한 번 무시하고 복귀로 진행
+        if self._ignore_next_result:
+            self._ignore_next_result = False
+            self.get_logger().info('이전 탐색 목표를 취소했습니다. home 으로 복귀합니다.')
+            return
 
         # 골이 얼마나 오래 돌았는지 (즉시 실패 = 타이밍/localization 문제로 추정)
         runtime = None
@@ -455,6 +486,60 @@ class ExplorationCoordinator(Node):
             f'복귀 시도 {self.return_attempts}/{self.max_return_attempts} → home ({hx:.2f}, {hy:.2f})'
         )
         self.send_nav_goal(hx, hy)
+
+    # ==================================================================
+    # 온디맨드 '지금 마무리' (부분 맵 저장 + 복귀)
+    # ==================================================================
+    def _finish_now_callback(self, msg):
+        """ 외부 트리거 수신: 무거운 처리는 control_loop 에서 (콜백은 플래그만 세움). """
+        if self.state == self.DONE:
+            return
+        if not self._finish_requested:
+            self.get_logger().warn('▶ 마무리 요청 수신: 곧 현재 맵 저장 후 복귀합니다.')
+        self._finish_requested = True
+
+    def _begin_finish_now(self):
+        """ 현재 부분 맵을 즉시 저장하고, 탐색을 멈춘 뒤 home 으로 복귀.
+            (전송/재시도/최종 저장은 기존 RETURNING 로직을 그대로 재사용) """
+        self._finish_requested = False
+        self.get_logger().warn('▶ 마무리 시작 → 부분 맵 저장 후 home 복귀.')
+
+        # 1) 현재(부분) 맵 즉시 저장 — 복귀가 실패해도 데이터는 확보
+        self._save_map_now()
+
+        # 2) 복귀 상태로 전환
+        self.state = self.RETURNING
+        self.return_attempts = 0
+        self._cooldown_until = None
+
+        # 3) 탐색 주행 중이면 현재 목표 취소 (다음 틱에 home 목표 전송)
+        if self.is_navigating and self._goal_handle is not None:
+            self._ignore_next_result = True
+            try:
+                self._goal_handle.cancel_goal_async()
+            except Exception as e:
+                self.get_logger().warn(f'목표 취소 호출 실패(무시): {e}')
+
+    def _save_map_now(self):
+        """ 종료하지 않고 현재 맵만 저장 (_finished 를 건드리지 않음). """
+        if not self._save_map_client.wait_for_service(timeout_sec=2.0):
+            self.get_logger().error('/slam_toolbox/save_map 서비스 없음 → 부분 저장 건너뜀.')
+            return
+        req = SaveMap.Request()
+        req.name.data = self.map_save_path
+        self.get_logger().info(f'부분 맵 저장 요청 → {self.map_save_path}')
+        fut = self._save_map_client.call_async(req)
+        fut.add_done_callback(self._save_now_done_callback)
+
+    def _save_now_done_callback(self, future):
+        try:
+            resp = future.result()
+            if resp.result == 0:   # RESULT_SUCCESS
+                self.get_logger().info(f'부분 맵 저장 완료: {self.map_save_path}.pgm / .yaml')
+            else:
+                self.get_logger().error(f'부분 맵 저장 실패(result={resp.result}).')
+        except Exception as e:
+            self.get_logger().error(f'부분 맵 저장 서비스 호출 오류: {e}')
 
     # ==================================================================
     # 맵 저장 후 종료
