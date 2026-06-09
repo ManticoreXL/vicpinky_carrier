@@ -95,7 +95,8 @@ export class RosService implements OnModuleInit, OnModuleDestroy {
         cbs.onFeedback({
           goalId: id,
           actionName: parsed['action'] as string,
-          feedback: parsed['feedback'] as Record<string, unknown>,
+          // rosbridge는 데이터를 'values'에 담음 (구버전 'feedback' 호환)
+          feedback: (parsed['values'] ?? parsed['feedback']) as Record<string, unknown>,
         });
       }
     }
@@ -107,7 +108,8 @@ export class RosService implements OnModuleInit, OnModuleDestroy {
         cbs.onResult({
           goalId: id,
           actionName: parsed['action'] as string,
-          result: parsed['result'] as Record<string, unknown>,
+          // rosbridge는 결과를 'values'에 담음 (구버전 'result' 호환)
+          result: (parsed['values'] ?? parsed['result']) as Record<string, unknown>,
           status: parsed['status'] as number,
         });
       }
@@ -175,7 +177,7 @@ export class RosService implements OnModuleInit, OnModuleDestroy {
       id,
       action: actionName,
       action_type: actionType,
-      goal,
+      args: goal,   // rosbridge는 goal을 'args' 필드에서 읽음 (call_service와 동일)
       feedback: true,
     });
     this.logger.debug(`action goal → ${actionName} [${id}]`);
