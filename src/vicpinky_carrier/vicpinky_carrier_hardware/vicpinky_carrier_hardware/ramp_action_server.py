@@ -3,12 +3,15 @@ import rclpy as rp
 from rclpy.action import ActionServer
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
-from std_msgs.msg import String
+from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
+# from std_msgs.msg import String
 import time
 
 from vicpinky_carrier_interfaces.action import RampControl
+from vicpinky_carrier_interfaces.msg import RampState
 from vicpinky_carrier_hardware.ramp_driver import MirrorMotorControl
 
+# ros2 action send_goal /ramp_control vicpinky_carrier_interfaces/action/RampControl "{target_string: 'Open'}"
 
 class RampControlServer(Node):
     def __init__(self):
@@ -19,15 +22,18 @@ class RampControlServer(Node):
         self.current_load = 0
         self.is_moving = False
 
+        self.timer_cb_group = MutuallyExclusiveCallbackGroup()
+        self.action_cb_group = MutuallyExclusiveCallbackGroup()
+
         self.state_publisher = self.create_publisher(
-            String, 'ramp_state', 10
+            RampState, 'ramp_state', 10
         )
 
-        self.timer = self.create_timer(0.1, self.timer_callback)
+        self.timer = self.create_timer(0.1, self.timer_callback, callback_group=self.timer_cb_group)
         
         self._action_server = ActionServer(
             self, RampControl,
-            "ramp_control", self.execute_callback
+            "ramp_control", self.execute_callback, callback_group=self.action_cb_group
         )
 
         self.motor=MirrorMotorControl('/dev/open_rb_ramp',12,13)
@@ -47,14 +53,15 @@ class RampControlServer(Node):
                     pass
                 else:
                     self.is_moving = False
-                    self.current_ramp_state = 'Closed' if self.goal_angle == 2048 else 'Open'
+                    self.current_ramp_state = 'Closed' if (self.goal_angle == 2048 or self.current_angle < 2700) else 'Open'
         except Exception as e:
             self.get_logger().error(f"Error while checking motor status: {e}")
 
 
     def publish_state(self):
-        msg = String()
-        msg.data = self.current_ramp_state
+        msg = RampState()
+        msg.ramp_state = self.current_ramp_state
+        msg.ramp_angle = self.current_angle * 360 /4096
         self.state_publisher.publish(msg)
 
     def execute_callback(self, goal_handle):
@@ -85,7 +92,7 @@ class RampControlServer(Node):
 
         # 액션 수행중
         while self.is_moving:
-            time.sleep(0.05)
+            time.sleep(0.05) 
             feedback_msg.current_angle = self.current_angle
             feedback_msg.current_load = self.current_load
             if self.current_load > 80:

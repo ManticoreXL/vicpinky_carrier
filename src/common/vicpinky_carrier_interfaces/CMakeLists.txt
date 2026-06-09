@@ -14,6 +14,7 @@ find_package(action_msgs REQUIRED)
 
 rosidl_generate_interfaces(${PROJECT_NAME}
   "action/RampControl.action"
+  "msg/RampState.msg"
   DEPENDENCIES geometry_msgs std_msgs action_msgs
 )
 
