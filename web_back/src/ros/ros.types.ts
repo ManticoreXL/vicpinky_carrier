@@ -52,6 +52,16 @@ export interface ActionResultMsg {
   status: number;              // 3=succeeded 4=aborted 5=canceled
 }
 
+// ── 수동/자율 믹서(twist_mux) 사용 로봇 ─────────────────────────────────────
+// 이 로봇들은 cmd_vel_mux 노드가 떠 있어, 수동 명령은 /{botId}/cmd_vel_manual 로
+// 보내야 자율(nav2 /cmd_vel_nav)보다 우선 적용된다. 그 외 로봇은 /cmd_vel 직접 발행.
+export const MUX_ROBOTS = new Set<string>(['tb3_01']);
+
+/** 수동 cmd_vel 발행 토픽 (믹서 로봇이면 _manual, 아니면 직접) */
+export function manualCmdVelTopic(botId: string): string {
+  return MUX_ROBOTS.has(botId) ? `/${botId}/cmd_vel_manual` : `/${botId}/cmd_vel`;
+}
+
 // ── 터틀봇 토픽 헬퍼 ────────────────────────────────────────────────────────
 const TB3_IDS = ['tb3_01', 'tb3_02', 'tb3_03', 'tb3_04'] as const;
 
@@ -88,6 +98,8 @@ export const SUBSCRIBED_TOPICS: RosTopicConfig[] = [
   { name: '/vicpinky/scan',             messageType: 'sensor_msgs/LaserScan' },
   { name: '/vicpinky/scan_filtered',    messageType: 'sensor_msgs/LaserScan' },
   { name: '/vicpinky/laser_scan_polygon_filter/transition_event', messageType: 'lifecycle_msgs/TransitionEvent' },
+  // 램프 상태 (carrier) — 타입은 로봇 측 실제 정의로 확인 필요
+  { name: '/vicpinky/ramp_state',       messageType: 'vicpinky_carrier_interfaces/msg/RampState' },
 
   // TurtleBot3 × 4
   ...TB3_IDS.flatMap(tb3Topics),
