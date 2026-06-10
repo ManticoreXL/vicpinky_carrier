@@ -24,7 +24,8 @@ AI 융합 로봇 SW 개발자 2기 최종 프로젝트 (4팀)
 4. 외부 의존성 소스 로드
     ```bash
     cd ~/vicpinky_carrier
-    vcs import src < vicpinky_carrier.repos
+    vcs import src < vicpinky.repos
+    vcs import src < turtlebot.repos
     ```
 
 5. 의존성 패키지 설치
@@ -38,7 +39,7 @@ AI 융합 로봇 SW 개발자 2기 최종 프로젝트 (4팀)
 6. 패키지 빌드
     ```bash
     cd src/
-    colcon build --symlink-install
+    colcon build --build-base ../build --install-base ../install
     ```
 
 # 트리비아
