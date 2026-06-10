@@ -25,6 +25,10 @@ class VoiceNode(Node):
         self.declare_parameter('audio_player_cmd', 'mpg123')
         self.declare_parameter('temp_audio_path', '/tmp/tts_output.mp3')
         self.declare_parameter('mic_keywords', ['googlevoicehat', 'i2s', 'snd_rpi'])
+        self.declare_parameter('pause_threshold', 0.5)
+        self.declare_parameter('energy_threshold', 200)
+        self.declare_parameter('dynamic_energy_threshold', False)
+        self.declare_parameter('tts_tld', 'co.kr')
 
         # 2. Parameter 값 추출 및 인스턴스 변수 할당
         self.stt_language = self.get_parameter('stt_language').value
@@ -36,6 +40,10 @@ class VoiceNode(Node):
         self.audio_player_cmd = self.get_parameter('audio_player_cmd').value
         self.temp_audio_path = self.get_parameter('temp_audio_path').value
         self.mic_keywords = self.get_parameter('mic_keywords').value
+        pause_threshold = self.get_parameter('pause_threshold').value
+        energy_threshold = self.get_parameter('energy_threshold').value
+        dynamic_energy_threshold = self.get_parameter('dynamic_energy_threshold').value
+        self.tts_tld = self.get_parameter('tts_tld').value
 
         self.tts_cb_group = MutuallyExclusiveCallbackGroup()
         self.timer_cb_group = MutuallyExclusiveCallbackGroup()
@@ -67,6 +75,10 @@ class VoiceNode(Node):
         self.add_on_set_parameters_callback(self.parameters_callback)
 
         self.recognizer = sr.Recognizer()
+        self.recognizer.pause_threshold = pause_threshold
+        self.recognizer.energy_threshold = energy_threshold
+        self.recognizer.dynamic_energy_threshold = dynamic_energy_threshold
+
         self.mic = self.find_i2s_microphone()
 
         if self.mic:
@@ -107,6 +119,9 @@ class VoiceNode(Node):
             elif param.name == 'temp_audio_path':
                 self.temp_audio_path = param.value
                 self.get_logger().info(f"Parameter updated: temp_audio_path = {param.value}")
+            elif param.name == 'tts_tld':
+                self.tts_tld = param.value
+                self.get_logger().info(f"Parameter updated: tts_tld = {param.value}")
             
             # STT 백그라운드 스레드 재시작이 필요한 파라미터들은 런타임 변경 거부
             elif param.name in ['ambient_noise_duration', 'phrase_time_limit', 'mic_keywords', 'stt_timer_period']:
@@ -173,7 +188,7 @@ class VoiceNode(Node):
 
     def process_tts_and_play(self, text):
         try:
-            tts = gTTS(text=text, lang=self.tts_language)
+            tts = gTTS(text=text, lang=self.tts_language, tld=self.tts_tld)
             tts.save(self.temp_audio_path)
             
             subprocess.run([self.audio_player_cmd, "-q", self.temp_audio_path])
