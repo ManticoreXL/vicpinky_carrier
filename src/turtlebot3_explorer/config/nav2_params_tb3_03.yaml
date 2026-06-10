@@ -1,20 +1,18 @@
 # =====================================================================
-# nav2_params_tb3_03.yaml
-# 실제 로봇(멀티로봇, 네임스페이스 tb3_03)용 Nav2 파라미터.
-# 원본 nav2_params.yaml 에서 바뀐 점:
-#   - 모든 프레임:  base_footprint -> tb3_03/base_footprint
-#                   odom           -> tb3_03/odom
-#                   map            -> tb3_03/map
-#                   base_link      -> tb3_03/base_link
-#   - 모든 scan 토픽: /scan -> /tb3_03/scan
-#   - odom 토픽:      /odom -> /tb3_03/odom
-#   - cmd_vel 계열은 상대이름 그대로 둠 (런치의 네임스페이스가 /tb3_03/cmd_vel 로 만들어줌)
-#   - enable_stamped_cmd_vel: true (실물 cmd_vel 이 TwistStamped 라서 유지)
-# 컨트롤러/critic 튜닝값은 원본 그대로 유지.
+# nav2_params_tb3_03.yaml  (단일 로봇 / 네임스페이스 없는 nav2)
+#
+# 규칙:
+#   - 프레임 이름  = 로봇 실제 값 tb3_03/*  (tb3_03/map, tb3_03/odom, tb3_03/base_footprint)
+#   - 토픽 이름    = /tb3_03/*  (/tb3_03/scan, /tb3_03/odom, /tb3_03/cmd_vel)
+#   - 맵 토픽(/map)은 slam_toolbox 가 발행하는 plain /map 을 그대로 구독(기본값).
+#   - 런치에서 PushRosNamespace / namespace 인자를 쓰지 않으므로
+#     노드 이름이 plain(controller_server 등) -> 이 yaml 키와 직접 매칭 -> critics 정상 로드.
 # =====================================================================
 
 amcl:
   ros__parameters:
+    # (mapping 중엔 slam_toolbox 가 map->odom TF 를 주므로 amcl 은 미사용.
+    #  navigation_launch 는 amcl 을 띄우지 않음. 일관성 위해 프레임만 맞춰둠.)
     alpha1: 0.2
     alpha2: 0.2
     alpha3: 0.2
@@ -121,14 +119,14 @@ controller_server:
       sim_time: 1.5
       linear_granularity: 0.05
       angular_granularity: 0.025
-      transform_tolerance: 0.2
+      transform_tolerance: 1.0
       xy_goal_tolerance: 0.35
       trans_stopped_velocity: 0.01
       short_circuit_trajectory_evaluation: True
       stateful: True
 
       critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
-      BaseObstacle.scale: 0.02
+      BaseObstacle.scale: 0.3
       PathAlign.scale: 32.0
       PathAlign.forward_point_distance: 0.1
       PathDist.scale: 32.0
@@ -152,11 +150,12 @@ local_costmap:
       height: 3
       resolution: 0.05
       robot_radius: 0.105
+      transform_tolerance: 2.0
       plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 8.0
-        inflation_radius: 0.2
+        cost_scaling_factor: 3.0
+        inflation_radius: 0.3
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -192,6 +191,7 @@ global_costmap:
       robot_radius: 0.105
       resolution: 0.05
       track_unknown_space: true
+      transform_tolerance: 2.0
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
@@ -265,7 +265,7 @@ behavior_server:
     local_frame: tb3_03/odom
     global_frame: tb3_03/map
     robot_base_frame: tb3_03/base_footprint
-    transform_tolerance: 0.1
+    transform_tolerance: 1.0
     simulate_ahead_time: 2.0
     max_rotational_vel: 1.0
     min_rotational_vel: 0.4
@@ -282,25 +282,6 @@ waypoint_follower:
       plugin: "nav2_waypoint_follower::WaitAtWaypoint"
       enabled: True
       waypoint_pause_duration: 200
-
-route_server:
-  ros__parameters:
-    boundary_radius_to_achieve_node: 1.0
-    radius_to_achieve_node: 2.0
-    smooth_corners: true
-    operations: ["AdjustSpeedLimit", "ReroutingService", "CollisionMonitor"]
-    ReroutingService:
-      plugin: "nav2_route::ReroutingService"
-    AdjustSpeedLimit:
-      plugin: "nav2_route::AdjustSpeedLimit"
-    CollisionMonitor:
-      plugin: "nav2_route::CollisionMonitor"
-      max_collision_dist: 3.0
-    edge_cost_functions: ["DistanceScorer", "CostmapScorer"]
-    DistanceScorer:
-      plugin: "nav2_route::DistanceScorer"
-    CostmapScorer:
-      plugin: "nav2_route::CostmapScorer"
 
 velocity_smoother:
   ros__parameters:
@@ -326,15 +307,15 @@ collision_monitor:
     cmd_vel_out_topic: "/tb3_03/cmd_vel"
     enable_stamped_cmd_vel: true
     state_topic: "collision_monitor_state"
-    transform_tolerance: 0.2
-    source_timeout: 1.0
+    transform_tolerance: 1.0
+    source_timeout: 3.0
     base_shift_correction: True
     stop_pub_timeout: 2.0
     polygons: ["FootprintApproach"]
     FootprintApproach:
       type: "polygon"
       action_type: "approach"
-      footprint_topic: "/tb3_03/local_costmap/published_footprint"
+      footprint_topic: "/local_costmap/published_footprint"
       time_before_collision: 1.2
       simulation_time_step: 0.1
       min_points: 6
@@ -347,6 +328,29 @@ collision_monitor:
       min_height: 0.15
       max_height: 2.0
       enabled: True
+
+route_server:
+  ros__parameters:
+    boundary_radius_to_achieve_node: 1.0
+    radius_to_achieve_node: 2.0
+    smooth_corners: true
+    operations: ["AdjustSpeedLimit", "ReroutingService", "CollisionMonitor"]
+    ReroutingService:
+      plugin: "nav2_route::ReroutingService"
+    AdjustSpeedLimit:
+      plugin: "nav2_route::AdjustSpeedLimit"
+    CollisionMonitor:
+      plugin: "nav2_route::CollisionMonitor"
+      max_collision_dist: 3.0
+    edge_cost_functions: ["DistanceScorer", "CostmapScorer"]
+    DistanceScorer:
+      plugin: "nav2_route::DistanceScorer"
+    CostmapScorer:
+      plugin: "nav2_route::CostmapScorer"
+
+map_server:
+  ros_parameters:
+    frame_id: "tb3_03/map"
 
 docking_server:
   ros__parameters:
