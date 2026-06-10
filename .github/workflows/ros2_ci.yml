@@ -29,15 +29,13 @@ jobs:
           rosdep install --from-paths src --ignore-src -y --rosdistro ${{ matrix.ros_distribution }}
 
       - name: Build Colcon Workspace
-        working-directory: ./src
         run: |
           source /opt/ros/${{ matrix.ros_distribution }}/setup.bash
-          colcon build --symlink-install
+          colcon build --base-path src
 
       - name: Run Colcon Tests
-        working-directory: ./src
         run: |
           source /opt/ros/${{ matrix.ros_distribution }}/setup.bash
           source install/setup.bash
-          colcon test
+          colcon test --base-path src
           colcon test-result --all
