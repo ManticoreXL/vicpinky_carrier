@@ -1,0 +1,10 @@
+repositories:
+  vic_pinky:
+    type: git
+    url: https://github.com/pinklab-art/vic_pinky.git
+    version: main
+  DynamixelSDK:
+    type: git
+    url: https://github.com/ROBOTIS-GIT/DynamixelSDK.git
+    version: jazzy
+  

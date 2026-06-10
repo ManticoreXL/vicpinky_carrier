@@ -1,8 +1,4 @@
 repositories:
-  vic_pinky:
-    type: git
-    url: https://github.com/pinklab-art/vic_pinky.git
-    version: main
   turtlebot3/turtlebot3:
     type: git
     url: https://github.com/ROBOTIS-GIT/turtlebot3.git
@@ -14,8 +10,12 @@ repositories:
   turtlebot3/turtlebot3_simulations:
     type: git
     url: https://github.com/ROBOTIS-GIT/turtlebot3_simulations.git
-    version: jazzy
-  DynamixelSDK:
+    version: jazzy  
+  coin_d4_driver:
     type: git
-    url: https://github.com/ROBOTIS-GIT/DynamixelSDK.git
+    url: https://github.com/ROBOTIS-GIT/coin_d4_driver.git
+    version: jazzy
+  ld08_driver:
+    type: git
+    url: https://github.com/ROBOTIS-GIT/ld08_driver.git
     version: jazzy
