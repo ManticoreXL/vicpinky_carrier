@@ -1,10 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { RosService } from '../ros/ros.service';
 import * as zlib from 'zlib';
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
 
 // ── 타입 ─────────────────────────────────────────────────────────────────────
 
@@ -70,57 +66,53 @@ export class MapService implements OnModuleInit {
     this.clearCbs.push(cb);
   }
 
-  // ── 맵 캐시 삭제 + Cartographer 재시작 ───────────────────────────────────
+  // ── 맵 캐시 삭제 + slam_toolbox 리셋 ─────────────────────────────────────
 
   clearMap(botId: string) {
     this.maps.delete(botId);
     this.clearCbs.forEach((cb) => cb(botId));
   }
 
+  /**
+   * 맵 초기화. ROS 직접 실행(child_process) 없이 rosbridge로 slam_toolbox
+   * reset 서비스를 호출 → 백엔드는 순수 rosbridge 클라이언트(구독+서비스).
+   */
   async resetMap(botId: string): Promise<{ ok: boolean; message: string }> {
     // 1. 캐시 즉시 삭제 → 프론트 화면 비움
     this.clearMap(botId);
 
-    const setup   = process.env.ROS2_SETUP          ?? '/opt/ros/jazzy/setup.bash';
-    const wsSetup = process.env.ROS2_WS_SETUP;        // workspace setup (선택)
-    const cfgDir  = process.env.CARTOGRAPHER_CONFIG_DIR  ?? '';
-    const cfgFile = process.env.CARTOGRAPHER_CONFIG_FILE ?? 'turtlebot3_lds_2d.lua';
-    const shell   = { shell: '/bin/bash' as const, timeout: 10_000 };
+    // 2. slam_toolbox reset 서비스 호출 (rosbridge 경유, ROS 소싱 불필요)
+    const serviceName = process.env.SLAM_RESET_SERVICE ?? '/slam_toolbox/reset';
 
-    // ROS 환경 소싱 명령 (워크스페이스가 있으면 함께 소싱)
-    const sourceEnv = wsSetup
-      ? `source ${setup} && source ${wsSetup}`
-      : `source ${setup}`;
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (ok: boolean, message: string) => {
+        if (done) return;
+        done = true;
+        resolve({ ok, message });
+      };
 
-    try {
-      // 2. 현재 trajectory 종료
-      await execAsync(
-        `${sourceEnv} && ros2 service call /${botId}/cartographer_node/finish_trajectory ` +
-        `cartographer_ros_msgs/srv/FinishTrajectory "{trajectory_id: 0}"`,
-        shell,
-      );
-      this.logger.log(`[${botId}] finish_trajectory 완료`);
-
-      await new Promise((r) => setTimeout(r, 400));
-
-      // 3. 새 trajectory 시작 (config 경로가 설정된 경우)
-      if (cfgDir) {
-        await execAsync(
-          `${sourceEnv} && ros2 service call /${botId}/cartographer_node/start_trajectory ` +
-          `cartographer_ros_msgs/srv/StartTrajectory ` +
-          `"{configuration_directory: '${cfgDir}', configuration_basename: '${cfgFile}', ` +
-          `use_initial_pose: false, relative_to_trajectory_id: 0}"`,
-          shell,
+      try {
+        this.rosService.callService(
+          {
+            serviceName,
+            serviceType: 'slam_toolbox/srv/Reset',
+            request: { pause_new_measurements: false },
+          },
+          () => {
+            this.logger.log(`[${botId}] slam_toolbox reset 완료 (${serviceName})`);
+            finish(true, '초기화 완료');
+          },
         );
-        this.logger.log(`[${botId}] start_trajectory 완료`);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.logger.error(`[${botId}] 맵 초기화 실패: ${msg}`);
+        finish(false, msg);
       }
 
-      return { ok: true, message: '초기화 완료' };
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`[${botId}] 맵 초기화 실패: ${msg}`);
-      return { ok: false, message: msg };
-    }
+      // 응답이 없어도 5초 후 종료 (요청은 나갔으니 성공 처리)
+      setTimeout(() => finish(true, '초기화 요청 전송됨'), 5000);
+    });
   }
 
   getPng(botId: string): Buffer | null {
