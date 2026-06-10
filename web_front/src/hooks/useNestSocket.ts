@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback, useState } from "react";
 import { io, Socket } from "socket.io-client";
+import { BACKEND_URL } from "../config";
 
 export interface ServiceCallPayload {
   serviceName: string;
@@ -76,7 +77,7 @@ export function useNestSocket() {
   const [mapInfos, setMapInfos]           = useState<MapInfos>({});
 
   useEffect(() => {
-    const s = io("http://localhost:3001", {
+    const s = io(BACKEND_URL, {
       transports: ["polling", "websocket"],
     });
     socketRef.current = s;
