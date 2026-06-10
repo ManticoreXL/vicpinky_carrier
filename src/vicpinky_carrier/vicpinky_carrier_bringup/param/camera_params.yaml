@@ -1,5 +1,0 @@
-/vicpinky/camera_drive:
-  ros__parameters:
-    video_device: "/dev/video0"
-    image_size: [320, 240]
-    camera_frame_id: "base_footprint"
