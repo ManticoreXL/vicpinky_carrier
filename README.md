@@ -38,8 +38,7 @@ AI 융합 로봇 SW 개발자 2기 최종 프로젝트 (4팀)
 
 6. 패키지 빌드
     ```bash
-    cd src/
-    colcon build --build-base ../build --install-base ../install
+    colcon build --base-path src
     ```
 
 # 트리비아
