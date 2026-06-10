@@ -24,7 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'headlight_node = turtlebot3_hardware.headlight_node:main'
+            'headlight_node = turtlebot3_hardware.headlight_node:main',
+            'voice_node = turtlebot3_hardware.voice_node:main'
         ],
     },
 )
