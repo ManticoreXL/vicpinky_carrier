@@ -1,0 +1,2 @@
+string ramp_state
+float64 ramp_angle

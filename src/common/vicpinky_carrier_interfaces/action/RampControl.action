@@ -1,0 +1,13 @@
+# RampControl.action
+
+# Request
+string target_string
+---
+# Result
+bool success
+string final_state
+int32 final_angle
+---
+# Feedback
+int32 current_angle
+int32 current_load
