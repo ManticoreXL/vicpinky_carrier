@@ -1,7 +1,7 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import type { Socket } from "socket.io-client";
 
-const BACKEND = "http://localhost:3001";
+import { BACKEND_URL as BACKEND } from "../config";
 
 // ── 타입 ──────────────────────────────────────────────────────────────────────
 

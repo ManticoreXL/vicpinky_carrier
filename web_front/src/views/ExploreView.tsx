@@ -9,7 +9,7 @@ import NlCommandPanel from "../components/NlCommandPanel";
 import type { RosMessage, ActiveGoals, MapTimestamps, MapInfos } from "../hooks/useNestSocket";
 import type { Socket } from "socket.io-client";
 
-const BACKEND = "http://localhost:3001";
+import { BACKEND_URL as BACKEND } from "../config";
 
 // ── 상수 ───────────────────────────────────────────────────────────────────────
 

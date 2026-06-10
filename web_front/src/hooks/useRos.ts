@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-
-const ROSBRIDGE_URL = "ws://localhost:9090";
+import { ROSBRIDGE_URL } from "../config";
 
 export type SubscribeFn = <T>(
   name: string,
