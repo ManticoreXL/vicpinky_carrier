@@ -1,0 +1,53 @@
+# Nav2 fleet adapter config (fleet_adapter_template 의 config.yaml 기준)
+# ⚠️ 필드명은 받으신 템플릿 버전의 예제 config.yaml 과 대조하세요(버전별 소폭 차이).
+
+rmf_fleet:
+  name: "tb3_fleet"
+
+  # 속도 한계 [최저, 최고] — tb3 burger 기준
+  limits:
+    linear:  [0.22, 0.4]    # m/s
+    angular: [1.0, 1.5]     # rad/s
+
+  profile:                  # 충돌 반경(교통 협상에 사용)
+    footprint: 0.25         # 로봇 반경 m
+    vicinity:  0.5          # 근접 경고 반경 m
+
+  reversible: true
+
+  battery_system:
+    voltage: 12.0
+    capacity: 24.0
+    charging_current: 5.0
+  mechanical_system:
+    mass: 10.0
+    moment_of_inertia: 5.0
+    friction_coefficient: 0.22
+
+  recharge_threshold: 0.10  # 10% 이하면 충전하러
+  recharge_soc: 1.0
+  publish_fleet_state: 2.0  # /fleet_states 발행 주기(s) → 웹이 이걸 구독
+
+  account_for_battery_drain: true
+  task_capabilities:
+    loop: true              # 순찰(왕복) — 재난 현장 기본
+    delivery: false
+  finishing_request: "nothing"
+
+  # 로봇 목록 — charger 는 nav graph 의 waypoint "이름"
+  robots:
+    tb3:
+      charger: "init"       # nav graph 의 init waypoint = 충전/대기 지점
+      responsive_wait: true
+
+  robot_state_update_frequency: 10.0
+
+# ── RMF ↔ 로봇 map 좌표 변환 (★ 가장 중요) ──────────────────────────────
+# nav graph(0.yaml)의 RMF 좌표와 로봇 map 프레임 좌표를 매칭점으로 정렬.
+# 같은 실제 지점을 rmf/robot 양쪽 좌표로 2~3개 적으면 어댑터가 변환 계산.
+#
+# nav graph를 로봇 SLAM 맵 위에 같은 스케일로 그렸다면 거의 동일 → 그대로 매칭.
+# (아래는 예시 — 실제 지점 좌표로 교체)
+reference_coordinates:
+  rmf:   [[3.43, -0.74], [9.15, -1.76], [8.97, -3.89]]   # nav graph 좌표 (0.yaml)
+  robot: [[3.43, -0.74], [9.15, -1.76], [8.97, -3.89]]   # 로봇 map 좌표 (같으면 동일)

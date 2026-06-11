@@ -1,0 +1,195 @@
+# ROS2 Domain Bridge 설정
+# 각 로봇 도메인 → 서버 도메인(40)으로 토픽 브리지
+# /tf 계열은 중복 key 문제로 tf_bridge_<robot>.yaml 로 분리
+
+topics:
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # tb3_01  (domain 41 ↔ 40)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  /tb3_01/scan:
+    type: sensor_msgs/msg/LaserScan
+    from_domain: 41
+    to_domain: 40
+
+  /tb3_01/odom:
+    type: nav_msgs/msg/Odometry
+    from_domain: 41
+    to_domain: 40
+
+  /tb3_01/battery_state:
+    type: sensor_msgs/msg/BatteryState
+    from_domain: 41
+    to_domain: 40
+
+  /tb3_01/imu:
+    type: sensor_msgs/msg/Imu
+    from_domain: 41
+    to_domain: 40
+
+  /tb3_01/joint_states:
+    type: sensor_msgs/msg/JointState
+    from_domain: 41
+    to_domain: 40
+
+  /tb3_01/magnetic_field:
+    type: sensor_msgs/msg/MagneticField
+    from_domain: 41
+    to_domain: 40
+
+  /tb3_01/sensor_state:
+    type: turtlebot3_msgs/msg/SensorState
+    from_domain: 41
+    to_domain: 40
+
+  /tb3_01/cmd_vel:
+    type: geometry_msgs/msg/TwistStamped
+    from_domain: 40
+    to_domain: 41
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # tb3_02  (domain 42 ↔ 40)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  /tb3_02/scan:
+    type: sensor_msgs/msg/LaserScan
+    from_domain: 42
+    to_domain: 40
+
+  /tb3_02/odom:
+    type: nav_msgs/msg/Odometry
+    from_domain: 42
+    to_domain: 40
+
+  /tb3_02/battery_state:
+    type: sensor_msgs/msg/BatteryState
+    from_domain: 42
+    to_domain: 40
+
+  /tb3_02/imu:
+    type: sensor_msgs/msg/Imu
+    from_domain: 42
+    to_domain: 40
+
+  /tb3_02/joint_states:
+    type: sensor_msgs/msg/JointState
+    from_domain: 42
+    to_domain: 40
+
+  /tb3_02/magnetic_field:
+    type: sensor_msgs/msg/MagneticField
+    from_domain: 42
+    to_domain: 40
+
+  /tb3_02/sensor_state:
+    type: turtlebot3_msgs/msg/SensorState
+    from_domain: 42
+    to_domain: 40
+
+  /tb3_02/cmd_vel:
+    type: geometry_msgs/msg/TwistStamped
+    from_domain: 40
+    to_domain: 42
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # tb3_03  (domain 43 ↔ 40)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  /tb3_03/scan:
+    type: sensor_msgs/msg/LaserScan
+    from_domain: 43
+    to_domain: 40
+
+  /tb3_03/odom:
+    type: nav_msgs/msg/Odometry
+    from_domain: 43
+    to_domain: 40
+
+  /tb3_03/battery_state:
+    type: sensor_msgs/msg/BatteryState
+    from_domain: 43
+    to_domain: 40
+
+  /tb3_03/imu:
+    type: sensor_msgs/msg/Imu
+    from_domain: 43
+    to_domain: 40
+
+  /tb3_03/joint_states:
+    type: sensor_msgs/msg/JointState
+    from_domain: 43
+    to_domain: 40
+
+  /tb3_03/magnetic_field:
+    type: sensor_msgs/msg/MagneticField
+    from_domain: 43
+    to_domain: 40
+
+  /tb3_03/sensor_state:
+    type: turtlebot3_msgs/msg/SensorState
+    from_domain: 43
+    to_domain: 40
+
+  /tb3_03/cmd_vel:
+    type: geometry_msgs/msg/TwistStamped
+    from_domain: 40
+    to_domain: 43
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # tb3_04  (domain 44 ↔ 40)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  /tb3_04/scan:
+    type: sensor_msgs/msg/LaserScan
+    from_domain: 44
+    to_domain: 40
+
+  /tb3_04/odom:
+    type: nav_msgs/msg/Odometry
+    from_domain: 44
+    to_domain: 40
+
+  /tb3_04/battery_state:
+    type: sensor_msgs/msg/BatteryState
+    from_domain: 44
+    to_domain: 40
+
+  /tb3_04/imu:
+    type: sensor_msgs/msg/Imu
+    from_domain: 44
+    to_domain: 40
+
+  /tb3_04/joint_states:
+    type: sensor_msgs/msg/JointState
+    from_domain: 44
+    to_domain: 40
+
+  /tb3_04/magnetic_field:
+    type: sensor_msgs/msg/MagneticField
+    from_domain: 44
+    to_domain: 40
+
+  /tb3_04/sensor_state:
+    type: turtlebot3_msgs/msg/SensorState
+    from_domain: 44
+    to_domain: 40
+
+  /tb3_04/cmd_vel:
+    type: geometry_msgs/msg/TwistStamped
+    from_domain: 40
+    to_domain: 44
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # omx  (domain 45 ↔ 40)
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  /omx/joint_states:
+    type: sensor_msgs/msg/JointState
+    from_domain: 45
+    to_domain: 40
+
+  /omx/cmd_vel:
+    type: geometry_msgs/msg/TwistStamped
+    from_domain: 40
+    to_domain: 45
+
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  # vicpinky (domain 40) — 브리지 불필요
+  # rosbridge가 domain 40이므로 직접 통신
+  # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
