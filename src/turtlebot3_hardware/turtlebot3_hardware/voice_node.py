@@ -22,9 +22,9 @@ class VoiceNode(Node):
         self.declare_parameter('phrase_time_limit', 5)
         self.declare_parameter('howling_delay', 0.5)
         self.declare_parameter('stt_timer_period', 0.1)
-        self.declare_parameter('audio_player_cmd', 'mpg123')
+        self.declare_parameter('audio_player_cmd', 'mpg123 -a plughw:1,0')
         self.declare_parameter('temp_audio_path', '/tmp/tts_output.mp3')
-        self.declare_parameter('mic_keywords', ['googlevoicehat', 'i2s', 'snd_rpi'])
+        self.declare_parameter('mic_keywords', ['googlevoicehat', 'i2s', 'snd_rpi', 'hw:1,0', 'plughw:1,0'])
         self.declare_parameter('pause_threshold', 0.5)
         self.declare_parameter('energy_threshold', 200)
         self.declare_parameter('dynamic_energy_threshold', False)
@@ -191,8 +191,9 @@ class VoiceNode(Node):
             tts = gTTS(text=text, lang=self.tts_language, tld=self.tts_tld)
             tts.save(self.temp_audio_path)
             
-            subprocess.run([self.audio_player_cmd, "-q", self.temp_audio_path])
-            
+            play_command = f"{self.audio_player_cmd} {self.temp_audio_path}"
+            subprocess.run(play_command, shell=True)
+
             if os.path.exists(self.temp_audio_path):
                 os.remove(self.temp_audio_path)
                 
