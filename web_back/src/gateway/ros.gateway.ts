@@ -14,6 +14,7 @@ import { RosService } from '../ros/ros.service';
 import { MapService } from '../map/map.service';
 import { CommandService } from '../command/command.service';
 import { LogsService } from '../logs/logs.service';
+import { FmsService, CreateTaskDto } from '../fms/fms.service';
 import type {
   ServiceCallPayload,
   TopicPublishPayload,
@@ -45,6 +46,7 @@ export class RosGateway
     private readonly mapService: MapService,
     private readonly commandService: CommandService,
     private readonly logsService: LogsService,
+    private readonly fmsService: FmsService,
   ) {}
 
   // ── 모듈 초기화 시 ROS 메시지 → 프론트 브로드캐스트 등록 ───────────────
@@ -266,6 +268,35 @@ export class RosGateway
         browserId: client.id,
       });
     }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // FMS (Fleet Management System)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  @SubscribeMessage('fms_dispatch_task')
+  async handleFmsDispatch(
+    @MessageBody() payload: CreateTaskDto,
+    @ConnectedSocket() client: Socket,
+  ) {
+    const task = await this.fmsService.createAndDispatch(payload, this.server);
+    this.server.emit('fms_task_created', task);
+  }
+
+  @SubscribeMessage('fms_cancel_task')
+  async handleFmsCancel(
+    @MessageBody() { taskId }: { taskId: string },
+  ) {
+    await this.fmsService.cancel(taskId, this.server);
+  }
+
+  @SubscribeMessage('fms_get_tasks')
+  async handleFmsGetTasks(
+    @MessageBody() filters: { status?: string; robotId?: string; limit?: number },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const tasks = await this.fmsService.list(filters);
+    client.emit('fms_tasks', tasks);
   }
 
   // ── 프론트 → Action Goal 취소 ────────────────────────────────────────────

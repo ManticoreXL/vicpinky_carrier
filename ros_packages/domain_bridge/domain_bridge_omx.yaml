@@ -1,0 +1,42 @@
+# omx (domain 45) ↔ hub (domain 40)
+# remap 규칙: key = to_domain 발행명, remap = from_domain 구독명
+
+topics:
+
+  # ── UPLINK: domain 45 → domain 40 ──────────────────────────────────────────
+  /omx/joint_states:
+    type: sensor_msgs/msg/JointState
+    from_domain: 45
+    to_domain: 40
+    remap: /joint_states
+
+  /omx/follower_state:
+    type: sensor_msgs/msg/JointState
+    from_domain: 45
+    to_domain: 40
+    remap: /follower_state
+
+  /omx/tf:
+    type: tf2_msgs/msg/TFMessage
+    from_domain: 45
+    to_domain: 40
+    remap: /tf
+
+  /omx/tf_static:
+    type: tf2_msgs/msg/TFMessage
+    from_domain: 45
+    to_domain: 40
+    remap: /tf_static
+
+  # ── DOWNLINK: domain 40 → domain 45 ────────────────────────────────────────
+  /joint_commands:
+    type: std_msgs/msg/Float32MultiArray
+    from_domain: 40
+    to_domain: 45
+    remap: /omx/joint_commands
+
+  /cmd_vel:
+    type: geometry_msgs/msg/TwistStamped
+    from_domain: 40
+    to_domain: 45
+    remap: /omx/cmd_vel

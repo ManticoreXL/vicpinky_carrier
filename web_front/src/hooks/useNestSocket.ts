@@ -60,6 +60,30 @@ export type MapTimestamps = Record<string, number>;
 // botId → 맵 메타데이터
 export type MapInfos = Record<string, MapInfo>;
 
+// ── FMS 타입 ─────────────────────────────────────────────────────────────────
+export type TaskStatus = 'queued' | 'active' | 'completed' | 'failed' | 'cancelled';
+export type TaskType   = 'explore' | 'deliver' | 'stop' | 'diagnose' | 'carrier_task' | 'emergency_stop';
+
+export interface FmsTask {
+  _id: string;
+  robotId: string;
+  type: TaskType;
+  status: TaskStatus;
+  targetId?: string;
+  notes?: string;
+  createdAt: string;
+  startedAt?: string;
+  completedAt?: string;
+  result?: Record<string, unknown>;
+}
+
+export interface FmsDispatchPayload {
+  robotId: string;
+  type: TaskType;
+  targetId?: string;
+  notes?: string;
+}
+
 export function useNestSocket() {
   const socketRef = useRef<Socket | null>(null);
   const serviceCallbacksRef = useRef<Map<string, (res: unknown) => void>>(new Map());
@@ -76,6 +100,9 @@ export function useNestSocket() {
   const [mapTimestamps, setMapTimestamps] = useState<MapTimestamps>({});
   const [mapInfos, setMapInfos]           = useState<MapInfos>({});
 
+  // FMS 상태
+  const [fmsTasks, setFmsTasks] = useState<FmsTask[]>([]);
+
   useEffect(() => {
     const s = io(BACKEND_URL, {
       transports: ["polling", "websocket"],
@@ -84,7 +111,10 @@ export function useNestSocket() {
     setSocket(s);
     const socket = s;
 
-    socket.on("connect",    () => setNestConnected(true));
+    socket.on("connect", () => {
+      setNestConnected(true);
+      socket.emit("fms_get_tasks", { limit: 200 });
+    });
     socket.on("disconnect", () => setNestConnected(false));
 
     socket.on("ros_message", (msg: RosMessage) => {
@@ -145,6 +175,21 @@ export function useNestSocket() {
       });
     });
 
+    // ── FMS 이벤트 ──────────────────────────────────────────────────────────
+    socket.on("fms_tasks", (tasks: FmsTask[]) => {
+      setFmsTasks(tasks);
+    });
+
+    socket.on("fms_task_created", (task: FmsTask) => {
+      setFmsTasks((prev) => [task, ...prev].slice(0, 200));
+    });
+
+    socket.on("fms_task_updated", (patch: Partial<FmsTask> & { _id: string }) => {
+      setFmsTasks((prev) =>
+        prev.map((t) => (t._id === patch._id ? { ...t, ...patch } : t)),
+      );
+    });
+
     return () => { s.disconnect(); setSocket(null); };
   }, []);
 
@@ -174,10 +219,20 @@ export function useNestSocket() {
     socketRef.current?.emit("call_service", { serviceName, serviceType, request });
   }, []);
 
+  const emitFmsDispatch = useCallback((payload: FmsDispatchPayload) => {
+    socketRef.current?.emit("fms_dispatch_task", payload);
+  }, []);
+
+  const emitFmsCancel = useCallback((taskId: string) => {
+    socketRef.current?.emit("fms_cancel_task", { taskId });
+  }, []);
+
   return {
     emitCmdVel, emitPublish, emitAction, cancelAction, callService,
+    emitFmsDispatch, emitFmsCancel,
     nestConnected, rosMessages, socket,
     activeGoals, actionFeedbacks, actionResults,
     mapTimestamps, mapInfos,
+    fmsTasks,
   };
 }

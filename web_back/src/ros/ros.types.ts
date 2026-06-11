@@ -52,16 +52,6 @@ export interface ActionResultMsg {
   status: number;              // 3=succeeded 4=aborted 5=canceled
 }
 
-// ── 수동/자율 믹서(twist_mux) 사용 로봇 ─────────────────────────────────────
-// 이 로봇들은 cmd_vel_mux 노드가 떠 있어, 수동 명령은 /{botId}/cmd_vel_manual 로
-// 보내야 자율(nav2 /cmd_vel_nav)보다 우선 적용된다. 그 외 로봇은 /cmd_vel 직접 발행.
-export const MUX_ROBOTS = new Set<string>(['tb3_01']);
-
-/** 수동 cmd_vel 발행 토픽 (믹서 로봇이면 _manual, 아니면 직접) */
-export function manualCmdVelTopic(botId: string): string {
-  return MUX_ROBOTS.has(botId) ? `/${botId}/cmd_vel_manual` : `/${botId}/cmd_vel`;
-}
-
 // ── 터틀봇 토픽 헬퍼 ────────────────────────────────────────────────────────
 const TB3_IDS = ['tb3_01', 'tb3_02', 'tb3_03', 'tb3_04'] as const;
 
@@ -73,12 +63,11 @@ function tb3Topics(id: string): RosTopicConfig[] {
     { name: `/${id}/joint_states`,      messageType: 'sensor_msgs/JointState' },
     { name: `/${id}/magnetic_field`,    messageType: 'sensor_msgs/MagneticField' },
     { name: `/${id}/odom`,              messageType: 'nav_msgs/Odometry' },
-    { name: `/${id}/robot_description`, messageType: 'std_msgs/String' },
-    { name: `/${id}/scan`,              messageType: 'sensor_msgs/LaserScan' },
-    { name: `/${id}/sensor_state`,      messageType: 'turtlebot3_msgs/SensorState' },
-    { name: `/${id}/mode`,              messageType: 'std_msgs/String' },
+    { name: `/${id}/robot_description`,    messageType: 'std_msgs/String' },
+    { name: `/${id}/scan`,                messageType: 'sensor_msgs/LaserScan' },
+    { name: `/${id}/sensor_state`,        messageType: 'turtlebot3_msgs/SensorState' },
+    { name: `/${id}/mode`,                messageType: 'std_msgs/String' },
     { name: `/${id}/yolo/person_detected`, messageType: 'std_msgs/Bool' },
-    { name: `/${id}/map`,              messageType: 'nav_msgs/OccupancyGrid' },
   ];
 }
 

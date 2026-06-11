@@ -1,0 +1,123 @@
+# tb3_01 (domain 41) ↔ hub (domain 40)
+# remap 규칙: key = to_domain 발행명, remap = from_domain 구독명
+
+topics:
+
+  # ── UPLINK: domain 41 → domain 40 ──────────────────────────────────────────
+  /tb3_01/scan:
+    type: sensor_msgs/msg/LaserScan
+    from_domain: 41
+    to_domain: 40
+    remap: /scan
+
+  /tb3_01/odom:
+    type: nav_msgs/msg/Odometry
+    from_domain: 41
+    to_domain: 40
+    remap: /odom
+
+  /tb3_01/battery_state:
+    type: sensor_msgs/msg/BatteryState
+    from_domain: 41
+    to_domain: 40
+    remap: /battery_state
+
+  /tb3_01/imu:
+    type: sensor_msgs/msg/Imu
+    from_domain: 41
+    to_domain: 40
+    remap: /imu
+
+  /tb3_01/joint_states:
+    type: sensor_msgs/msg/JointState
+    from_domain: 41
+    to_domain: 40
+    remap: /joint_states
+
+  /tb3_01/magnetic_field:
+    type: sensor_msgs/msg/MagneticField
+    from_domain: 41
+    to_domain: 40
+    remap: /magnetic_field
+
+  /tb3_01/sensor_state:
+    type: turtlebot3_msgs/msg/SensorState
+    from_domain: 41
+    to_domain: 40
+    remap: /sensor_state
+
+  /tb3_01/robot_description:
+    type: std_msgs/msg/String
+    from_domain: 41
+    to_domain: 40
+    remap: /robot_description
+
+  /tb3_01/mode:
+    type: std_msgs/msg/String
+    from_domain: 41
+    to_domain: 40
+    remap: /mode
+
+  /tb3_01/yolo/person_detected:
+    type: std_msgs/msg/Bool
+    from_domain: 41
+    to_domain: 40
+    remap: /yolo/person_detected
+
+  /tb3_01/tf:
+    type: tf2_msgs/msg/TFMessage
+    from_domain: 41
+    to_domain: 40
+    remap: /tf
+
+  /tb3_01/tf_static:
+    type: tf2_msgs/msg/TFMessage
+    from_domain: 41
+    to_domain: 40
+    remap: /tf_static
+
+  # ── DOWNLINK: domain 40 → domain 41 ────────────────────────────────────────
+  /cmd_vel:
+    type: geometry_msgs/msg/TwistStamped
+    from_domain: 40
+    to_domain: 41
+    remap: /tb3_01/cmd_vel
+
+  /cmd:
+    type: std_msgs/msg/String
+    from_domain: 40
+    to_domain: 41
+    remap: /tb3_01/cmd
+
+services:
+
+  # ── UPLINK SERVICES: domain 41 → domain 40 ─────────────────────────────────
+  /tb3_01/reset:
+    type: std_srvs/srv/Trigger
+    from_domain: 41
+    to_domain: 40
+    remap: /reset
+
+  /tb3_01/reset_odometry:
+    type: std_srvs/srv/Trigger
+    from_domain: 41
+    to_domain: 40
+    remap: /reset_odometry
+
+  /tb3_01/motor_power:
+    type: std_srvs/srv/SetBool
+    from_domain: 41
+    to_domain: 40
+    remap: /motor_power
+
+  /tb3_01/sound:
+    type: turtlebot3_msgs/srv/Sound
+    from_domain: 41
+    to_domain: 40
+    remap: /sound
+
+  /tb3_01/run_diagnosis:
+    type: turtlebot3_custom_msgs/srv/SelfDiagnosis
+    from_domain: 41
+    to_domain: 40
+    remap: /run_diagnosis
