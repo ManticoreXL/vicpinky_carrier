@@ -54,7 +54,7 @@ class HeadlightNode(Node):
         self.color_off = (0, 0, 0)
         
         # 초기 상태 적용 (소등)
-        self.set_led_state(False)
+        self.set_led_state(True)
 
         # 토픽 구독
         self.sub = self.create_subscription(
