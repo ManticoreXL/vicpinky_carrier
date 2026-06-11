@@ -1,69 +1,69 @@
-# Downlink: domain 40 → 각 로봇 도메인
-# 소스 topic은 domain 40에서 namespace 포함, 로봇에서는 namespace 없이 수신
+# # Downlink: domain 40 → 각 로봇 도메인
+# # 소스 topic은 domain 40에서 namespace 포함, 로봇에서는 namespace 없이 수신
 
-topics:
+# topics:
 
-  # ── tb3_01 (40 → 41) ──────────────────────────────────────
-  /tb3_01/cmd_vel:
-    type: geometry_msgs/msg/TwistStamped
-    from_domain: 40
-    to_domain: 41
-    remap: /cmd_vel
+#   # ── tb3_01 (40 → 41) ──────────────────────────────────────
+#   /tb3_01/cmd_vel:
+#     type: geometry_msgs/msg/TwistStamped
+#     from_domain: 40
+#     to_domain: 41
+#     remap: /cmd_vel
 
-  /tb3_01/cmd:
-    type: std_msgs/msg/String
-    from_domain: 40
-    to_domain: 41
-    remap: /cmd
+#   /tb3_01/cmd:
+#     type: std_msgs/msg/String
+#     from_domain: 40
+#     to_domain: 41
+#     remap: /cmd
 
-  # ── tb3_02 (40 → 42) ──────────────────────────────────────
-  /tb3_02/cmd_vel:
-    type: geometry_msgs/msg/TwistStamped
-    from_domain: 40
-    to_domain: 42
-    remap: /cmd_vel
+#   # ── tb3_02 (40 → 42) ──────────────────────────────────────
+#   /tb3_02/cmd_vel:
+#     type: geometry_msgs/msg/TwistStamped
+#     from_domain: 40
+#     to_domain: 42
+#     remap: /cmd_vel
 
-  /tb3_02/cmd:
-    type: std_msgs/msg/String
-    from_domain: 40
-    to_domain: 42
-    remap: /cmd
+#   /tb3_02/cmd:
+#     type: std_msgs/msg/String
+#     from_domain: 40
+#     to_domain: 42
+#     remap: /cmd
 
-  # ── tb3_03 (40 → 43) ──────────────────────────────────────
-  /tb3_03/cmd_vel:
-    type: geometry_msgs/msg/TwistStamped
-    from_domain: 40
-    to_domain: 43
-    remap: /cmd_vel
+#   # ── tb3_03 (40 → 43) ──────────────────────────────────────
+#   /tb3_03/cmd_vel:
+#     type: geometry_msgs/msg/TwistStamped
+#     from_domain: 40
+#     to_domain: 43
+#     remap: /cmd_vel
 
-  /tb3_03/cmd:
-    type: std_msgs/msg/String
-    from_domain: 40
-    to_domain: 43
-    remap: /cmd
+#   /tb3_03/cmd:
+#     type: std_msgs/msg/String
+#     from_domain: 40
+#     to_domain: 43
+#     remap: /cmd
 
-  # ── tb3_04 (40 → 44) ──────────────────────────────────────
-  /tb3_04/cmd_vel:
-    type: geometry_msgs/msg/TwistStamped
-    from_domain: 40
-    to_domain: 44
-    remap: /cmd_vel
+#   # ── tb3_04 (40 → 44) ──────────────────────────────────────
+#   /tb3_04/cmd_vel:
+#     type: geometry_msgs/msg/TwistStamped
+#     from_domain: 40
+#     to_domain: 44
+#     remap: /cmd_vel
 
-  /tb3_04/cmd:
-    type: std_msgs/msg/String
-    from_domain: 40
-    to_domain: 44
-    remap: /cmd
+#   /tb3_04/cmd:
+#     type: std_msgs/msg/String
+#     from_domain: 40
+#     to_domain: 44
+#     remap: /cmd
 
-  # ── omx (40 → 45) ─────────────────────────────────────────
-  /omx/cmd_vel:
-    type: geometry_msgs/msg/TwistStamped
-    from_domain: 40
-    to_domain: 45
-    remap: /cmd_vel
+#   # ── omx (40 → 45) ─────────────────────────────────────────
+#   /omx/cmd_vel:
+#     type: geometry_msgs/msg/TwistStamped
+#     from_domain: 40
+#     to_domain: 45
+#     remap: /cmd_vel
 
-  /omx/joint_commands:
-    type: std_msgs/msg/Float32MultiArray
-    from_domain: 40
-    to_domain: 45
-    remap: /joint_commands
+#   /omx/joint_commands:
+#     type: std_msgs/msg/Float32MultiArray
+#     from_domain: 40
+#     to_domain: 45
+#     remap: /joint_commands
