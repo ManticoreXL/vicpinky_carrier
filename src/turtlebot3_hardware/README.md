@@ -52,7 +52,7 @@ sudo usermod -aG dialout $USER
 
 # 필요 패키지 설치
 ```bash
-sudo apt-get install python3-pyaudio mpg123 scons build-essential python3-rpi-lgpio
+sudo apt-get install python3-pyaudio mpg123 scons build-essential python3-rpi-lgpio flac
 sudo pip3 install adafruit-circuitpython-neopixel-spi gTTS SpeechRecognition --break-system-packages
 ```
 
@@ -65,7 +65,7 @@ ros2 launch turtlebot3_hardware hardware_bringup.launch.py
 # headlight_node 사용 방법
 ## 노드 실행
 ```bash
-ros2 launch turtlebot3_hardware turtlebot3_hardware.launch.py
+ros2 run turtlebot3_hardware headlight_node.py
 ```
 
 ## LED 켜기
@@ -81,6 +81,22 @@ ros2 topic pub -1 /headlight_cmd std_msgs/msg/String "{data: 'off'}"
 ## LED 깜빡이기
 ```bash
 ros2 topic pub -1 /headlight_cmd std_msgs/msg/String "{data: 'blink'}"
+```
+
+# voice_node 사용 방법
+## 노드 실행
+```bash
+ros2 run turtlebot3_hardware voice_node
+```
+
+## STT 수신하기
+```bash
+ros2 topic echo /recognized_text
+```
+
+## TTS로 말하기
+```bash
+ros2 topic pub -1 /speak_cmd std_msgs/msg/String "{data: 'hello'}"
 ```
 
 ## 주요 파라미터
