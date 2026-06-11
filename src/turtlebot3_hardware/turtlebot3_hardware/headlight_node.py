@@ -71,7 +71,7 @@ class HeadlightNode(Node):
         # 파라미터 변경 감지 콜백 등록
         self.add_on_set_parameters_callback(self.parameters_callback)
 
-        self.get_logger().info("Python Headlight Node Started (Brightness: 0-100%).")
+        self.get_logger().info("Headlight Node Started.")
 
 
     def parameters_callback(self, params):
