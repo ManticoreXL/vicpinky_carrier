@@ -51,6 +51,7 @@ export default function App() {
   const {
     emitCmdVel, emitAction, cancelAction, callService,
     emitFmsDispatch, emitFmsCancel,
+    emitNavGoal, emitNavInitialPose,
     nestConnected, rosMessages, socket,
     activeGoals, actionFeedbacks, actionResults,
     mapTimestamps, mapInfos,
@@ -131,8 +132,11 @@ export default function App() {
           <FmsView
             rosMessages={displayMessages}
             fmsTasks={fmsTasks}
+            socket={socket}
             emitFmsDispatch={emitFmsDispatch}
             emitFmsCancel={emitFmsCancel}
+            emitNavGoal={emitNavGoal}
+            emitNavInitialPose={emitNavInitialPose}
           />
         </div>
       ) : isExplore ? (

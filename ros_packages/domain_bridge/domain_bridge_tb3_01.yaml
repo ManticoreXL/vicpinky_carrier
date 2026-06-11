@@ -89,6 +89,25 @@ topics:
     to_domain: 41
     remap: /tb3_01/cmd
 
+  /goal_pose:
+    type: geometry_msgs/msg/PoseStamped
+    from_domain: 40
+    to_domain: 41
+    remap: /tb3_01/goal_pose
+
+  /initialpose:
+    type: geometry_msgs/msg/PoseWithCovarianceStamped
+    from_domain: 40
+    to_domain: 41
+    remap: /tb3_01/initialpose
+
+  # ── UPLINK: amcl 위치 ──────────────────────────────────────────────────────
+  /tb3_01/amcl_pose:
+    type: geometry_msgs/msg/PoseWithCovarianceStamped
+    from_domain: 41
+    to_domain: 40
+    remap: /amcl_pose
+
 services:
 
   # ── UPLINK SERVICES: domain 41 → domain 40 ─────────────────────────────────

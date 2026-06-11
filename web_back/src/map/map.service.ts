@@ -1,8 +1,18 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { RosService } from '../ros/ros.service';
 import * as zlib from 'zlib';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // ── 타입 ─────────────────────────────────────────────────────────────────────
+
+export interface StaticMapInfo {
+  resolution: number;
+  width: number;
+  height: number;
+  originX: number;
+  originY: number;
+}
 
 export interface MapInfo {
   resolution: number;
@@ -221,5 +231,97 @@ export class MapService implements OnModuleInit {
     for (let i = 0; i < buf.length; i++)
       crc = (crc >>> 8) ^ this.crcTable[(crc ^ buf[i]) & 0xff];
     return (crc ^ 0xffffffff) >>> 0;
+  }
+
+  // ── 정적 PGM 맵 로드 ─────────────────────────────────────────────────────
+
+  private staticCache = new Map<string, { png: Buffer; info: StaticMapInfo }>();
+
+  listStaticMaps(): string[] {
+    const mapsDir = process.env.MAPS_DIR ?? path.resolve(process.cwd(), '..');
+    if (!fs.existsSync(mapsDir)) return [];
+    return fs.readdirSync(mapsDir)
+      .filter((f) => f.endsWith('.yaml') && !f.startsWith('.'))
+      .map((f) => f.replace('.yaml', ''))
+      .filter((name) => fs.existsSync(path.join(mapsDir, `${name}.pgm`)));
+  }
+
+  loadStaticMap(name: string): { png: Buffer; info: StaticMapInfo } | null {
+    if (this.staticCache.has(name)) return this.staticCache.get(name)!;
+
+    const mapsDir = process.env.MAPS_DIR ?? path.resolve(process.cwd(), '..');
+    const pgmPath  = path.join(mapsDir, `${name}.pgm`);
+    const yamlPath = path.join(mapsDir, `${name}.yaml`);
+
+    if (!fs.existsSync(pgmPath) || !fs.existsSync(yamlPath)) {
+      this.logger.warn(`정적 맵 없음: ${pgmPath}`);
+      return null;
+    }
+
+    // YAML 파싱 (resolution, origin)
+    const yamlText = fs.readFileSync(yamlPath, 'utf8');
+    const resolution = parseFloat(yamlText.match(/resolution:\s*([\d.e+\-]+)/)?.[1] ?? '0.05');
+    const originMatch = yamlText.match(/origin:\s*\[([-\d.\s,e+\-]+)\]/);
+    const originParts = originMatch ? originMatch[1].split(',').map(Number) : [0, 0];
+    const [originX, originY] = originParts;
+
+    // PGM P5 파싱
+    const pgmBuf = fs.readFileSync(pgmPath);
+    const parsed = this.parsePgm(pgmBuf);
+    if (!parsed) { this.logger.error(`PGM 파싱 실패: ${pgmPath}`); return null; }
+
+    const { width, height, pixels } = parsed;
+    const png = this.buildPngFromPgm(width, height, pixels);
+    const info: StaticMapInfo = { resolution, width, height, originX, originY };
+
+    this.staticCache.set(name, { png, info });
+    return { png, info };
+  }
+
+  private parsePgm(buf: Buffer): { width: number; height: number; pixels: Buffer } | null {
+    let i = 0;
+    const tokens: string[] = [];
+
+    while (tokens.length < 4 && i < buf.length) {
+      // 공백/개행 스킵
+      while (i < buf.length && buf[i] <= 32) i++;
+      if (i >= buf.length) break;
+      // 주석 스킵
+      if (buf[i] === 35) { while (i < buf.length && buf[i] !== 10) i++; continue; }
+      // 토큰 읽기
+      let tok = '';
+      while (i < buf.length && buf[i] > 32) tok += String.fromCharCode(buf[i++]);
+      if (tok) tokens.push(tok);
+    }
+
+    if (tokens[0] !== 'P5' || tokens.length < 4) return null;
+    const width  = parseInt(tokens[1]);
+    const height = parseInt(tokens[2]);
+    // 헤더 끝 이후 1바이트(개행) 넘기기
+    while (i < buf.length && buf[i] !== 10) i++;
+    i++;
+
+    return { width, height, pixels: buf.slice(i) };
+  }
+
+  private buildPngFromPgm(width: number, height: number, pixels: Buffer): Buffer {
+    const raw = Buffer.alloc(height * (1 + width));
+    for (let row = 0; row < height; row++) {
+      raw[row * (1 + width)] = 0; // filter: None
+      for (let col = 0; col < width; col++) {
+        raw[row * (1 + width) + 1 + col] = pixels[row * width + col] ?? 205;
+      }
+    }
+    const compressed = zlib.deflateSync(raw);
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(width, 0);
+    ihdr.writeUInt32BE(height, 4);
+    ihdr[8] = 8; ihdr[9] = 0; // 8-bit grayscale
+    return Buffer.concat([
+      Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+      this.chunk('IHDR', ihdr),
+      this.chunk('IDAT', compressed),
+      this.chunk('IEND', Buffer.alloc(0)),
+    ]);
   }
 }

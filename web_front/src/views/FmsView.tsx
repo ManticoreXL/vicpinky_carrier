@@ -1,5 +1,7 @@
 import { useState, useMemo } from "react";
+import type { Socket } from "socket.io-client";
 import { RosMessage, FmsTask, FmsDispatchPayload, TaskType } from "../hooks/useNestSocket";
+import NavMapCanvas from "../components/NavMapCanvas";
 
 // ── 상수 ─────────────────────────────────────────────────────────────────────
 
@@ -44,8 +46,11 @@ const ONLINE_THRESHOLD_MS = 5000;
 interface Props {
   rosMessages: Record<string, RosMessage>;
   fmsTasks: FmsTask[];
-  emitFmsDispatch: (p: FmsDispatchPayload) => void;
-  emitFmsCancel: (taskId: string) => void;
+  socket:             Socket | null;
+  emitFmsDispatch:    (p: FmsDispatchPayload) => void;
+  emitFmsCancel:      (taskId: string) => void;
+  emitNavGoal:        (robotId: string, x: number, y: number, yaw: number) => void;
+  emitNavInitialPose: (robotId: string, x: number, y: number, yaw: number) => void;
 }
 
 // ── 유틸 ─────────────────────────────────────────────────────────────────────
@@ -277,8 +282,11 @@ function TaskRow({ task, onCancel }: { task: FmsTask; onCancel: () => void }) {
 
 type FilterTab = "all" | "active" | "queued" | "completed" | "failed";
 
-export default function FmsView({ rosMessages, fmsTasks, emitFmsDispatch, emitFmsCancel }: Props) {
-  const [filterTab, setFilterTab] = useState<FilterTab>("all");
+type ContentTab = "fleet" | "map";
+
+export default function FmsView({ rosMessages, fmsTasks, socket, emitFmsDispatch, emitFmsCancel, emitNavGoal, emitNavInitialPose }: Props) {
+  const [filterTab,   setFilterTab]   = useState<FilterTab>("all");
+  const [contentTab,  setContentTab]  = useState<ContentTab>("map");
   const [form, setForm] = useState<{ robotId: string; type: TaskType; targetId: string; notes: string }>({
     robotId: "tb3_01",
     type: "explore",
@@ -358,22 +366,59 @@ export default function FmsView({ rosMessages, fmsTasks, emitFmsDispatch, emitFm
       {/* ── 본문 ────────────────────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* ── 좌측: Fleet Grid ───────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto p-4">
-          <p className="text-[9px] font-bold text-[#333] uppercase tracking-[0.3em] mb-3 font-mono">
-            ── ROBOT FLEET ──────────────────────────────────
-          </p>
-          <div className="grid grid-cols-3 gap-3 xl:grid-cols-3 2xl:grid-cols-6">
-            {ROBOTS.map((robot) => (
-              <RobotCard
-                key={robot.id}
-                robot={robot}
-                rosMessages={rosMessages}
-                fmsTasks={fmsTasks}
-                onDispatch={(type, targetId) => dispatch(robot.id, type, targetId)}
-              />
+        {/* ── 좌측: 탭 컨텐츠 ───────────────────────────────────────────── */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* 탭 헤더 */}
+          <div className="flex-none flex border-b border-[#111] bg-[#080808]">
+            {([
+              { key: "map"   as ContentTab, label: "◈ 네비게이션 맵" },
+              { key: "fleet" as ContentTab, label: "⬡ 로봇 플릿"    },
+            ] as const).map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setContentTab(key)}
+                className={`px-4 py-2 text-[10px] font-bold uppercase tracking-wider font-mono border-r border-[#111] transition-all ${
+                  contentTab === key
+                    ? "text-blue-400 bg-blue-950/20 border-b-2 border-b-blue-600"
+                    : "text-[#333] hover:text-[#666]"
+                }`}
+              >
+                {label}
+              </button>
             ))}
           </div>
+
+          {/* 맵 탭 */}
+          {contentTab === "map" && (
+            <div className="flex-1 overflow-hidden">
+              <NavMapCanvas
+                rosMessages={rosMessages}
+                socket={socket}
+                onSendGoal={emitNavGoal}
+                onSetInitialPose={emitNavInitialPose}
+              />
+            </div>
+          )}
+
+          {/* 플릿 탭 */}
+          {contentTab === "fleet" && (
+            <div className="flex-1 overflow-y-auto p-4">
+              <p className="text-[9px] font-bold text-[#333] uppercase tracking-[0.3em] mb-3 font-mono">
+                ── ROBOT FLEET ──────────────────────────────────
+              </p>
+              <div className="grid grid-cols-3 gap-3 xl:grid-cols-3 2xl:grid-cols-6">
+                {ROBOTS.map((robot) => (
+                  <RobotCard
+                    key={robot.id}
+                    robot={robot}
+                    rosMessages={rosMessages}
+                    fmsTasks={fmsTasks}
+                    onDispatch={(type, targetId) => dispatch(robot.id, type, targetId)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── 우측: Task Panel ───────────────────────────────────────────── */}

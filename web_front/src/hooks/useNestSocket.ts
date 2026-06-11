@@ -227,9 +227,18 @@ export function useNestSocket() {
     socketRef.current?.emit("fms_cancel_task", { taskId });
   }, []);
 
+  const emitNavGoal = useCallback((robotId: string, x: number, y: number, yaw: number) => {
+    socketRef.current?.emit("nav_send_goal", { robotId, x, y, yaw });
+  }, []);
+
+  const emitNavInitialPose = useCallback((robotId: string, x: number, y: number, yaw: number) => {
+    socketRef.current?.emit("nav_set_initialpose", { robotId, x, y, yaw });
+  }, []);
+
   return {
     emitCmdVel, emitPublish, emitAction, cancelAction, callService,
     emitFmsDispatch, emitFmsCancel,
+    emitNavGoal, emitNavInitialPose,
     nestConnected, rosMessages, socket,
     activeGoals, actionFeedbacks, actionResults,
     mapTimestamps, mapInfos,

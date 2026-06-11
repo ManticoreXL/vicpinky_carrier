@@ -36,6 +36,33 @@ export class MapController {
     return res.status(result.ok ? HttpStatus.OK : HttpStatus.INTERNAL_SERVER_ERROR).json(result);
   }
 
+  /** 사용 가능한 정적 맵 목록 */
+  @Get('static/list')
+  getStaticList(@Res() res: Response) {
+    res.set('Access-Control-Allow-Origin', '*');
+    return res.json(this.mapService.listStaticMaps());
+  }
+
+  /** 정적 PGM 맵 → PNG 이미지 */
+  @Get('static/:name/image')
+  getStaticImage(@Param('name') name: string, @Res() res: Response) {
+    const result = this.mapService.loadStaticMap(name);
+    if (!result) return res.status(HttpStatus.NOT_FOUND).send('map not found');
+    res.set('Content-Type', 'image/png');
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.set('Access-Control-Allow-Origin', '*');
+    return res.send(result.png);
+  }
+
+  /** 정적 맵 메타데이터 (resolution, origin, size) */
+  @Get('static/:name/info')
+  getStaticInfo(@Param('name') name: string, @Res() res: Response) {
+    const result = this.mapService.loadStaticMap(name);
+    if (!result) return res.status(HttpStatus.NOT_FOUND).json({ error: 'not found' });
+    res.set('Access-Control-Allow-Origin', '*');
+    return res.json(result.info);
+  }
+
   /** nav2 호환 YAML 다운로드 */
   @Get(':botId/yaml')
   getYaml(@Param('botId') botId: string, @Res() res: Response) {

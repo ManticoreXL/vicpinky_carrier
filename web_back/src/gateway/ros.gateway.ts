@@ -14,7 +14,8 @@ import { RosService } from '../ros/ros.service';
 import { MapService } from '../map/map.service';
 import { CommandService } from '../command/command.service';
 import { LogsService } from '../logs/logs.service';
-import { FmsService, CreateTaskDto } from '../fms/fms.service';
+import { FmsService } from '../fms/fms.service';
+import type { CreateTaskDto } from '../fms/fms.service';
 import type {
   ServiceCallPayload,
   TopicPublishPayload,
@@ -297,6 +298,62 @@ export class RosGateway
   ) {
     const tasks = await this.fmsService.list(filters);
     client.emit('fms_tasks', tasks);
+  }
+
+  // ── Nav2: 목표 지점 전송 ─────────────────────────────────────────────────
+  @SubscribeMessage('nav_send_goal')
+  handleNavGoal(
+    @MessageBody() { robotId, x, y, yaw }: { robotId: string; x: number; y: number; yaw: number },
+  ) {
+    const now = Date.now() / 1000;
+    this.rosService.publish({
+      topicName: `/${robotId}/goal_pose`,
+      messageType: 'geometry_msgs/PoseStamped',
+      message: {
+        header: { stamp: { sec: Math.floor(now), nanosec: 0 }, frame_id: 'map' },
+        pose: {
+          position: { x, y, z: 0 },
+          orientation: {
+            x: 0, y: 0,
+            z: Math.sin(yaw / 2),
+            w: Math.cos(yaw / 2),
+          },
+        },
+      },
+    });
+  }
+
+  // ── Nav2: 초기 위치 설정 (AMCL) ─────────────────────────────────────────
+  @SubscribeMessage('nav_set_initialpose')
+  handleNavInitialPose(
+    @MessageBody() { robotId, x, y, yaw }: { robotId: string; x: number; y: number; yaw: number },
+  ) {
+    const now = Date.now() / 1000;
+    this.rosService.publish({
+      topicName: `/${robotId}/initialpose`,
+      messageType: 'geometry_msgs/PoseWithCovarianceStamped',
+      message: {
+        header: { stamp: { sec: Math.floor(now), nanosec: 0 }, frame_id: 'map' },
+        pose: {
+          pose: {
+            position: { x, y, z: 0 },
+            orientation: {
+              x: 0, y: 0,
+              z: Math.sin(yaw / 2),
+              w: Math.cos(yaw / 2),
+            },
+          },
+          covariance: [
+            0.25, 0, 0, 0, 0, 0,
+            0, 0.25, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0.06853891945200942,
+          ],
+        },
+      },
+    });
   }
 
   // ── 프론트 → Action Goal 취소 ────────────────────────────────────────────
