@@ -21,7 +21,7 @@
 ## WS2812B 16구 링 LED 배선
 - VCC   : 5V
 - GND   : GND
-- DIN   : RPI Pin 32 (GPIO 12)
+- DIN   : RPI Pin 19 (GPIO 10)
 
 ## HAM4311 적외선 감지 센서 배선
 - 공통 VCC  : 3.3V
@@ -31,22 +31,32 @@
 - 센서3 OUT : RPI Pin 18 (GPIO 24)
 
 # 사전 설정
+## 펌웨어 컨픽 수정
 ```bash
 sudo nano /boot/firmware/config.txt
 ```
 파일 최하단에 아래 내용 추가
-```Plaintext
-dtparam=i2s=on
-dtoverlay=max98357a
-dtoverlay=googlevoicehat-soundcard
+- `dtparam=spi=on`
+- `dtparam=i2s=on`
+- `dtoverlay=max98357a`
+- `dtoverlay=googlevoicehat-soundcard`
+
+## 하드웨어 그룹 권한 부여
+```bash
+sudo usermod -aG audio $USER
+sudo usermod -aG video $USER
+sudo usermod -aG plugdev $USER
+sudo usermod -aG spi $USER
 ```
 
-# 필요 패키지 정리
+# 필요 패키지 설치
 ```bash
 sudo apt-get install python3-pyaudio mpg123 scons build-essential
 sudo pip3 install rpi_ws281x gTTS SpeechRecognition --break-system-packages
 ```
 
-# 기타
-- 하드웨어 패키지는 반드시 관리자 권한으로 실행해야 함
-- `sudo -E /opt/ros/jazzy/bin/ros2 ~`
+# 실행 방법
+## 통합 런치 파일 실행
+```bash
+ros2 launch turtlebot3_hardware hardware_bringup.launch.py
+```
