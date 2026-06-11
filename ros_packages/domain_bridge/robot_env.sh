@@ -19,7 +19,4 @@ case "$ROBOT_ID" in
     ;;
 esac
 
-export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
-export CYCLONEDDS_URI=file://$HOME/cyclonedds.xml
-
 echo "✓ 도메인 설정: $ROBOT_ID → ROS_DOMAIN_ID=$ROS_DOMAIN_ID"
