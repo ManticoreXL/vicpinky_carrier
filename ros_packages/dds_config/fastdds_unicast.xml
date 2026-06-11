@@ -22,17 +22,27 @@
             <locator/>
           </metatrafficUnicastLocatorList>
           <initialPeersList>
-            <!-- ↓↓↓ 실제 IP로 바꾸고, 장비 수만큼 <locator> 추가 ↓↓↓ -->
             <locator>
-              <udpv4><address>192.168.100.138</address></udpv4>   <!-- 서버 PC -->
+              <udpv4><address>10.10.14.117</address></udpv4>  <!-- 빅핑키 (VicPinky) domain 40 -->
             </locator>
             <locator>
-              <udpv4><address>192.168.100.122</address></udpv4>   <!-- 로봇 tb3_01 -->
+              <udpv4><address>10.10.14.109</address></udpv4>  <!-- 핑키 1 -->
             </locator>
             <locator>
-              <udpv4><address>192.168.0.23</address></udpv4>   <!-- 로봇 tb3_03 -->
+              <udpv4><address>10.10.14.110</address></udpv4>  <!-- 핑키 2 -->
             </locator>
-            <!-- 로봇이 더 있으면 계속 추가 -->
+            <locator>
+              <udpv4><address>10.10.14.158</address></udpv4>  <!-- tb3_01 domain 41 -->
+            </locator>
+            <locator>
+              <udpv4><address>10.10.14.19</address></udpv4>   <!-- tb3_02 domain 42 -->
+            </locator>
+            <locator>
+              <udpv4><address>10.10.14.23</address></udpv4>   <!-- tb3_03 domain 43 -->
+            </locator>
+            <locator>
+              <udpv4><address>10.10.14.16</address></udpv4>   <!-- tb3_04 domain 44 -->
+            </locator>
           </initialPeersList>
         </builtin>
       </rtps>

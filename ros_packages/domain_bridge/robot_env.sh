@@ -5,6 +5,12 @@
 
 ROBOT_ID="${1:-}"
 
+# FastDDS 유니캐스트 설정 (멀티캐스트 안 될 때 피어 직접 지정)
+_DDS_CONFIG="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../dds_config/fastdds_unicast.xml"
+if [ -f "$_DDS_CONFIG" ]; then
+  export FASTRTPS_DEFAULT_PROFILES_FILE="$_DDS_CONFIG"
+fi
+
 case "$ROBOT_ID" in
   vicpinky) export ROS_DOMAIN_ID=40 ;;
   tb3_01)   export ROS_DOMAIN_ID=41 ;;
@@ -20,3 +26,4 @@ case "$ROBOT_ID" in
 esac
 
 echo "✓ 도메인 설정: $ROBOT_ID → ROS_DOMAIN_ID=$ROS_DOMAIN_ID"
+echo "✓ FastDDS 유니캐스트: $FASTRTPS_DEFAULT_PROFILES_FILE"

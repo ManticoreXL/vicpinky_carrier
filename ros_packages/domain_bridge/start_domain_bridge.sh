@@ -6,6 +6,12 @@
 source /opt/ros/jazzy/setup.bash
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DDS_CONFIG="$SCRIPT_DIR/../dds_config/fastdds_unicast.xml"
+
+if [ -f "$DDS_CONFIG" ]; then
+  export FASTRTPS_DEFAULT_PROFILES_FILE="$DDS_CONFIG"
+  echo "  FastDDS 유니캐스트 설정 로드: $DDS_CONFIG"
+fi
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "  Domain Bridge 시작"
