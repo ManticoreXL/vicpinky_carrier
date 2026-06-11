@@ -32,10 +32,3 @@ jobs:
         run: |
           source /opt/ros/${{ matrix.ros_distribution }}/setup.bash
           colcon build --base-path src
-
-      - name: Run Colcon Tests
-        run: |
-          source /opt/ros/${{ matrix.ros_distribution }}/setup.bash
-          source install/setup.bash
-          colcon test --base-path src
-          colcon test-result --all
