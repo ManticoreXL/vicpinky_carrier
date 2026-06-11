@@ -47,12 +47,13 @@ sudo usermod -aG audio $USER
 sudo usermod -aG video $USER
 sudo usermod -aG plugdev $USER
 sudo usermod -aG spi $USER
+sudo usermod -aG dialout $USER
 ```
 
 # 필요 패키지 설치
 ```bash
-sudo apt-get install python3-pyaudio mpg123 scons build-essential
-sudo pip3 install rpi_ws281x gTTS SpeechRecognition --break-system-packages
+sudo apt-get install python3-pyaudio mpg123 scons build-essential python3-rpi-lgpio
+sudo pip3 install adafruit-circuitpython-neopixel-spi gTTS SpeechRecognition --break-system-packages
 ```
 
 # 실행 방법
@@ -60,3 +61,38 @@ sudo pip3 install rpi_ws281x gTTS SpeechRecognition --break-system-packages
 ```bash
 ros2 launch turtlebot3_hardware hardware_bringup.launch.py
 ```
+
+# headlight_node 사용 방법
+## 노드 실행
+```bash
+ros2 launch turtlebot3_hardware turtlebot3_hardware.launch.py
+```
+
+## LED 켜기
+```bash
+ros2 topic pub -1 /headlight_cmd std_msgs/msg/String "{data: 'on'}"
+```
+
+## LED 끄기
+```bash
+ros2 topic pub -1 /headlight_cmd std_msgs/msg/String "{data: 'off'}"
+```
+
+## LED 깜빡이기
+```bash
+ros2 topic pub -1 /headlight_cmd std_msgs/msg/String "{data: 'blink'}"
+```
+
+## 주요 파라미터
+- `led_brightness`
+    - Integer
+    - default=50   
+    - LED 밝기를 0부터 100까지 값으로 제어 (100이 최대)
+- `blink_period`
+    - Float
+    - default=0.5
+    - `blink` 명령 수신 시 LED 점멸 주기 (초 단위)
+- `blink_count`
+    - Integer
+    - default=3
+    - `blink` 명령 수신 시 LED 점멸 횟수
