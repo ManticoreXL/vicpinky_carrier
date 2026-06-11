@@ -1,57 +1,59 @@
+"""
+SPI 기반 NeoPixel LED 제어용 노드
+"""
+
 import rclpy
 from rclpy.node import Node
 from rcl_interfaces.msg import SetParametersResult
 from std_msgs.msg import String
-from rpi_ws281x import PixelStrip, Color
+
+import board
+import neopixel_spi
 
 class HeadlightNode(Node):
+    """
+    NeoPixel LED 하드웨어 제어 클래스
+    """
+
     def __init__(self):
+        """
+        HeadlightNode 초기화
+        """
         super().__init__('headlight_node')
         
-        # Parameter 선언 및 기본값 설정
+        # Parameter 선언 (밝기 기본값을 100으로 변경)
         self.declare_parameter('led_count', 16)
-        self.declare_parameter('led_pin', 12)
-        self.declare_parameter('led_freq_hz', 800000)
-        self.declare_parameter('led_dma', 10)
-        self.declare_parameter('led_brightness', 255)
-        self.declare_parameter('led_invert', False)
-        self.declare_parameter('led_channel', 0)
-        
+        self.declare_parameter('led_brightness', 50)
         self.declare_parameter('blink_period', 0.5)
         self.declare_parameter('blink_count', 3)
         
         # 초기 Parameter 값 추출
         led_count = self.get_parameter('led_count').value
-        led_pin = self.get_parameter('led_pin').value
-        led_freq_hz = self.get_parameter('led_freq_hz').value
-        led_dma = self.get_parameter('led_dma').value
-        self.current_brightness = self.get_parameter('led_brightness').value
-        led_invert = self.get_parameter('led_invert').value
-        led_channel = self.get_parameter('led_channel').value
+        # 0~100 범위의 입력값을 0.0~1.0 형태의 실수로 스케일링 변환
+        self.current_brightness = self.get_parameter('led_brightness').value / 100.0
         
         blink_period = self.get_parameter('blink_period').value
         self.target_toggle_count = self.get_parameter('blink_count').value * 2
         
         # 하드웨어 스트립 초기화
-        self.strip = PixelStrip(
-            led_count, 
-            led_pin, 
-            led_freq_hz, 
-            led_dma, 
-            led_invert, 
-            self.current_brightness, 
-            led_channel
+        self.strip = neopixel_spi.NeoPixel_SPI(
+            board.SPI(),
+            led_count,
+            brightness=self.current_brightness,
+            pixel_order=neopixel_spi.GRB,
+            auto_write=False
         )
-        self.strip.begin()
         
         # 상태 변수
         self.current_state = False
         self.saved_state = False
         self.is_blinking = False
         self.toggle_count = 0
-        self.color = Color(255, 255, 255)
         
-        # 초기 상태 적용
+        self.color_on = (255, 255, 255)
+        self.color_off = (0, 0, 0)
+        
+        # 초기 상태 적용 (소등)
         self.set_led_state(False)
 
         # 토픽 구독
@@ -69,24 +71,31 @@ class HeadlightNode(Node):
         # 파라미터 변경 감지 콜백 등록
         self.add_on_set_parameters_callback(self.parameters_callback)
 
-        self.get_logger().info("Python Headlight Node Started with Dynamic Parameters.")
+        self.get_logger().info("Python Headlight Node Started (Brightness: 0-100%).")
 
 
     def parameters_callback(self, params):
+        """
+        파라미터 변경이 감지되면 호출되는 콜백 함수
+
+        Args:
+            params (list): 변경이 요청된 파라미터 객체 리슽
+
+        Returns:
+            SetParameterResult: 파라미터 변경 성공 여부와 결과 메시지
+        """
         successful = True
         reason = "Parameters updated successfully"
 
         for param in params:
             if param.name == 'led_brightness':
-                self.current_brightness = param.value
-                self.strip.setBrightness(self.current_brightness)
-                # LED가 켜져 있는 상태라면 변경된 밝기를 즉시 하드웨어에 반영
+                self.current_brightness = param.value / 100.0
+                self.strip.brightness = self.current_brightness
                 if self.current_state:
                     self.strip.show()
-                self.get_logger().info(f"Parameter updated: led_brightness = {param.value}")
+                self.get_logger().info(f"Parameter updated: led_brightness = {param.value}%")
 
             elif param.name == 'blink_period':
-                # 진행 중이던 Timer를 취소하고 새로운 주기로 Timer 재설정
                 was_running = not self.timer.is_canceled()
                 self.timer.cancel()
                 self.timer = self.create_timer(param.value, self.timer_callback)
@@ -98,8 +107,7 @@ class HeadlightNode(Node):
                 self.target_toggle_count = param.value * 2
                 self.get_logger().info(f"Parameter updated: blink_count = {param.value}")
 
-            # 실행 중 변경이 불가능한 하드웨어 파라미터의 업데이트 요청 거부
-            elif param.name in ['led_pin', 'led_count', 'led_freq_hz', 'led_dma', 'led_invert', 'led_channel']:
+            elif param.name == 'led_count':
                 successful = False
                 reason = f"Hardware parameter '{param.name}' cannot be changed at runtime."
                 self.get_logger().warn(reason)
@@ -109,16 +117,27 @@ class HeadlightNode(Node):
 
 
     def set_led_state(self, state):
+        """
+        LED 점등 상태 변경
+
+        Args:
+            state (bool): True일 경우 color_on 색상으로 점등, False인 경우 소등
+        """
         self.current_state = state
-        color_to_set = self.color if state else Color(0, 0, 0)
+        color_to_set = self.color_on if state else self.color_off
 
-        for i in range(self.strip.numPixels()):
-            self.strip.setPixelColor(i, color_to_set)
-
+        self.strip.fill(color_to_set)
         self.strip.show()
 
 
     def cmd_callback(self, msg):
+        """
+        headlight_cmd 토픽을 수신하면 호출되는 콜백 함수
+
+        Args:
+            msg (std_msgs.msg.String): 수신된 제어 메시지
+
+        """
         cmd = msg.data.lower()
 
         if cmd == "on":
@@ -142,6 +161,9 @@ class HeadlightNode(Node):
 
 
     def timer_callback(self):
+        """
+        점멸 모드가 활성화되었을 때 호출되는 타이머 콜백 함수
+        """
         if self.is_blinking:
             if self.toggle_count < self.target_toggle_count:
                 self.set_led_state(not self.current_state)
@@ -162,6 +184,7 @@ def main(args=None):
         pass
     finally:
         node.set_led_state(False)
+        node.strip.deinit()
         node.destroy_node()
         rclpy.shutdown()
 
