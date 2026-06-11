@@ -14,8 +14,6 @@ interface StaticMapInfo {
   originY: number;
 }
 
-type NavMode = "view" | "goal" | "pose";
-
 const TB3_ROBOTS = [
   { id: "tb3_01", label: "TB3-01", color: "#3b82f6" },
   { id: "tb3_02", label: "TB3-02", color: "#10b981" },
@@ -53,6 +51,12 @@ interface Props {
   onSetInitialPose: (robotId: string, x: number, y: number, yaw: number) => void;
 }
 
+interface DragState {
+  sx: number; sy: number;
+  cx: number; cy: number;
+  type: "goal" | "pose";
+}
+
 // ── 컴포넌트 ──────────────────────────────────────────────────────────────────
 
 export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetInitialPose }: Props) {
@@ -61,16 +65,15 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
   const imgRef    = useRef<HTMLImageElement | null>(null);
   const infoRef   = useRef<StaticMapInfo | null>(null);
   const scaleRef  = useRef(1);
+  const dragRef   = useRef<DragState | null>(null);
 
   const [availableMaps, setAvailableMaps] = useState<string[]>([]);
   const [selectedMap,   setSelectedMap]   = useState<string>("");
   const [mapInfo,       setMapInfo]       = useState<StaticMapInfo | null>(null);
   const [imgLoaded,     setImgLoaded]     = useState(false);
-  const [mode,          setMode]          = useState<NavMode>("view");
+  const [interactive,   setInteractive]   = useState(true);
   const [selectedBot,   setSelectedBot]   = useState("tb3_01");
   const [showCamera,    setShowCamera]    = useState(true);
-
-  const dragRef = useRef<{ sx: number; sy: number; cx: number; cy: number } | null>(null);
 
   const base = BACKEND_URL.replace(/\/$/, "");
 
@@ -126,7 +129,47 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-    // 로봇 마커 (amcl_pose)
+    // ── 경로 그리기 (로봇 마커보다 먼저) ──────────────────────────────────
+    for (const robot of TB3_ROBOTS) {
+      const planData = rosMessages[`/${robot.id}/plan`]?.data as {
+        poses?: Array<{ pose?: { position?: { x?: number; y?: number } } }>
+      } | undefined;
+
+      const poses = planData?.poses;
+      if (!poses?.length) continue;
+
+      const isSelected = robot.id === selectedBot;
+
+      ctx.beginPath();
+      let started = false;
+      for (const p of poses) {
+        const pos = p?.pose?.position;
+        if (pos?.x == null) continue;
+        const { cx, cy } = worldToCanvas(pos.x, pos.y ?? 0, info, scale);
+        if (!started) { ctx.moveTo(cx, cy); started = true; }
+        else ctx.lineTo(cx, cy);
+      }
+      ctx.strokeStyle = robot.color + (isSelected ? "dd" : "55");
+      ctx.lineWidth   = isSelected ? 2.5 : 1.2;
+      ctx.setLineDash(isSelected ? [4, 3] : [2, 3]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      // 도착 지점 원
+      const last = poses[poses.length - 1]?.pose?.position;
+      if (last?.x != null) {
+        const { cx, cy } = worldToCanvas(last.x, last.y ?? 0, info, scale);
+        ctx.beginPath();
+        ctx.arc(cx, cy, isSelected ? 7 : 4, 0, Math.PI * 2);
+        ctx.fillStyle   = robot.color + (isSelected ? "44" : "22");
+        ctx.fill();
+        ctx.strokeStyle = robot.color + (isSelected ? "ee" : "66");
+        ctx.lineWidth   = isSelected ? 2 : 1;
+        ctx.stroke();
+      }
+    }
+
+    // ── 로봇 마커 (amcl_pose) ─────────────────────────────────────────────
     for (const robot of TB3_ROBOTS) {
       const amcl = rosMessages[`/${robot.id}/amcl_pose`]?.data as {
         pose?: { pose?: { position?: { x?: number; y?: number }; orientation?: { x?: number; y?: number; z?: number; w?: number } } }
@@ -140,15 +183,14 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
       drawRobotMarker(ctx, cx, cy, yaw, robot.color, robot.label, robot.id === selectedBot);
     }
 
-    // 드래그 중 목표 마커
-    if (dragRef.current && mode !== "view") {
-      const { sx, sy, cx, cy } = dragRef.current;
-      const yaw = (Math.abs(cx - sx) + Math.abs(cy - sy)) > 5
-        ? Math.atan2(cy - sy, cx - sx)
-        : 0;
-      drawGoalMarker(ctx, sx, sy, yaw, mode === "goal" ? "#ef4444" : "#22d3ee");
+    // ── 드래그 중 프리뷰 ─────────────────────────────────────────────────
+    if (dragRef.current) {
+      const { sx, sy, cx, cy, type } = dragRef.current;
+      const dx = cx - sx, dy = cy - sy;
+      const yaw = (Math.abs(dx) + Math.abs(dy)) > 5 ? Math.atan2(dy, dx) : 0;
+      drawPreviewMarker(ctx, sx, sy, yaw, type === "goal" ? "#ef4444" : "#22d3ee", type);
     }
-  }, [rosMessages, mode, selectedBot]);
+  }, [rosMessages, selectedBot]);
 
   useEffect(() => { draw(); }, [draw, imgLoaded]);
 
@@ -166,9 +208,10 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
   };
 
   const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (mode === "view") return;
+    if (!interactive) return;
+    e.preventDefault();
     const { x, y } = canvasXY(e);
-    dragRef.current = { sx: x, sy: y, cx: x, cy: y };
+    dragRef.current = { sx: x, sy: y, cx: x, cy: y, type: e.button === 2 ? "pose" : "goal" };
   };
 
   const onMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
@@ -180,7 +223,7 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
 
   const onMouseUp = () => {
     if (!dragRef.current || !infoRef.current) return;
-    const { sx, sy, cx, cy } = dragRef.current;
+    const { sx, sy, cx, cy, type } = dragRef.current;
     dragRef.current = null;
 
     const info  = infoRef.current;
@@ -190,16 +233,17 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
     // canvas Y 반전 → ROS yaw
     const yaw = (Math.abs(dx) + Math.abs(dy)) > 5 ? Math.atan2(-dy, dx) : 0;
 
-    if (mode === "goal") onSendGoal(selectedBot, wx, wy, yaw);
-    if (mode === "pose") onSetInitialPose(selectedBot, wx, wy, yaw);
+    if (type === "goal") onSendGoal(selectedBot, wx, wy, yaw);
+    else                 onSetInitialPose(selectedBot, wx, wy, yaw);
     draw();
   };
 
   const onMouseLeave = () => { dragRef.current = null; draw(); };
+  const onContextMenu = (e: React.MouseEvent) => e.preventDefault();
 
-  // ── 렌더 ─────────────────────────────────────────────────────────────────
-
+  // ── 선택 로봇 메타 ────────────────────────────────────────────────────────
   const selectedRobotMeta = TB3_ROBOTS.find((r) => r.id === selectedBot);
+  const selectedPlanPoses = (rosMessages[`/${selectedBot}/plan`]?.data as { poses?: unknown[] } | undefined)?.poses;
 
   return (
     <div className="flex flex-col h-full bg-[#050505]">
@@ -215,12 +259,8 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
             onChange={(e) => setSelectedMap(e.target.value)}
             className="text-[10px] font-mono bg-[#0d0d0d] border border-[#1e1e1e] text-[#aaa] px-2 py-0.5 max-w-[160px] truncate"
           >
-            {availableMaps.length === 0 && (
-              <option value="">맵 없음</option>
-            )}
-            {availableMaps.map((m) => (
-              <option key={m} value={m}>{m}</option>
-            ))}
+            {availableMaps.length === 0 && <option value="">맵 없음</option>}
+            {availableMaps.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
 
@@ -230,47 +270,55 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
         <div className="flex items-center gap-1.5">
           <span className="text-[9px] font-mono text-[#444] uppercase tracking-widest">ROBOT</span>
           <div className="flex">
-            {TB3_ROBOTS.map((r) => (
-              <button
-                key={r.id}
-                onClick={() => setSelectedBot(r.id)}
-                className={`px-2 py-0.5 text-[9px] font-mono font-bold border-r border-[#1a1a1a] last:border-0 transition-all ${
-                  selectedBot === r.id
-                    ? "text-[#111] font-black"
-                    : "text-[#333] hover:text-[#666] bg-transparent"
-                }`}
-                style={selectedBot === r.id ? { background: r.color, color: "#000" } : {}}
-              >
-                {r.label}
-              </button>
-            ))}
+            {TB3_ROBOTS.map((r) => {
+              const hasPos  = rosMessages[`/${r.id}/amcl_pose`]?.data != null;
+              const hasPlan = ((rosMessages[`/${r.id}/plan`]?.data as { poses?: unknown[] } | undefined)?.poses?.length ?? 0) > 0;
+              return (
+                <button
+                  key={r.id}
+                  onClick={() => setSelectedBot(r.id)}
+                  className="relative px-2 py-0.5 text-[9px] font-mono font-bold border-r border-[#1a1a1a] last:border-0 transition-all"
+                  style={selectedBot === r.id
+                    ? { background: r.color, color: "#000" }
+                    : { color: hasPos ? r.color + "aa" : "#333" }}
+                >
+                  {r.label}
+                  {hasPlan && (
+                    <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-green-400" />
+                  )}
+                </button>
+              );
+            })}
           </div>
         </div>
 
         <div className="w-px h-4 bg-[#1a1a1a]" />
 
-        {/* 모드 */}
-        <div className="flex border border-[#1a1a1a] overflow-hidden">
-          {([
-            { key: "view" as NavMode, label: "보기"     },
-            { key: "goal" as NavMode, label: "목표 지점" },
-            { key: "pose" as NavMode, label: "초기 위치" },
-          ] as const).map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setMode(key)}
-              className={`px-3 py-1 text-[9px] font-bold uppercase tracking-wider font-mono border-r border-[#1a1a1a] last:border-0 transition-all ${
-                mode === key
-                  ? key === "goal" ? "text-red-400 bg-[#1a0000]"
-                  : key === "pose" ? "text-cyan-400 bg-[#001a1a]"
-                  : "text-[#888] bg-[#111]"
-                  : "text-[#333] hover:text-[#666]"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {/* 조작 토글 */}
+        <button
+          onClick={() => setInteractive((v) => !v)}
+          className={`px-3 py-1 text-[9px] font-mono font-bold uppercase tracking-wider border transition-all ${
+            interactive
+              ? "border-blue-900/50 text-blue-400 bg-blue-950/20"
+              : "border-[#1a1a1a] text-[#333] hover:text-[#666]"
+          }`}
+        >
+          {interactive ? "● 조작 중" : "○ 보기"}
+        </button>
+
+        {/* 조작 힌트 */}
+        {interactive && (
+          <div className="flex items-center gap-3">
+            <span className="flex items-center gap-1 text-[9px] font-mono">
+              <kbd className="px-1 py-0.5 border border-[#222] text-[#444] text-[8px]">L</kbd>
+              <span className="text-red-400/70">목표</span>
+            </span>
+            <span className="flex items-center gap-1 text-[9px] font-mono">
+              <kbd className="px-1 py-0.5 border border-[#222] text-[#444] text-[8px]">R</kbd>
+              <span className="text-cyan-400/70">초기위치</span>
+            </span>
+          </div>
+        )}
 
         {/* 카메라 토글 */}
         <button
@@ -283,19 +331,11 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
         >
           ◉ CAM
         </button>
-
-        {/* 힌트 */}
-        {mode !== "view" && (
-          <span className="text-[9px] font-mono text-[#444] italic hidden xl:block">
-            {mode === "goal" ? "클릭+드래그 → 목표 전송" : "클릭+드래그 → AMCL 초기화"}
-          </span>
-        )}
       </div>
 
-      {/* ── 본문: 맵 캔버스 + 카메라 오버레이 ────────────────────────────── */}
+      {/* ── 본문 ─────────────────────────────────────────────────────────── */}
       <div ref={wrapRef} className="flex-1 relative overflow-hidden flex items-center justify-center bg-[#020202]">
 
-        {/* 맵 캔버스 */}
         {!imgLoaded ? (
           <span className="text-[10px] font-mono text-[#333] uppercase tracking-widest">
             {availableMaps.length === 0 ? "맵 파일 없음" : "맵 로딩 중…"}
@@ -307,7 +347,8 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
             onMouseMove={onMouseMove}
             onMouseUp={onMouseUp}
             onMouseLeave={onMouseLeave}
-            className={mode !== "view" ? "cursor-crosshair" : "cursor-default"}
+            onContextMenu={onContextMenu}
+            className={interactive ? "cursor-crosshair" : "cursor-default"}
             style={{ imageRendering: "pixelated", display: "block" }}
           />
         )}
@@ -322,33 +363,31 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
               >
                 ◉ {selectedRobotMeta?.label ?? selectedBot}
               </span>
-              <button
-                onClick={() => setShowCamera(false)}
-                className="text-[9px] text-[#333] hover:text-[#888]"
-              >✕</button>
+              <button onClick={() => setShowCamera(false)} className="text-[9px] text-[#333] hover:text-[#888]">✕</button>
             </div>
-            <CameraFeed
-              botId={selectedBot}
-              label={selectedRobotMeta?.label ?? selectedBot}
-              socket={socket}
-            />
+            <CameraFeed botId={selectedBot} label={selectedRobotMeta?.label ?? selectedBot} socket={socket} />
           </div>
         )}
 
         {/* 범례 (좌상단) */}
         {imgLoaded && (
-          <div className="absolute top-2 left-2 flex flex-col gap-1 bg-[#050505]/80 px-2 py-1.5 border border-[#111]">
+          <div className="absolute top-2 left-2 flex flex-col gap-1 bg-[#050505]/90 px-2 py-1.5 border border-[#111]">
             {TB3_ROBOTS.map((r) => {
-              const hasPose = rosMessages[`/${r.id}/amcl_pose`]?.data != null;
+              const hasPos  = rosMessages[`/${r.id}/amcl_pose`]?.data != null;
+              const hasPlan = ((rosMessages[`/${r.id}/plan`]?.data as { poses?: unknown[] } | undefined)?.poses?.length ?? 0) > 0;
               return (
-                <span key={r.id} className="flex items-center gap-1.5 text-[8px] font-mono">
+                <button
+                  key={r.id}
+                  onClick={() => setSelectedBot(r.id)}
+                  className={`flex items-center gap-1.5 text-left transition-all ${selectedBot === r.id ? "opacity-100" : "opacity-50 hover:opacity-80"}`}
+                >
                   <span
-                    className={`w-2 h-2 rounded-full flex-none ${hasPose ? "" : "opacity-30"}`}
-                    style={{ background: r.color }}
+                    className="w-2 h-2 rounded-full flex-none"
+                    style={{ background: r.color, opacity: hasPos ? 1 : 0.2 }}
                   />
-                  <span className={hasPose ? "text-[#888]" : "text-[#333]"}>{r.label}</span>
-                  {!hasPose && <span className="text-[#2a2a2a]">—</span>}
-                </span>
+                  <span className={`text-[8px] font-mono ${hasPos ? "text-[#888]" : "text-[#2a2a2a]"}`}>{r.label}</span>
+                  {hasPlan && <span className="text-[6px]" style={{ color: r.color }}>▶ 경로</span>}
+                </button>
               );
             })}
           </div>
@@ -362,6 +401,11 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
           <span>{mapInfo.width}×{mapInfo.height}px</span>
           <span>{mapInfo.resolution}m/px</span>
           <span>원점 ({mapInfo.originX.toFixed(2)}, {mapInfo.originY.toFixed(2)})</span>
+          {(selectedPlanPoses?.length ?? 0) > 0 && (
+            <span style={{ color: selectedRobotMeta?.color }}>
+              ▶ 경로 {selectedPlanPoses!.length}pt
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -375,9 +419,17 @@ function drawRobotMarker(
   cx: number, cy: number, yaw: number,
   color: string, label: string, selected: boolean,
 ) {
-  const r = selected ? 8 : 6;
+  const r = selected ? 9 : 6;
   ctx.save();
   ctx.translate(cx, cy);
+
+  if (selected) {
+    ctx.beginPath();
+    ctx.arc(0, 0, r + 4, 0, Math.PI * 2);
+    ctx.strokeStyle = color + "44";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
 
   ctx.beginPath();
   ctx.arc(0, 0, r, 0, Math.PI * 2);
@@ -387,32 +439,32 @@ function drawRobotMarker(
   ctx.lineWidth   = selected ? 2.5 : 1.5;
   ctx.stroke();
 
-  // 방향 화살표 (canvas Y 반전 → -yaw)
-  const len = r + 9;
+  const len = r + 10;
   ctx.beginPath();
   ctx.moveTo(0, 0);
   ctx.lineTo(Math.cos(-yaw) * len, Math.sin(-yaw) * len);
   ctx.strokeStyle = color;
-  ctx.lineWidth   = 2;
+  ctx.lineWidth   = selected ? 2.5 : 1.5;
   ctx.stroke();
 
   ctx.fillStyle = color;
-  ctx.font      = `bold ${selected ? 9 : 8}px monospace`;
+  ctx.font      = `bold ${selected ? 10 : 8}px monospace`;
   ctx.textAlign = "center";
-  ctx.fillText(label, 0, -r - 4);
+  ctx.fillText(label, 0, -r - 5);
 
   ctx.restore();
 }
 
-function drawGoalMarker(
+function drawPreviewMarker(
   ctx: CanvasRenderingContext2D,
-  cx: number, cy: number, yaw: number, color: string,
+  cx: number, cy: number, yaw: number,
+  color: string, type: "goal" | "pose",
 ) {
   ctx.save();
   ctx.translate(cx, cy);
 
   ctx.beginPath();
-  ctx.arc(0, 0, 8, 0, Math.PI * 2);
+  ctx.arc(0, 0, 9, 0, Math.PI * 2);
   ctx.fillStyle   = color + "33";
   ctx.fill();
   ctx.strokeStyle = color;
@@ -421,9 +473,9 @@ function drawGoalMarker(
   ctx.stroke();
   ctx.setLineDash([]);
 
-  const len = 22;
-  const hx = Math.cos(yaw) * len;
-  const hy = Math.sin(yaw) * len;
+  const len = 24;
+  const hx  = Math.cos(yaw) * len;
+  const hy  = Math.sin(yaw) * len;
   ctx.beginPath();
   ctx.moveTo(0, 0);
   ctx.lineTo(hx, hy);
@@ -439,6 +491,11 @@ function drawGoalMarker(
   ctx.closePath();
   ctx.fillStyle = color;
   ctx.fill();
+
+  ctx.fillStyle = color;
+  ctx.font      = "bold 9px monospace";
+  ctx.textAlign = "center";
+  ctx.fillText(type === "goal" ? "GOAL" : "INIT", 0, -15);
 
   ctx.restore();
 }

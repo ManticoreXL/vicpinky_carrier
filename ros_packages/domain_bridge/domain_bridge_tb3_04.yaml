@@ -86,6 +86,12 @@ topics:
     to_domain: 40
     remap: /tb3_04/amcl_pose
 
+  /plan:
+    type: nav_msgs/msg/Path
+    from_domain: 44
+    to_domain: 40
+    remap: /tb3_04/plan
+
   # ── DOWNLINK: 관제탑(40)의 꼬리표 달린 명령을 로봇(44)에게 순정으로 떼서 주기 ──
   /tb3_04/cmd_vel:
     type: geometry_msgs/msg/TwistStamped
