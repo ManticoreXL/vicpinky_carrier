@@ -36,7 +36,7 @@ Visualization Manager:
       Enabled: true
       Description Source: Topic
       Description Topic:
-        Value: /tb3_01/robot_description
+        Value: /robot_description
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
@@ -84,7 +84,7 @@ Visualization Manager:
       Name: LaserScan
       Enabled: true
       Topic:
-        Value: /tb3_01/scan
+        Value: /scan
         Depth: 5
         Durability Policy: Volatile
         History Policy: Keep Last
@@ -108,7 +108,7 @@ Visualization Manager:
       Value: true
   Global Options:
     Background Color: 48; 48; 48
-    Fixed Frame: tb3_01/map
+    Fixed Frame: map
     Frame Rate: 30
   Name: root
   Tools:

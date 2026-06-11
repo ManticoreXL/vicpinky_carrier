@@ -1,22 +1,20 @@
 # =====================================================================
-# slam_params_tb3_02.yaml
-# 실제 로봇(tb3_02)용 slam_toolbox 온라인 비동기 매핑 파라미터.
-# 핵심:
-#   - 프레임을 전부 tb3_02 네임스페이스로 (odom/map/base)
-#   - scan_topic 을 /tb3_02/scan 으로
-#   - 발행되는 map 토픽(/tb3_02/map)은 런치의 네임스페이스가 처리
-# 나머지 매퍼 값은 slam_toolbox 기본 online_async 설정을 따름.
+# slam_params.yaml  (단일 로봇 / 네임스페이스 없음 / 도메인 41 격리)
+#
+# 프레임/토픽은 로봇이 발행하는 plain 값과 일치해야 한다.
+#   (네임스페이스 미사용 -> 로봇이 odom / base_footprint / base_scan, /scan 을 plain 으로 발행.
+#    분리는 도메인이 담당하므로 tb3_NN/ 접두어 불필요.)
 # =====================================================================
 
 slam_toolbox:
   ros__parameters:
     use_sim_time: false
 
-    # ---- 프레임 / 입력 (tb3_02) ----
-    odom_frame: tb3_02/odom
-    map_frame: tb3_02/map
-    base_frame: tb3_02/base_footprint
-    scan_topic: /tb3_02/scan
+    # ---- 프레임 / 입력 (plain) ----
+    odom_frame: odom
+    map_frame: map
+    base_frame: base_footprint
+    scan_topic: /scan
 
     mode: mapping
 
@@ -32,11 +30,11 @@ slam_toolbox:
     debug_logging: false
     throttle_scans: 1
     transform_publish_period: 0.02
-    map_update_interval: 1.0      # 탐사용으로 빠른 갱신(기본 5.0 -> 1.0)
+    map_update_interval: 0.5      # 탐사용 빠른 갱신
     resolution: 0.05
-    max_laser_range: 12.0         # 라이다 사양에 맞게 조정 (LD08/Coin D4 기준 여유값)
+    max_laser_range: 12.0
     minimum_time_interval: 0.5
-    transform_timeout: 0.2
+    transform_timeout: 1.0        # 늦게 오는 TF/스캔 여유 (네트워크 지연 대비)
     tf_buffer_duration: 30.0
     stack_size_to_use: 40000000
     enable_interactive_mode: true
@@ -44,9 +42,9 @@ slam_toolbox:
     # ---- 매퍼 ----
     use_scan_matching: true
     use_scan_barycenter: true
-    minimum_travel_distance: 0.3
-    minimum_travel_heading: 0.3
-    scan_buffer_size: 10
+    minimum_travel_distance: 0.1
+    minimum_travel_heading: 0.1
+    scan_buffer_size: 50
     scan_buffer_maximum_scan_distance: 10.0
     link_match_minimum_response_fine: 0.1
     link_scan_maximum_distance: 1.5

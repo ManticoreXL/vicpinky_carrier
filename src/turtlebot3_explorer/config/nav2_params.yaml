@@ -1,5 +1,23 @@
+# =====================================================================
+# nav2_params.yaml  (단일 로봇 / 네임스페이스 없음 / 도메인 41 격리)
+#
+# 규칙:
+#   - 네임스페이스 미사용 + 도메인 격리 -> 모든 프레임/토픽이 plain.
+#   - 프레임  : map, odom, base_footprint, base_link, base_scan
+#   - 토픽    : /scan, /odom, /cmd_vel, /map
+#   - 노드 이름도 plain(controller_server 등) -> 이 yaml 키와 직접 매칭 -> critics 정상 로드.
+#   - 분리는 도메인이 담당하므로 tb3_NN/ 접두어 불필요.
+# =====================================================================
+
+# 저장된 맵 주행(localization_launch) 시 map_server 가 맵을 'map' 프레임으로 발행.
+map_server:
+  ros__parameters:
+    frame_id: "map"
+
 amcl:
   ros__parameters:
+    # (mapping 중엔 slam_toolbox 가 map->odom TF 를 주므로 amcl 은 미사용.
+    #  navigation_launch 는 amcl 을 띄우지 않음. 일관성 위해 프레임만 맞춰둠.)
     alpha1: 0.2
     alpha2: 0.2
     alpha3: 0.2
@@ -36,12 +54,12 @@ amcl:
     z_max: 0.05
     z_rand: 0.5
     z_short: 0.05
-    scan_topic: scan
+    scan_topic: /scan
 
 bt_navigator:
   ros__parameters:
     global_frame: map
-    robot_base_frame: base_link
+    robot_base_frame: base_footprint
     odom_topic: /odom
     bt_loop_duration: 10
     default_server_timeout: 20
@@ -66,28 +84,25 @@ controller_server:
     min_theta_velocity_threshold: 0.001
     failure_tolerance: 0.3
     progress_checker_plugins: ["progress_checker"]
-    goal_checker_plugins: ["general_goal_checker"] 
+    goal_checker_plugins: ["general_goal_checker"]
     controller_plugins: ["FollowPath"]
     use_realtime_priority: false
 
-    # Progress checker parameters
     progress_checker:
       plugin: "nav2_controller::SimpleProgressChecker"
       required_movement_radius: 0.1
       movement_time_allowance: 15.0
 
-    # Goal checker parameters (도착 오차 완화 적용: 0.25 -> 0.35)
     general_goal_checker:
       stateful: True
       plugin: "nav2_controller::SimpleGoalChecker"
       xy_goal_tolerance: 0.35
       yaw_goal_tolerance: 3.14
 
-    # DWB 컨트롤러 
     FollowPath:
       plugin: "dwb_core::DWBLocalPlanner"
       debug_trajectory_details: True
-      min_vel_x: 0.0      # 단독 후진 금지 
+      min_vel_x: 0.0
       min_vel_y: 0.0
       max_vel_x: 0.22
       max_vel_y: 0.0
@@ -95,30 +110,28 @@ controller_server:
       min_speed_xy: 0.0
       max_speed_xy: 0.22
       min_speed_theta: 0.0
-      
-      # 가속도 설정
+
       acc_lim_x: 2.5
       acc_lim_y: 0.0
       acc_lim_theta: 3.2
       decel_lim_x: -2.5
       decel_lim_y: 0.0
       decel_lim_theta: -3.2
-      
+
       vx_samples: 20
       vy_samples: 1
       vtheta_samples: 20
       sim_time: 1.5
       linear_granularity: 0.05
       angular_granularity: 0.025
-      transform_tolerance: 0.2
+      transform_tolerance: 1.0
       xy_goal_tolerance: 0.35
       trans_stopped_velocity: 0.01
       short_circuit_trajectory_evaluation: True
       stateful: True
-      
-      # DWB 경로 평가 가중치 (장애물 회피력 극대화 적용)
+
       critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
-      BaseObstacle.scale: 0.02
+      BaseObstacle.scale: 0.3
       PathAlign.scale: 32.0
       PathAlign.forward_point_distance: 0.1
       PathDist.scale: 32.0
@@ -136,17 +149,18 @@ local_costmap:
       update_frequency: 2.0
       publish_frequency: 2.0
       global_frame: odom
-      robot_base_frame: base_link
+      robot_base_frame: base_footprint
       rolling_window: true
       width: 3
       height: 3
       resolution: 0.05
       robot_radius: 0.105
+      transform_tolerance: 2.0
       plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 8.0  
-        inflation_radius: 0.2
+        cost_scaling_factor: 3.0
+        inflation_radius: 0.3
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -178,10 +192,11 @@ global_costmap:
       update_frequency: 1.0
       publish_frequency: 1.0
       global_frame: map
-      robot_base_frame: base_link
+      robot_base_frame: base_footprint
       robot_radius: 0.105
       resolution: 0.05
       track_unknown_space: true
+      transform_tolerance: 2.0
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
@@ -202,8 +217,8 @@ global_costmap:
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 8.0  
-        inflation_radius: 0.2    
+        cost_scaling_factor: 8.0
+        inflation_radius: 0.2
       always_send_full_costmap: True
 
 map_saver:
@@ -218,7 +233,6 @@ planner_server:
     expected_planner_frequency: 2.0
     planner_plugins: ["GridBased"]
     costmap_update_timeout: 1.0
-    # 구형 플래너를 최신 SmacPlanner2D로 교체
     GridBased:
       plugin: "nav2_smac_planner::SmacPlanner2D"
       tolerance: 0.5
@@ -255,8 +269,8 @@ behavior_server:
       plugin: "nav2_behaviors::AssistedTeleop"
     local_frame: odom
     global_frame: map
-    robot_base_frame: base_link
-    transform_tolerance: 0.1
+    robot_base_frame: base_footprint
+    transform_tolerance: 1.0
     simulate_ahead_time: 2.0
     max_rotational_vel: 1.0
     min_rotational_vel: 0.4
@@ -273,6 +287,52 @@ waypoint_follower:
       plugin: "nav2_waypoint_follower::WaitAtWaypoint"
       enabled: True
       waypoint_pause_duration: 200
+
+velocity_smoother:
+  ros__parameters:
+    smoothing_frequency: 20.0
+    enable_stamped_cmd_vel: true
+    stamp_smoothed_velocity_with_smoothing_time: False
+    scale_velocities: False
+    feedback: "OPEN_LOOP"
+    max_velocity: [0.5, 0.0, 2.0]
+    min_velocity: [-0.5, 0.0, -2.0]
+    max_accel: [2.5, 0.0, 3.2]
+    max_decel: [-2.5, 0.0, -3.2]
+    odom_topic: "/odom"
+    odom_duration: 0.1
+    deadband_velocity: [0.0, 0.0, 0.0]
+    velocity_timeout: 1.0
+
+collision_monitor:
+  ros__parameters:
+    base_frame_id: "base_footprint"
+    odom_frame_id: "odom"
+    cmd_vel_in_topic: "cmd_vel_smoothed"
+    cmd_vel_out_topic: "/cmd_vel"
+    enable_stamped_cmd_vel: true
+    state_topic: "collision_monitor_state"
+    transform_tolerance: 1.0
+    source_timeout: 3.0
+    base_shift_correction: True
+    stop_pub_timeout: 2.0
+    polygons: ["FootprintApproach"]
+    FootprintApproach:
+      type: "polygon"
+      action_type: "approach"
+      footprint_topic: "/local_costmap/published_footprint"
+      time_before_collision: 1.2
+      simulation_time_step: 0.1
+      min_points: 6
+      visualize: False
+      enabled: True
+    observation_sources: ["scan"]
+    scan:
+      type: "scan"
+      topic: "/scan"
+      min_height: 0.15
+      max_height: 2.0
+      enabled: True
 
 route_server:
   ros__parameters:
@@ -293,52 +353,6 @@ route_server:
     CostmapScorer:
       plugin: "nav2_route::CostmapScorer"
 
-velocity_smoother:
-  ros__parameters:
-    smoothing_frequency: 20.0
-    enable_stamped_cmd_vel: true
-    stamp_smoothed_velocity_with_smoothing_time: False
-    scale_velocities: False
-    feedback: "OPEN_LOOP"
-    max_velocity: [0.5, 0.0, 2.0]
-    min_velocity: [-0.5, 0.0, -2.0]
-    max_accel: [2.5, 0.0, 3.2]
-    max_decel: [-2.5, 0.0, -3.2]
-    odom_topic: "odom"
-    odom_duration: 0.1
-    deadband_velocity: [0.0, 0.0, 0.0]
-    velocity_timeout: 1.0
-
-collision_monitor:
-  ros__parameters:
-    base_frame_id: "base_footprint"
-    odom_frame_id: "odom"
-    cmd_vel_in_topic: "cmd_vel_smoothed"
-    cmd_vel_out_topic: "cmd_vel"
-    enable_stamped_cmd_vel: true
-    state_topic: "collision_monitor_state"
-    transform_tolerance: 0.2
-    source_timeout: 1.0
-    base_shift_correction: True
-    stop_pub_timeout: 2.0
-    polygons: ["FootprintApproach"]
-    FootprintApproach:
-      type: "polygon"
-      action_type: "approach"
-      footprint_topic: "/local_costmap/published_footprint"
-      time_before_collision: 1.2
-      simulation_time_step: 0.1
-      min_points: 6
-      visualize: False
-      enabled: True
-    observation_sources: ["scan"]
-    scan:
-      type: "scan"
-      topic: "scan"
-      min_height: 0.15
-      max_height: 2.0
-      enabled: True
-
 docking_server:
   ros__parameters:
     controller_frequency: 50.0
@@ -358,8 +372,8 @@ docking_server:
       docking_threshold: 0.05
       staging_x_offset: -0.7
       use_external_detection_pose: true
-      use_battery_status: false 
-      use_stall_detection: false 
+      use_battery_status: false
+      use_stall_detection: false
       external_detection_timeout: 1.0
       external_detection_translation_x: -0.18
       external_detection_translation_y: 0.0
@@ -379,17 +393,3 @@ docking_server:
       projection_time: 5.0
       simulation_step: 0.1
       dock_collision_threshold: 0.3
-
-loopback_simulator:
-  ros__parameters:
-    base_frame_id: "base_footprint"
-    odom_frame_id: "odom"
-    map_frame_id: "map"
-    scan_frame_id: "base_scan"  
-    update_duration: 0.02
-    scan_range_min: 0.05
-    scan_range_max: 30.0
-    scan_angle_min: -3.1415
-    scan_angle_max: 3.1415
-    scan_angle_increment: 0.02617
-    scan_use_inf: true
