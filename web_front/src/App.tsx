@@ -55,7 +55,7 @@ export default function App() {
     nestConnected, rosMessages, socket,
     activeGoals, actionFeedbacks, actionResults,
     mapTimestamps, mapInfos,
-    fmsTasks,
+    fmsTasks, tmAlerts, ackTmAlert, setRobotHome,
   } = useNestSocket();
   const [selectedRobot, setSelectedRobot] = useState<RobotId>("vicpinky");
   const [appMode, setAppMode]             = useState<AppMode>("control");
@@ -137,6 +137,9 @@ export default function App() {
             emitFmsCancel={emitFmsCancel}
             emitNavGoal={emitNavGoal}
             emitNavInitialPose={emitNavInitialPose}
+            tmAlerts={tmAlerts}
+            ackTmAlert={ackTmAlert}
+            setRobotHome={setRobotHome}
           />
         </div>
       ) : isExplore ? (

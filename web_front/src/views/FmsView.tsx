@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import type { Socket } from "socket.io-client";
-import { RosMessage, FmsTask, FmsDispatchPayload, TaskType } from "../hooks/useNestSocket";
+import { RosMessage, FmsTask, FmsDispatchPayload, TaskType, TaskManagerAlert } from "../hooks/useNestSocket";
 import NavMapCanvas from "../components/NavMapCanvas";
 
 // ── 상수 ─────────────────────────────────────────────────────────────────────
@@ -15,6 +15,7 @@ const ROBOTS = [
 ] as const;
 
 const TASK_LABELS: Record<TaskType, string> = {
+  navigate:      "네비게이션",
   explore:       "탐사",
   deliver:       "수송",
   stop:          "정지",
@@ -46,11 +47,14 @@ const ONLINE_THRESHOLD_MS = 5000;
 interface Props {
   rosMessages: Record<string, RosMessage>;
   fmsTasks: FmsTask[];
+  tmAlerts: TaskManagerAlert[];
   socket:             Socket | null;
   emitFmsDispatch:    (p: FmsDispatchPayload) => void;
   emitFmsCancel:      (taskId: string) => void;
   emitNavGoal:        (robotId: string, x: number, y: number, yaw: number) => void;
   emitNavInitialPose: (robotId: string, x: number, y: number, yaw: number) => void;
+  ackTmAlert:         (alertId: string) => void;
+  setRobotHome:       (robotId: string, x: number, y: number, yaw: number) => void;
 }
 
 // ── 유틸 ─────────────────────────────────────────────────────────────────────
@@ -249,30 +253,47 @@ function QuickBtn({
 
 // ── 태스크 행 ─────────────────────────────────────────────────────────────────
 
+function priorityStyle(p: number) {
+  if (p <= 2) return "text-red-400 border-red-900/60";
+  if (p <= 4) return "text-amber-400 border-amber-900/60";
+  if (p <= 6) return "text-blue-400/70 border-blue-900/40";
+  return "text-[#333] border-[#1a1a1a]";
+}
+
 function TaskRow({ task, onCancel }: { task: FmsTask; onCancel: () => void }) {
   const canCancel = task.status === "active" || task.status === "queued";
+  const prio = task.priority ?? 5;
   return (
-    <div className="flex items-center gap-2 px-3 py-2 border-b border-[#111] hover:bg-[#0d0d0d] text-[10px] font-mono">
-      <div className={`w-1.5 h-1.5 rounded-full flex-none ${STATUS_DOT[task.status] ?? "bg-[#333]"}`} />
-      <span className="w-16 text-[#888] truncate uppercase tracking-wider">
-        {task.robotId.replace("vicpinky", "VP").replace("tb3_0", "TB")}
-      </span>
-      <span className="flex-1 text-[#666] uppercase tracking-wider truncate">
-        {TASK_LABELS[task.type]}
-        {task.targetId && <span className="text-[#444] ml-1">→{task.targetId}</span>}
-      </span>
-      <span className={`px-1.5 py-px border text-[9px] font-bold uppercase ${STATUS_STYLE[task.status]}`}>
-        {task.status}
-      </span>
-      <span className="w-14 text-right text-[#333]">{timeAgo(task.createdAt)}</span>
-      {canCancel ? (
-        <button
-          onClick={onCancel}
-          className="w-5 h-5 flex items-center justify-center text-[#444] hover:text-red-500 transition-colors"
-          title="취소"
-        >✕</button>
-      ) : (
-        <div className="w-5" />
+    <div className="flex flex-col border-b border-[#0d0d0d] hover:bg-[#0d0d0d] text-[10px] font-mono">
+      <div className="flex items-center gap-2 px-3 py-1.5">
+        <div className={`w-1.5 h-1.5 rounded-full flex-none ${STATUS_DOT[task.status] ?? "bg-[#333]"}`} />
+        <span className={`px-1 py-px border text-[8px] font-bold ${priorityStyle(prio)}`}>
+          P{prio}
+        </span>
+        <span className="w-14 text-[#888] truncate uppercase tracking-wider">
+          {task.robotId.replace("vicpinky", "VP").replace("tb3_0", "TB")}
+        </span>
+        <span className="flex-1 text-[#666] uppercase tracking-wider truncate">
+          {TASK_LABELS[task.type]}
+          {task.targetId && <span className="text-[#444] ml-1">→{task.targetId}</span>}
+        </span>
+        <span className={`px-1.5 py-px border text-[9px] font-bold uppercase ${STATUS_STYLE[task.status]}`}>
+          {task.status}
+        </span>
+        {canCancel ? (
+          <button
+            onClick={onCancel}
+            className="w-5 h-5 flex items-center justify-center text-[#333] hover:text-red-500 transition-colors"
+            title="취소"
+          >✕</button>
+        ) : (
+          <div className="w-5" />
+        )}
+      </div>
+      {task.waitReason && task.status === "queued" && (
+        <p className="px-3 pb-1.5 text-[9px] text-amber-500/60 font-mono leading-tight">
+          ⏸ {task.waitReason}
+        </p>
       )}
     </div>
   );
@@ -284,14 +305,15 @@ type FilterTab = "all" | "active" | "queued" | "completed" | "failed";
 
 type ContentTab = "fleet" | "map";
 
-export default function FmsView({ rosMessages, fmsTasks, socket, emitFmsDispatch, emitFmsCancel, emitNavGoal, emitNavInitialPose }: Props) {
+export default function FmsView({ rosMessages, fmsTasks, tmAlerts, socket, emitFmsDispatch, emitFmsCancel, emitNavGoal, emitNavInitialPose, ackTmAlert, setRobotHome }: Props) {
   const [filterTab,   setFilterTab]   = useState<FilterTab>("all");
   const [contentTab,  setContentTab]  = useState<ContentTab>("map");
-  const [form, setForm] = useState<{ robotId: string; type: TaskType; targetId: string; notes: string }>({
-    robotId: "tb3_01",
-    type: "explore",
-    targetId: "",
-    notes: "",
+  const [form, setForm] = useState<{
+    robotId: string; type: TaskType; targetId: string; notes: string;
+    priority: number; goalX: string; goalY: string; goalYaw: string;
+  }>({
+    robotId: "tb3_01", type: "explore", targetId: "", notes: "",
+    priority: 5, goalX: "0", goalY: "0", goalYaw: "0",
   });
 
   // 통계
@@ -320,8 +342,14 @@ export default function FmsView({ rosMessages, fmsTasks, socket, emitFmsDispatch
       type:     form.type,
       targetId: form.targetId || undefined,
       notes:    form.notes    || undefined,
+      priority: form.priority,
+      ...(form.type === "navigate" ? {
+        goalX:   parseFloat(form.goalX)   || 0,
+        goalY:   parseFloat(form.goalY)   || 0,
+        goalYaw: parseFloat(form.goalYaw) || 0,
+      } : {}),
     });
-    setForm((f) => ({ ...f, targetId: "", notes: "" }));
+    setForm((f) => ({ ...f, targetId: "", notes: "", goalX: "0", goalY: "0", goalYaw: "0" }));
   };
 
   const TABS: { key: FilterTab; label: string }[] = [
@@ -333,12 +361,13 @@ export default function FmsView({ rosMessages, fmsTasks, socket, emitFmsDispatch
   ];
 
   const taskTypes: { value: TaskType; label: string; bots: string[] }[] = [
-    { value: "explore",       label: "탐사",       bots: ["tb3_01","tb3_02","tb3_03","tb3_04"] },
-    { value: "deliver",       label: "수송",       bots: ["tb3_01","tb3_02","tb3_03","tb3_04"] },
-    { value: "stop",          label: "정지",       bots: ["tb3_01","tb3_02","tb3_03","tb3_04"] },
-    { value: "diagnose",      label: "진단",       bots: ["tb3_01","tb3_02","tb3_03","tb3_04"] },
-    { value: "carrier_task",  label: "배송 태스크", bots: ["vicpinky"] },
-    { value: "emergency_stop","label": "긴급정지",  bots: ["vicpinky","tb3_01","tb3_02","tb3_03","tb3_04","omx"] },
+    { value: "navigate",      label: "네비게이션",   bots: ["tb3_01","tb3_02","tb3_03","tb3_04"] },
+    { value: "explore",       label: "탐사",        bots: ["tb3_01","tb3_02","tb3_03","tb3_04"] },
+    { value: "deliver",       label: "수송",        bots: ["tb3_01","tb3_02","tb3_03","tb3_04"] },
+    { value: "stop",          label: "정지",        bots: ["tb3_01","tb3_02","tb3_03","tb3_04"] },
+    { value: "diagnose",      label: "진단",        bots: ["tb3_01","tb3_02","tb3_03","tb3_04"] },
+    { value: "carrier_task",  label: "배송 태스크",  bots: ["vicpinky"] },
+    { value: "emergency_stop","label": "긴급정지",   bots: ["vicpinky","tb3_01","tb3_02","tb3_03","tb3_04","omx"] },
   ];
 
   const availableTypes = taskTypes.filter((t) => t.bots.includes(form.robotId));
@@ -357,6 +386,13 @@ export default function FmsView({ rosMessages, fmsTasks, socket, emitFmsDispatch
           color={activeCount > 0 ? "text-blue-400" : "text-[#444]"} />
         <Stat label="인원 감지" value={String(alertCount)}
           color={alertCount > 0 ? "text-red-500 danger-pulse" : "text-[#444]"} />
+        {tmAlerts.filter((a) => a.requiresAction).length > 0 && (
+          <Stat
+            label="조치 필요"
+            value={String(tmAlerts.filter((a) => a.requiresAction).length)}
+            color="text-amber-400 danger-pulse"
+          />
+        )}
         <div className="flex-1" />
         <span className="text-[9px] font-mono text-[#2a2a2a] uppercase tracking-widest">
           FLEET MANAGEMENT SYSTEM
@@ -396,6 +432,7 @@ export default function FmsView({ rosMessages, fmsTasks, socket, emitFmsDispatch
                 socket={socket}
                 onSendGoal={emitNavGoal}
                 onSetInitialPose={emitNavInitialPose}
+                onSetHome={setRobotHome}
               />
             </div>
           )}
@@ -461,6 +498,48 @@ export default function FmsView({ rosMessages, fmsTasks, socket, emitFmsDispatch
             )}
           </div>
 
+          {/* 관제탑 알림 */}
+          {tmAlerts.length > 0 && (
+            <div className="flex-none border-t border-[#111] max-h-44 overflow-y-auto">
+              <p className="sticky top-0 bg-[#080808] px-3 py-1 text-[9px] font-bold text-amber-500/70
+                            uppercase tracking-[0.25em] font-mono border-b border-[#111] z-10">
+                ⚠ 관제탑 알림 ({tmAlerts.filter((a) => a.requiresAction).length})
+              </p>
+              {tmAlerts.map((alert) => (
+                <div
+                  key={alert.id}
+                  className={`flex items-start gap-2 px-3 py-2 border-b border-[#0d0d0d] ${
+                    alert.requiresAction ? "bg-amber-950/10" : ""
+                  }`}
+                >
+                  <span className={`mt-0.5 text-[8px] flex-none ${
+                    alert.type === "battery"       ? "text-amber-400" :
+                    alert.type === "task_failed"   ? "text-red-400"   :
+                    alert.type === "robot_offline" ? "text-red-400"   :
+                    alert.type === "assigned"      ? "text-blue-400"  :
+                    alert.type === "completed"     ? "text-green-500" : "text-[#555]"
+                  }`}>
+                    {alert.type === "battery" ? "🔋" :
+                     alert.type === "task_failed" ? "✕" :
+                     alert.type === "robot_offline" ? "⚠" :
+                     alert.type === "assigned" ? "▶" :
+                     alert.type === "completed" ? "✓" : "ℹ"}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[9px] font-mono text-[#888] leading-tight">{alert.message}</p>
+                    <p className="text-[8px] font-mono text-[#333] mt-0.5">
+                      {new Date(alert.timestamp).toLocaleTimeString("ko-KR")}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => ackTmAlert(alert.id)}
+                    className="text-[9px] text-[#333] hover:text-[#666] flex-none"
+                  >✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* 태스크 생성 폼 */}
           <div className="flex-none border-t border-[#111] p-3 flex flex-col gap-2.5">
             <p className="text-[9px] font-bold text-[#333] uppercase tracking-[0.25em] font-mono">
@@ -494,6 +573,46 @@ export default function FmsView({ rosMessages, fmsTasks, socket, emitFmsDispatch
                 <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </select>
+
+            {/* 우선순위 */}
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] font-mono text-[#444] uppercase tracking-widest w-12">P</span>
+              <div className="flex flex-1">
+                {([1,3,5,7,10] as const).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setForm((f) => ({ ...f, priority: p }))}
+                    className={`flex-1 py-0.5 text-[8px] font-mono font-bold border-r border-[#111] last:border-0 transition-all ${
+                      form.priority === p
+                        ? p <= 2 ? "bg-red-900/40 text-red-400" :
+                          p <= 4 ? "bg-amber-900/40 text-amber-400" :
+                          p <= 6 ? "bg-blue-900/40 text-blue-400" :
+                                   "bg-[#111] text-[#555]"
+                        : "text-[#333] hover:text-[#666]"
+                    }`}
+                  >
+                    {p <= 2 ? "긴급" : p <= 4 ? "높음" : p <= 6 ? "보통" : p <= 8 ? "낮음" : "최저"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* navigate: 좌표 입력 */}
+            {form.type === "navigate" && (
+              <div className="flex gap-1">
+                {(["goalX","goalY","goalYaw"] as const).map((k) => (
+                  <input
+                    key={k}
+                    type="number" step="0.1"
+                    placeholder={k === "goalX" ? "X" : k === "goalY" ? "Y" : "Yaw"}
+                    value={form[k]}
+                    onChange={(e) => setForm((f) => ({ ...f, [k]: e.target.value }))}
+                    className="flex-1 min-w-0 bg-[#0a0a0a] border border-[#1a1a1a] text-[#888] text-[10px] font-mono
+                               px-2 py-1.5 placeholder-[#2a2a2a] focus:outline-none focus:border-red-900/60"
+                  />
+                ))}
+              </div>
+            )}
 
             {/* 타겟 (carrier_task일 때) */}
             {form.type === "carrier_task" && (

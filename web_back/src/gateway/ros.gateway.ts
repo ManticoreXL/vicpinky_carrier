@@ -16,6 +16,7 @@ import { CommandService } from '../command/command.service';
 import { LogsService } from '../logs/logs.service';
 import { FmsService } from '../fms/fms.service';
 import type { CreateTaskDto } from '../fms/fms.service';
+import { TaskManagerService } from '../fms/task-manager.service';
 import type {
   ServiceCallPayload,
   TopicPublishPayload,
@@ -48,6 +49,7 @@ export class RosGateway
     private readonly commandService: CommandService,
     private readonly logsService: LogsService,
     private readonly fmsService: FmsService,
+    private readonly taskManager: TaskManagerService,
   ) {}
 
   // ── 모듈 초기화 시 ROS 메시지 → 프론트 브로드캐스트 등록 ───────────────
@@ -70,6 +72,7 @@ export class RosGateway
 
   afterInit() {
     this.logger.log('WebSocket Gateway 시작 — namespace: /ros');
+    this.taskManager.setServer(this.server);
   }
 
   handleConnection(client: Socket) {
@@ -275,13 +278,27 @@ export class RosGateway
   // FMS (Fleet Management System)
   // ══════════════════════════════════════════════════════════════════════════
 
+  /** TaskManager 경유 — 우선순위 큐 → 배터리/온라인 검증 → 자동 할당 */
   @SubscribeMessage('fms_dispatch_task')
   async handleFmsDispatch(
     @MessageBody() payload: CreateTaskDto,
-    @ConnectedSocket() client: Socket,
   ) {
-    const task = await this.fmsService.createAndDispatch(payload, this.server);
-    this.server.emit('fms_task_created', task);
+    await this.taskManager.enqueue(payload);
+  }
+
+  /** 관제 작업자: 알림 확인 */
+  @SubscribeMessage('task_manager_ack')
+  handleTmAck(@MessageBody() { alertId }: { alertId: string }) {
+    this.taskManager.ackAlert(alertId);
+  }
+
+  /** 홈 위치 등록 (우클릭 → 초기위치 설정과 별개로, 복귀용 홈 등록) */
+  @SubscribeMessage('task_manager_set_home')
+  handleTmSetHome(
+    @MessageBody() { robotId, x, y, yaw }: { robotId: string; x: number; y: number; yaw: number },
+  ) {
+    this.taskManager.setHomePosition(robotId, x, y, yaw);
+    this.server.emit('task_manager_home_set', { robotId, x, y, yaw });
   }
 
   @SubscribeMessage('fms_cancel_task')

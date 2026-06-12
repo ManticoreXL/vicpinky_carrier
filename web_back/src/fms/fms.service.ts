@@ -10,6 +10,10 @@ export interface CreateTaskDto {
   type: TaskType;
   targetId?: string;
   notes?: string;
+  priority?: number;
+  goalX?: number;
+  goalY?: number;
+  goalYaw?: number;
 }
 
 @Injectable()
@@ -21,7 +25,45 @@ export class FmsService {
     private readonly rosService: RosService,
   ) {}
 
-  // ── 생성 + ROS 디스패치 ─────────────────────────────────────────────────────
+  // ── TaskManager용: 큐에만 등록 (즉시 실행 안 함) ────────────────────────
+  async createQueued(dto: CreateTaskDto): Promise<TaskDocument> {
+    const task = await this.taskModel.create({ ...dto, status: 'queued', priority: dto.priority ?? 5 });
+    this.logger.log(`태스크 큐 등록: ${task._id} [${dto.robotId}/${dto.type}] P${dto.priority ?? 5}`);
+    return task;
+  }
+
+  // ── TaskManager용: 우선순위순 queued 태스크 목록 ──────────────────────────
+  async getQueuedTasks(limit = 20): Promise<TaskDocument[]> {
+    return this.taskModel
+      .find({ status: 'queued' })
+      .sort({ priority: 1, createdAt: 1 })
+      .limit(limit)
+      .exec();
+  }
+
+  // ── TaskManager용: 단건 조회 ──────────────────────────────────────────────
+  async getTask(taskId: string): Promise<TaskDocument | null> {
+    return this.taskModel.findById(taskId).exec();
+  }
+
+  // ── TaskManager용: 대기 이유 갱신 ─────────────────────────────────────────
+  async setWaitReason(taskId: string, reason: string): Promise<void> {
+    await this.taskModel.updateOne({ _id: taskId }, { waitReason: reason });
+  }
+
+  // ── TaskManager용: 활성화 + 디스패치 ─────────────────────────────────────
+  async activateAndDispatch(taskId: string, server: Server): Promise<void> {
+    const task = await this.taskModel.findById(taskId).exec();
+    if (!task || task.status !== 'queued') return;
+    await this.taskModel.updateOne(
+      { _id: taskId },
+      { $set: { status: 'active', startedAt: new Date() }, $unset: { waitReason: '' } },
+    );
+    server.emit('fms_task_updated', { _id: taskId, status: 'active', startedAt: new Date(), waitReason: null });
+    this.dispatch(task, server);
+  }
+
+  // ── 생성 + 즉시 ROS 디스패치 (기존 호환) ────────────────────────────────
   async createAndDispatch(dto: CreateTaskDto, server: Server): Promise<TaskDocument> {
     const task = await this.taskModel.create({ ...dto, status: 'queued' });
     this.logger.log(`태스크 생성: ${task._id} [${dto.robotId}/${dto.type}]`);
@@ -86,6 +128,24 @@ export class FmsService {
         );
         break;
 
+      case 'navigate': {
+        const now = Date.now() / 1000;
+        const yaw = task.goalYaw ?? 0;
+        this.rosService.publish({
+          topicName: `/${robotId}/goal_pose`,
+          messageType: 'geometry_msgs/PoseStamped',
+          message: {
+            header: { stamp: { sec: Math.floor(now), nanosec: 0 }, frame_id: 'map' },
+            pose: {
+              position: { x: task.goalX ?? 0, y: task.goalY ?? 0, z: 0 },
+              orientation: { x: 0, y: 0, z: Math.sin(yaw / 2), w: Math.cos(yaw / 2) },
+            },
+          },
+        });
+        // navigate 완료는 TaskManagerService가 amcl_pose로 모니터링
+        break;
+      }
+
       case 'diagnose':
         this.rosService.callService(
           {
@@ -110,7 +170,7 @@ export class FmsService {
   }
 
   // ── 상태 변경 ────────────────────────────────────────────────────────────────
-  private async setStatus(
+  async setStatus(
     taskId: string,
     status: TaskStatus,
     server: Server,

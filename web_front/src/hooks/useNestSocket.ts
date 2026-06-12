@@ -62,15 +62,20 @@ export type MapInfos = Record<string, MapInfo>;
 
 // ── FMS 타입 ─────────────────────────────────────────────────────────────────
 export type TaskStatus = 'queued' | 'active' | 'completed' | 'failed' | 'cancelled';
-export type TaskType   = 'explore' | 'deliver' | 'stop' | 'diagnose' | 'carrier_task' | 'emergency_stop';
+export type TaskType   = 'explore' | 'deliver' | 'stop' | 'diagnose' | 'carrier_task' | 'emergency_stop' | 'navigate';
 
 export interface FmsTask {
   _id: string;
   robotId: string;
   type: TaskType;
   status: TaskStatus;
+  priority: number;
   targetId?: string;
   notes?: string;
+  waitReason?: string;
+  goalX?: number;
+  goalY?: number;
+  goalYaw?: number;
   createdAt: string;
   startedAt?: string;
   completedAt?: string;
@@ -82,6 +87,20 @@ export interface FmsDispatchPayload {
   type: TaskType;
   targetId?: string;
   notes?: string;
+  priority?: number;
+  goalX?: number;
+  goalY?: number;
+  goalYaw?: number;
+}
+
+export interface TaskManagerAlert {
+  id: string;
+  type: 'battery' | 'robot_offline' | 'task_failed' | 'assigned' | 'completed' | 'info';
+  taskId?: string;
+  robotId?: string;
+  message: string;
+  requiresAction: boolean;
+  timestamp: number;
 }
 
 export function useNestSocket() {
@@ -102,6 +121,8 @@ export function useNestSocket() {
 
   // FMS 상태
   const [fmsTasks, setFmsTasks] = useState<FmsTask[]>([]);
+  // Task Manager 알림 (최근 50개 유지)
+  const [tmAlerts, setTmAlerts] = useState<TaskManagerAlert[]>([]);
 
   useEffect(() => {
     const s = io(BACKEND_URL, {
@@ -190,6 +211,11 @@ export function useNestSocket() {
       );
     });
 
+    // ── Task Manager 알림 ───────────────────────────────────────────────────
+    socket.on("task_manager_alert", (alert: TaskManagerAlert) => {
+      setTmAlerts((prev) => [alert, ...prev].slice(0, 50));
+    });
+
     return () => { s.disconnect(); setSocket(null); };
   }, []);
 
@@ -235,13 +261,23 @@ export function useNestSocket() {
     socketRef.current?.emit("nav_set_initialpose", { robotId, x, y, yaw });
   }, []);
 
+  const ackTmAlert = useCallback((alertId: string) => {
+    socketRef.current?.emit("task_manager_ack", { alertId });
+    setTmAlerts((prev) => prev.filter((a) => a.id !== alertId));
+  }, []);
+
+  const setRobotHome = useCallback((robotId: string, x: number, y: number, yaw: number) => {
+    socketRef.current?.emit("task_manager_set_home", { robotId, x, y, yaw });
+  }, []);
+
   return {
     emitCmdVel, emitPublish, emitAction, cancelAction, callService,
     emitFmsDispatch, emitFmsCancel,
     emitNavGoal, emitNavInitialPose,
+    ackTmAlert, setRobotHome,
     nestConnected, rosMessages, socket,
     activeGoals, actionFeedbacks, actionResults,
     mapTimestamps, mapInfos,
-    fmsTasks,
+    fmsTasks, tmAlerts,
   };
 }
