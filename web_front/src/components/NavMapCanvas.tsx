@@ -68,28 +68,46 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
   const scaleRef  = useRef(1);
   const dragRef   = useRef<DragState | null>(null);
 
-  const [availableMaps, setAvailableMaps] = useState<string[]>([]);
-  const [selectedMap,   setSelectedMap]   = useState<string>("");
-  const [mapInfo,       setMapInfo]       = useState<StaticMapInfo | null>(null);
-  const [imgLoaded,     setImgLoaded]     = useState(false);
-  const [interactive,   setInteractive]   = useState(true);
-  const [homeMode,      setHomeMode]      = useState(false);
-  const [selectedBots, setSelectedBots] = useState<Set<string>>(new Set(["tb3_01"]));
-  const [showCamera,    setShowCamera]    = useState(true);
+  const [availableMaps,   setAvailableMaps]   = useState<string[]>([]);
+  const [selectedMap,     setSelectedMap]     = useState<string>("");
+  const [assignments,     setAssignments]     = useState<Record<string, string>>({});
+  const [assignLoading,   setAssignLoading]   = useState(false);
+  const [mapInfo,         setMapInfo]         = useState<StaticMapInfo | null>(null);
+  const [imgLoaded,       setImgLoaded]       = useState(false);
+  const [interactive,     setInteractive]     = useState(true);
+  const [homeMode,        setHomeMode]        = useState(false);
+  const [selectedBots,    setSelectedBots]    = useState<Set<string>>(new Set(["tb3_01"]));
+  const [showCamera,      setShowCamera]      = useState(true);
 
   const base = BACKEND_URL.replace(/\/$/, "");
 
-  // ── 맵 목록 로드 ─────────────────────────────────────────────────────────
+  // ── 맵 목록 + 할당 로드 ──────────────────────────────────────────────────
 
   useEffect(() => {
-    fetch(`${base}/api/map/static/list`)
-      .then((r) => r.json())
-      .then((list: string[]) => {
+    Promise.all([
+      fetch(`${base}/api/map/static/list`).then((r) => r.json() as Promise<string[]>),
+      fetch(`${base}/api/map/assignments`).then((r) => r.json() as Promise<Record<string, string>>),
+    ])
+      .then(([list, asgn]) => {
         setAvailableMaps(list);
-        if (list.length > 0) setSelectedMap(list[0]);
+        setAssignments(asgn);
+        // 첫 선택 로봇의 할당 맵으로 초기화
+        const firstBot = "tb3_01";
+        const initial = asgn[firstBot] ?? list[0] ?? "";
+        if (initial) setSelectedMap(initial);
       })
       .catch(console.error);
   }, [base]);
+
+  // ── 선택 로봇 변경 시 해당 로봇의 할당 맵으로 전환 ─────────────────────
+
+  useEffect(() => {
+    const firstBot = [...selectedBots][0];
+    if (!firstBot || !assignments[firstBot]) return;
+    const assignedMap = assignments[firstBot];
+    if (assignedMap !== selectedMap) setSelectedMap(assignedMap);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBots, assignments]);
 
   // ── 선택된 맵 로드 ────────────────────────────────────────────────────────
 
@@ -269,12 +287,38 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
           <span className="text-[9px] font-mono text-[#444] uppercase tracking-widest">MAP</span>
           <select
             value={selectedMap}
-            onChange={(e) => setSelectedMap(e.target.value)}
-            className="text-[10px] font-mono bg-[#0d0d0d] border border-[#1e1e1e] text-[#aaa] px-2 py-0.5 max-w-[160px] truncate"
+            onChange={async (e) => {
+              const mapName = e.target.value;
+              setSelectedMap(mapName);
+              if (!mapName || selectedBots.size === 0) return;
+              setAssignLoading(true);
+              try {
+                await Promise.all([...selectedBots].map((robotId) =>
+                  fetch(`${base}/api/map/assign`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ robotId, mapName }),
+                  }).then((r) => r.json())
+                ));
+                setAssignments((prev) => {
+                  const next = { ...prev };
+                  for (const id of selectedBots) next[id] = mapName;
+                  return next;
+                });
+              } finally {
+                setAssignLoading(false);
+              }
+            }}
+            className={`text-[10px] font-mono bg-[#0d0d0d] border text-[#aaa] px-2 py-0.5 max-w-[160px] truncate ${
+              assignLoading ? "border-amber-700/50 text-amber-400" : "border-[#1e1e1e]"
+            }`}
           >
             {availableMaps.length === 0 && <option value="">맵 없음</option>}
             {availableMaps.map((m) => <option key={m} value={m}>{m}</option>)}
           </select>
+          {assignLoading && (
+            <span className="text-[9px] font-mono text-amber-400/70 animate-pulse">로딩...</span>
+          )}
         </div>
 
         <div className="w-px h-4 bg-[#1a1a1a]" />
@@ -321,6 +365,14 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
                   {r.label}
                   {hasPlan && (
                     <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-green-400" />
+                  )}
+                  {assignments[r.id] && (
+                    <span
+                      className="absolute -bottom-3 left-0 right-0 text-center text-[7px] font-mono text-[#555] truncate"
+                      title={assignments[r.id]}
+                    >
+                      {assignments[r.id].length > 6 ? assignments[r.id].slice(0, 6) + "…" : assignments[r.id]}
+                    </span>
                   )}
                 </button>
               );

@@ -4,11 +4,13 @@ import { Task, TaskSchema } from './task.schema';
 import { FmsService } from './fms.service';
 import { TaskManagerService } from './task-manager.service';
 import { RosModule } from '../ros/ros.module';
+import { FleetModule } from '../fleet/fleet.module';
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Task.name, schema: TaskSchema }]),
     RosModule,
+    FleetModule,
   ],
   providers: [FmsService, TaskManagerService],
   exports: [FmsService, TaskManagerService],

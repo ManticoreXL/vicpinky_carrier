@@ -6,14 +6,15 @@ import { Task, TaskDocument, TaskStatus, TaskType } from './task.schema';
 import { RosService } from '../ros/ros.service';
 
 export interface CreateTaskDto {
-  robotId: string;
+  task_id?: string;
   type: TaskType;
-  targetId?: string;
-  notes?: string;
+  targetNode: string;
   priority?: number;
-  goalX?: number;
-  goalY?: number;
-  goalYaw?: number;
+}
+
+// task_id 자동 생성 헬퍼
+function genTaskId(): string {
+  return `TASK-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 }
 
 @Injectable()
@@ -25,17 +26,23 @@ export class FmsService {
     private readonly rosService: RosService,
   ) {}
 
-  // ── TaskManager용: 큐에만 등록 (즉시 실행 안 함) ────────────────────────
+  // ── TaskManager용: 우선순위 큐에 등록 ────────────────────────────────────
   async createQueued(dto: CreateTaskDto): Promise<TaskDocument> {
-    const task = await this.taskModel.create({ ...dto, status: 'queued', priority: dto.priority ?? 5 });
-    this.logger.log(`태스크 큐 등록: ${task._id} [${dto.robotId}/${dto.type}] P${dto.priority ?? 5}`);
+    const task = await this.taskModel.create({
+      task_id:    dto.task_id ?? genTaskId(),
+      type:       dto.type,
+      targetNode: dto.targetNode,
+      priority:   dto.priority ?? 5,
+      status:     TaskStatus.PENDING,
+    });
+    this.logger.log(`태스크 등록: ${task.task_id} [${dto.type}→${dto.targetNode}] P${dto.priority ?? 5}`);
     return task;
   }
 
-  // ── TaskManager용: 우선순위순 queued 태스크 목록 ──────────────────────────
-  async getQueuedTasks(limit = 20): Promise<TaskDocument[]> {
+  // ── TaskManager용: 우선순위순 PENDING 태스크 ──────────────────────────────
+  async getPendingTasks(limit = 20): Promise<TaskDocument[]> {
     return this.taskModel
-      .find({ status: 'queued' })
+      .find({ status: TaskStatus.PENDING })
       .sort({ priority: 1, createdAt: 1 })
       .limit(limit)
       .exec();
@@ -51,150 +58,87 @@ export class FmsService {
     await this.taskModel.updateOne({ _id: taskId }, { waitReason: reason });
   }
 
-  // ── TaskManager용: 활성화 + 디스패치 ─────────────────────────────────────
-  async activateAndDispatch(taskId: string, server: Server): Promise<void> {
-    const task = await this.taskModel.findById(taskId).exec();
-    if (!task || task.status !== 'queued') return;
+  // ── TaskManager용: 로봇 할당 + 상태 ASSIGNED ─────────────────────────────
+  async assignToRobot(
+    taskId: string,
+    robotId: string,
+    pathQueue: string[],
+    server: Server,
+  ): Promise<void> {
+    const startedAt = new Date();
     await this.taskModel.updateOne(
       { _id: taskId },
-      { $set: { status: 'active', startedAt: new Date() }, $unset: { waitReason: '' } },
+      {
+        $set: {
+          status:    TaskStatus.ASSIGNED,
+          startedAt,
+          pathQueue,
+          assignedRobot: { robot_id: robotId, is_completed: false },
+        },
+        $unset: { waitReason: '' },
+      },
     );
-    server.emit('fms_task_updated', { _id: taskId, status: 'active', startedAt: new Date(), waitReason: null });
-    this.dispatch(task, server);
+    server.emit('fms_task_updated', {
+      _id: taskId,
+      status: TaskStatus.ASSIGNED,
+      startedAt,
+      pathQueue,
+      assignedRobot: { robot_id: robotId, is_completed: false },
+      waitReason: null,
+    });
   }
 
-  // ── 생성 + 즉시 ROS 디스패치 (기존 호환) ────────────────────────────────
-  async createAndDispatch(dto: CreateTaskDto, server: Server): Promise<TaskDocument> {
-    const task = await this.taskModel.create({ ...dto, status: 'queued' });
-    this.logger.log(`태스크 생성: ${task._id} [${dto.robotId}/${dto.type}]`);
-
-    try {
-      this.dispatch(task, server);
-      await this.setStatus(task._id.toString(), 'active', server, { startedAt: new Date() });
-    } catch (e) {
-      await this.setStatus(task._id.toString(), 'failed', server);
-    }
-
-    return task;
+  // ── TaskManager용: RUNNING 전환 ───────────────────────────────────────────
+  async setRunning(taskId: string, server: Server): Promise<void> {
+    await this.setStatus(taskId, TaskStatus.RUNNING, server);
   }
 
-  // ── ROS 디스패치 ────────────────────────────────────────────────────────────
-  private dispatch(task: TaskDocument, server: Server) {
-    const { robotId, type, targetId } = task;
-    const taskId = task._id.toString();
-
-    switch (type) {
-      case 'explore':
-      case 'deliver':
-      case 'stop':
-        this.rosService.publish({
-          topicName: `/${robotId}/cmd`,
-          messageType: 'std_msgs/String',
-          message: { data: type },
-        });
-        // 토픽 발행은 즉시 완료 처리
-        void this.setStatus(taskId, 'completed', server, { completedAt: new Date() });
-        break;
-
-      case 'emergency_stop':
-        this.rosService.publish({
-          topicName: `/${robotId}/cmd_vel`,
-          messageType: robotId === 'vicpinky' ? 'geometry_msgs/Twist' : 'geometry_msgs/TwistStamped',
-          message: robotId === 'vicpinky'
-            ? { linear: { x: 0, y: 0, z: 0 }, angular: { x: 0, y: 0, z: 0 } }
-            : { header: { stamp: { sec: 0, nanosec: 0 }, frame_id: '' },
-                twist: { linear: { x: 0, y: 0, z: 0 }, angular: { x: 0, y: 0, z: 0 } } },
-        });
-        void this.setStatus(taskId, 'completed', server, { completedAt: new Date() });
-        break;
-
-      case 'carrier_task':
-        this.rosService.sendActionGoal(
-          {
-            actionName: '/vicpinky/carrier_task',
-            actionType: 'carrier_msgs/action/CarrierTask',
-            goal: { task_type: 'deliver', target_id: targetId ?? '', timeout_sec: 0, extra_args: [] },
-          },
-          (fb) => {
-            server.emit('fms_task_feedback', { taskId, feedback: fb.feedback });
-          },
-          async (res) => {
-            const status: TaskStatus = res.status === 3 ? 'completed' : 'failed';
-            await this.setStatus(taskId, status, server, {
-              completedAt: new Date(),
-              result: res.result,
-            });
-          },
-        );
-        break;
-
-      case 'navigate': {
-        const now = Date.now() / 1000;
-        const yaw = task.goalYaw ?? 0;
-        this.rosService.publish({
-          topicName: `/${robotId}/goal_pose`,
-          messageType: 'geometry_msgs/PoseStamped',
-          message: {
-            header: { stamp: { sec: Math.floor(now), nanosec: 0 }, frame_id: 'map' },
-            pose: {
-              position: { x: task.goalX ?? 0, y: task.goalY ?? 0, z: 0 },
-              orientation: { x: 0, y: 0, z: Math.sin(yaw / 2), w: Math.cos(yaw / 2) },
-            },
-          },
-        });
-        // navigate 완료는 TaskManagerService가 amcl_pose로 모니터링
-        break;
-      }
-
-      case 'diagnose':
-        this.rosService.callService(
-          {
-            serviceName: `/${robotId}/run_diagnosis`,
-            serviceType: 'turtlebot3_custom_msgs/srv/SelfDiagnosis',
-            request: { target_component: 'all' },
-          },
-          async (res) => {
-            const r = res as { is_ok?: boolean; summary_message?: string };
-            const status: TaskStatus = r.is_ok ? 'completed' : 'failed';
-            await this.setStatus(taskId, status, server, {
-              completedAt: new Date(),
-              result: res as Record<string, unknown>,
-            });
-          },
-        );
-        break;
-
-      default:
-        this.logger.warn(`알 수 없는 태스크 타입: ${type}`);
-    }
+  // ── TaskManager용: pathQueue 갱신 (waypoint 이동 후) ─────────────────────
+  async updatePathQueue(taskId: string, remaining: string[], server: Server): Promise<void> {
+    await this.taskModel.updateOne({ _id: taskId }, { pathQueue: remaining });
+    server.emit('fms_task_updated', { _id: taskId, pathQueue: remaining });
   }
 
-  // ── 상태 변경 ────────────────────────────────────────────────────────────────
+  // ── ROS 발행: 목표 지점 전송 ──────────────────────────────────────────────
+  publishGoal(robotId: string, x: number, y: number, yaw: number): void {
+    const now = Date.now() / 1000;
+    this.rosService.publish({
+      topicName:   `/${robotId}/goal_pose`,
+      messageType: 'geometry_msgs/PoseStamped',
+      message: {
+        header: { stamp: { sec: Math.floor(now), nanosec: 0 }, frame_id: 'map' },
+        pose: {
+          position:    { x, y, z: 0 },
+          orientation: { x: 0, y: 0, z: Math.sin(yaw / 2), w: Math.cos(yaw / 2) },
+        },
+      },
+    });
+  }
+
+  // ── 상태 변경 (공용) ──────────────────────────────────────────────────────
   async setStatus(
     taskId: string,
     status: TaskStatus,
     server: Server,
     extra: Record<string, unknown> = {},
-  ) {
+  ): Promise<void> {
     await this.taskModel.updateOne({ _id: taskId }, { status, ...extra });
     server.emit('fms_task_updated', { _id: taskId, status, ...extra });
-    this.logger.debug(`태스크 상태 변경: ${taskId} → ${status}`);
   }
 
-  // ── 취소 ────────────────────────────────────────────────────────────────────
+  // ── 취소 ──────────────────────────────────────────────────────────────────
   async cancel(taskId: string, server: Server): Promise<void> {
     const task = await this.taskModel.findById(taskId);
     if (!task) return;
-    if (task.status === 'completed' || task.status === 'failed') return;
-    await this.setStatus(taskId, 'cancelled', server, { completedAt: new Date() });
+    if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED) return;
+    await this.setStatus(taskId, TaskStatus.FAILED, server, { completedAt: new Date() });
   }
 
-  // ── 조회 ────────────────────────────────────────────────────────────────────
-  async list(opts: { status?: string; robotId?: string; limit?: number } = {}) {
+  // ── 목록 조회 ─────────────────────────────────────────────────────────────
+  async list(opts: { status?: string; robot_id?: string; limit?: number } = {}) {
     const filter: Record<string, unknown> = {};
-    if (opts.status)  filter.status  = opts.status;
-    if (opts.robotId) filter.robotId = opts.robotId;
-
+    if (opts.status)   filter.status = opts.status;
+    if (opts.robot_id) filter['assignedRobot.robot_id'] = opts.robot_id;
     return this.taskModel
       .find(filter)
       .sort({ createdAt: -1 })
@@ -203,8 +147,9 @@ export class FmsService {
       .exec();
   }
 
-  // ── 활성 태스크 수 ──────────────────────────────────────────────────────────
   async activeCount(): Promise<number> {
-    return this.taskModel.countDocuments({ status: { $in: ['queued', 'active'] } });
+    return this.taskModel.countDocuments({
+      status: { $in: [TaskStatus.PENDING, TaskStatus.ASSIGNED, TaskStatus.RUNNING] },
+    });
   }
 }

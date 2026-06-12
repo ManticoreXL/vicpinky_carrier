@@ -61,21 +61,19 @@ export type MapTimestamps = Record<string, number>;
 export type MapInfos = Record<string, MapInfo>;
 
 // ── FMS 타입 ─────────────────────────────────────────────────────────────────
-export type TaskStatus = 'queued' | 'active' | 'completed' | 'failed' | 'cancelled';
-export type TaskType   = 'explore' | 'deliver' | 'stop' | 'diagnose' | 'carrier_task' | 'emergency_stop' | 'navigate';
+export type TaskStatus = 'PENDING' | 'ASSIGNED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+export type TaskType   = 'SUPPLY' | 'PROCESS' | 'DISTRIBUTE' | 'CHARGE';
 
 export interface FmsTask {
   _id: string;
-  robotId: string;
+  task_id: string;
   type: TaskType;
   status: TaskStatus;
   priority: number;
-  targetId?: string;
-  notes?: string;
+  targetNode: string;
   waitReason?: string;
-  goalX?: number;
-  goalY?: number;
-  goalYaw?: number;
+  assignedRobot: { robot_id: string | null; is_completed: boolean };
+  pathQueue: string[];
   createdAt: string;
   startedAt?: string;
   completedAt?: string;
@@ -83,14 +81,10 @@ export interface FmsTask {
 }
 
 export interface FmsDispatchPayload {
-  robotId: string;
+  task_id?: string;
   type: TaskType;
-  targetId?: string;
-  notes?: string;
+  targetNode: string;
   priority?: number;
-  goalX?: number;
-  goalY?: number;
-  goalYaw?: number;
 }
 
 export interface TaskManagerAlert {

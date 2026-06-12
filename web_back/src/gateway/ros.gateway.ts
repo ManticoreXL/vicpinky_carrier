@@ -310,7 +310,7 @@ export class RosGateway
 
   @SubscribeMessage('fms_get_tasks')
   async handleFmsGetTasks(
-    @MessageBody() filters: { status?: string; robotId?: string; limit?: number },
+    @MessageBody() filters: { status?: string; robot_id?: string; limit?: number },
     @ConnectedSocket() client: Socket,
   ) {
     const tasks = await this.fmsService.list(filters);

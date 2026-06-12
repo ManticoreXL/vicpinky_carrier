@@ -1,39 +1,56 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 
-export type TaskStatus = 'queued' | 'active' | 'completed' | 'failed' | 'cancelled';
-export type TaskType   = 'explore' | 'deliver' | 'stop' | 'diagnose' | 'carrier_task' | 'emergency_stop' | 'navigate';
+export enum TaskType {
+  SUPPLY     = 'SUPPLY',
+  PROCESS    = 'PROCESS',
+  DISTRIBUTE = 'DISTRIBUTE',
+  CHARGE     = 'CHARGE',
+}
+
+export enum TaskStatus {
+  PENDING   = 'PENDING',
+  ASSIGNED  = 'ASSIGNED',
+  RUNNING   = 'RUNNING',
+  COMPLETED = 'COMPLETED',
+  FAILED    = 'FAILED',
+}
+
 export type TaskDocument = HydratedDocument<Task>;
 
 @Schema({ timestamps: true, collection: 'fms_tasks' })
 export class Task {
-  @Prop({ required: true, index: true })
-  robotId: string;
+  @Prop({ required: true, unique: true, index: true })
+  task_id: string;
 
-  @Prop({ required: true })
+  @Prop({ required: true, enum: TaskType })
   type: TaskType;
 
-  @Prop({ required: true, default: 'queued', index: true })
+  @Prop({ required: true, enum: TaskStatus, default: TaskStatus.PENDING, index: true })
   status: TaskStatus;
 
-  /** 1=긴급 … 5=보통 … 10=낮음. 낮을수록 먼저 실행 */
+  @Prop({ required: true })
+  targetNode: string;
+
+  /** 1=긴급 … 5=보통 … 10=낮음 */
   @Prop({ default: 5, index: true })
   priority: number;
 
   @Prop()
-  targetId?: string;
-
-  @Prop()
-  notes?: string;
-
-  /** 대기 중인 이유 (배터리 부족, 오프라인 등) */
-  @Prop()
   waitReason?: string;
 
-  /** navigate 태스크 목표 좌표 */
-  @Prop() goalX?: number;
-  @Prop() goalY?: number;
-  @Prop() goalYaw?: number;
+  @Prop({
+    type: {
+      robot_id:     { type: String,  default: null  },
+      is_completed: { type: Boolean, default: false },
+    },
+    default: { robot_id: null, is_completed: false },
+  })
+  assignedRobot: { robot_id: string | null; is_completed: boolean };
+
+  /** 경로 탐색으로 생성된 남은 waypoint 목록 */
+  @Prop({ type: [String], default: [] })
+  pathQueue: string[];
 
   @Prop()
   startedAt?: Date;

@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Res, HttpStatus } from '@nestjs/common';
+import { Controller, Get, Post, Param, Body, Res, HttpStatus } from '@nestjs/common';
 import type { Response } from 'express';
 import { MapService } from './map.service';
 
@@ -41,6 +41,24 @@ export class MapController {
   getStaticList(@Res() res: Response) {
     res.set('Access-Control-Allow-Origin', '*');
     return res.json(this.mapService.listStaticMaps());
+  }
+
+  /** 로봇별 현재 맵 할당 목록 */
+  @Get('assignments')
+  getAssignments(@Res() res: Response) {
+    res.set('Access-Control-Allow-Origin', '*');
+    return res.json(this.mapService.getAssignments());
+  }
+
+  /** 로봇에 맵 할당 + nav2 load_map 서비스 호출 */
+  @Post('assign')
+  async assignMap(
+    @Body() body: { robotId: string; mapName: string },
+    @Res() res: Response,
+  ) {
+    const result = await this.mapService.assignMap(body.robotId, body.mapName);
+    res.set('Access-Control-Allow-Origin', '*');
+    return res.status(result.ok ? HttpStatus.OK : HttpStatus.INTERNAL_SERVER_ERROR).json(result);
   }
 
   /** 정적 PGM 맵 → PNG 이미지 */

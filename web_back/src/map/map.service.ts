@@ -31,6 +31,9 @@ interface StoredMap {
   timestamp: number;
 }
 
+const MAPS_DIR = process.env.MAPS_DIR ?? '/home/js/map';
+const ASSIGNMENTS_FILE = path.join(MAPS_DIR, 'assignments.json');
+
 // ── 서비스 ────────────────────────────────────────────────────────────────────
 
 @Injectable()
@@ -40,9 +43,13 @@ export class MapService implements OnModuleInit {
   private readonly updateCbs: ((botId: string, info: MapInfo) => void)[] = [];
   private readonly clearCbs: ((botId: string) => void)[] = [];
 
+  // robotId → mapName
+  private readonly robotAssignments = new Map<string, string>();
+
   constructor(private readonly rosService: RosService) {}
 
   onModuleInit() {
+    this.loadAssignments();
     this.rosService.onMessage((msg) => {
       // 글로벌 /map (project_slam / slam_toolbox) → 'project_slam' 키
       // 네임스페이스 맵 /{botId}/map → 해당 botId 키
@@ -238,20 +245,75 @@ export class MapService implements OnModuleInit {
   private staticCache = new Map<string, { png: Buffer; info: StaticMapInfo }>();
 
   listStaticMaps(): string[] {
-    const mapsDir = process.env.MAPS_DIR ?? path.resolve(process.cwd(), '..');
-    if (!fs.existsSync(mapsDir)) return [];
-    return fs.readdirSync(mapsDir)
-      .filter((f) => f.endsWith('.yaml') && !f.startsWith('.'))
+    if (!fs.existsSync(MAPS_DIR)) return [];
+    return fs.readdirSync(MAPS_DIR)
+      .filter((f) => f.endsWith('.yaml') && !f.startsWith('.') && f !== 'assignments.json')
       .map((f) => f.replace('.yaml', ''))
-      .filter((name) => fs.existsSync(path.join(mapsDir, `${name}.pgm`)));
+      .filter((name) => fs.existsSync(path.join(MAPS_DIR, `${name}.pgm`)));
+  }
+
+  // ── 로봇별 맵 할당 ────────────────────────────────────────────────────────
+
+  getAssignments(): Record<string, string> {
+    return Object.fromEntries(this.robotAssignments);
+  }
+
+  async assignMap(robotId: string, mapName: string): Promise<{ ok: boolean; message: string }> {
+    this.robotAssignments.set(robotId, mapName);
+    this.saveAssignments();
+    this.staticCache.delete(mapName); // 캐시 무효화
+
+    const mapUrl = path.join(MAPS_DIR, `${mapName}.yaml`);
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (ok: boolean, message: string) => {
+        if (done) return;
+        done = true;
+        resolve({ ok, message });
+      };
+      try {
+        this.rosService.callService(
+          {
+            serviceName: `/${robotId}/map_server/load_map`,
+            serviceType: 'nav2_msgs/srv/LoadMap',
+            request: { map_url: mapUrl },
+          },
+          (res) => {
+            const r = res as { result?: number };
+            const ok = r?.result === 0 || r?.result == null;
+            this.logger.log(`[${robotId}] load_map → ${mapName} (result=${r?.result})`);
+            finish(ok, ok ? '맵 로드 완료' : `맵 로드 실패 (code ${r?.result})`);
+          },
+        );
+      } catch (err: unknown) {
+        finish(false, err instanceof Error ? err.message : String(err));
+      }
+      setTimeout(() => finish(true, '요청 전송됨 (응답 없음)'), 5000);
+    });
+  }
+
+  private loadAssignments() {
+    try {
+      if (fs.existsSync(ASSIGNMENTS_FILE)) {
+        const raw = JSON.parse(fs.readFileSync(ASSIGNMENTS_FILE, 'utf8')) as Record<string, string>;
+        for (const [k, v] of Object.entries(raw)) this.robotAssignments.set(k, v);
+        this.logger.log(`맵 할당 로드: ${JSON.stringify(raw)}`);
+      }
+    } catch { /* 파일 없거나 파싱 실패 시 무시 */ }
+  }
+
+  private saveAssignments() {
+    try {
+      if (!fs.existsSync(MAPS_DIR)) fs.mkdirSync(MAPS_DIR, { recursive: true });
+      fs.writeFileSync(ASSIGNMENTS_FILE, JSON.stringify(Object.fromEntries(this.robotAssignments), null, 2));
+    } catch (e) { this.logger.error('할당 저장 실패', e); }
   }
 
   loadStaticMap(name: string): { png: Buffer; info: StaticMapInfo } | null {
     if (this.staticCache.has(name)) return this.staticCache.get(name)!;
 
-    const mapsDir = process.env.MAPS_DIR ?? path.resolve(process.cwd(), '..');
-    const pgmPath  = path.join(mapsDir, `${name}.pgm`);
-    const yamlPath = path.join(mapsDir, `${name}.yaml`);
+    const pgmPath  = path.join(MAPS_DIR, `${name}.pgm`);
+    const yamlPath = path.join(MAPS_DIR, `${name}.yaml`);
 
     if (!fs.existsSync(pgmPath) || !fs.existsSync(yamlPath)) {
       this.logger.warn(`정적 맵 없음: ${pgmPath}`);
