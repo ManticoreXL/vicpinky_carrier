@@ -52,7 +52,8 @@ sudo usermod -aG dialout $USER
 
 # 필요 패키지 설치
 ```bash
-sudo apt-get install python3-pyaudio mpg123 scons build-essential python3-rpi-lgpio alsa-utils flac
+sudo apt update
+sudo apt install python3-pyaudio mpg123 scons build-essential python3-rpi-lgpio alsa-utils flac
 sudo pip3 install adafruit-circuitpython-neopixel-spi gTTS SpeechRecognition --break-system-packages
 ```
 
