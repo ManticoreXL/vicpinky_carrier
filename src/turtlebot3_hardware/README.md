@@ -52,7 +52,7 @@ sudo usermod -aG dialout $USER
 
 # 필요 패키지 설치
 ```bash
-sudo apt-get install python3-pyaudio mpg123 scons build-essential python3-rpi-lgpio flac
+sudo apt-get install python3-pyaudio mpg123 scons build-essential python3-rpi-lgpio alsa-utils flac
 sudo pip3 install adafruit-circuitpython-neopixel-spi gTTS SpeechRecognition --break-system-packages
 ```
 
@@ -112,3 +112,36 @@ ros2 topic pub -1 /speak_cmd std_msgs/msg/String "{data: 'hello'}"
     - Integer
     - default=3
     - `blink` 명령 수신 시 LED 점멸 횟수
+
+# 트리비아
+## 마이크 장치 테스트
+마이크 장치 목록 조회
+```
+arecord -l
+```
+
+실시간 VU 미터 테스트
+```bash
+arecord -D plughw:1,0 -c 2 -r 48000 -f S32_LE -V stereo /dev/null
+```
+
+5초 녹음 테스트
+```
+arecord -D plughw:1,0 -c 2 -r 48000 -f S32_LE -d 5 test.wav
+```
+
+## 스피커 장치 테스트
+스피커 장치 목록 조회
+```bash
+aplay -l
+```
+
+시스템 내장 스피커 테스트
+```bash
+speaker-test -D plughw:1,0 -c 2 -t wav
+```
+
+녹음 파일 재생 테스트
+```bash
+aplay -D plughw:1,0 test.wav
+```
