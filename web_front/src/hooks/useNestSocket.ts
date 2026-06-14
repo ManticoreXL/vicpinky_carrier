@@ -228,7 +228,12 @@ export function useNestSocket() {
       setOccupiedEdges(payload);
     });
 
-    // ── 노드 잠금 상태 ──────────────────────────────────────────────────────
+    // ── 노드 잠금 초기 상태 (연결 시 서버 DB 기준으로 동기화) ──────────────
+    socket.on("node_lock_init", (nodeIds: string[]) => {
+      setLockedNodes(new Set(nodeIds));
+    });
+
+    // ── 노드 잠금 실시간 변경 ───────────────────────────────────────────────
     socket.on("node_lock_changed", ({ node_id, isLocked }: { node_id: string; isLocked: boolean }) => {
       setLockedNodes(prev => {
         const next = new Set(prev);

@@ -161,6 +161,10 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   //
   // 노드를 잠그면 해당 노드를 경유 중인 모든 활성 로봇의 경로를 재계산한다.
 
+  async getLockedNodeIds(): Promise<string[]> {
+    return this.topologyService.getAllLockedNodeIds();
+  }
+
   async lockNode(nodeId: string, isLocked: boolean): Promise<void> {
     await this.topologyService.setNodeLocked(nodeId, isLocked);
     if (!this.server) return;

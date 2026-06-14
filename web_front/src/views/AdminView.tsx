@@ -32,6 +32,7 @@ interface FleetNode {
   x: number;
   y: number;
   yaw: number;
+  isLocked?: boolean;
 }
 
 interface FleetEdge {
@@ -505,6 +506,16 @@ function NodeSection() {
     } catch (e) { setErr(String(e)); }
   }
 
+  async function toggleNodeLock(node: FleetNode) {
+    try {
+      await api(`/api/fleet/topology/nodes/${node.node_id}/lock`, {
+        method: "PATCH",
+        body: JSON.stringify({ isLocked: !node.isLocked }),
+      });
+      void load();
+    } catch (e) { setErr(String(e)); }
+  }
+
   const displayed = mapFilter ? nodes.filter(n => n.map_id === mapFilter) : nodes;
 
   return (
@@ -522,7 +533,7 @@ function NodeSection() {
         <TableWrap>
         <thead>
           <tr className="border-b border-[#1e1e1e]">
-            {["node_id","map_id","타입","x","y","yaw",""].map(h => <th key={h} className={TH}>{h}</th>)}
+            {["node_id","map_id","타입","x","y","yaw","잠금",""].map(h => <th key={h} className={TH}>{h}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -541,6 +552,7 @@ function NodeSection() {
               <td className={TD}><input className={`${INP} w-20`} type="number" step="0.01" value={addDraft.x ?? 0} onChange={e => setAddDraft(d => ({ ...d, x: +e.target.value }))} /></td>
               <td className={TD}><input className={`${INP} w-20`} type="number" step="0.01" value={addDraft.y ?? 0} onChange={e => setAddDraft(d => ({ ...d, y: +e.target.value }))} /></td>
               <td className={TD}><input className={`${INP} w-20`} type="number" step="0.01" value={addDraft.yaw ?? 0} onChange={e => setAddDraft(d => ({ ...d, yaw: +e.target.value }))} /></td>
+              <td className={TD} />
               <td className={TD}>
                 <div className="flex gap-1">
                   <button className={BTN("bg-green-900/40 text-green-300 border-green-800/60")} onClick={add}>저장</button>
@@ -550,13 +562,13 @@ function NodeSection() {
             </tr>
           )}
           {displayed.length === 0 && !adding && (
-            <tr><td colSpan={7} className="px-3 py-6 text-center text-[#333] text-xs">노드 없음</td></tr>
+            <tr><td colSpan={8} className="px-3 py-6 text-center text-[#333] text-xs">노드 없음</td></tr>
           )}
           {displayed.map(n => {
             const isEdit = editId === n.node_id;
             const d = editDraft;
             return (
-              <tr key={n.node_id} className="border-b border-[#141414] hover:bg-[#0f0f0f] transition-colors">
+              <tr key={n.node_id} className={`border-b border-[#141414] hover:bg-[#0f0f0f] transition-colors ${n.isLocked ? "bg-red-950/10" : ""}`}>
                 <td className={TD}>{n.node_id}</td>
                 <td className={TD}>{isEdit ? <input className={INP} value={d.map_id ?? n.map_id} onChange={e => setEditDraft(p => ({ ...p, map_id: e.target.value }))} /> : n.map_id}</td>
                 <td className={TD}>{isEdit
@@ -566,6 +578,12 @@ function NodeSection() {
                 <td className={TD}>{isEdit ? <input className={`${INP} w-20`} type="number" step="0.01" value={d.x ?? n.x} onChange={e => setEditDraft(p => ({ ...p, x: +e.target.value }))} /> : n.x.toFixed(3)}</td>
                 <td className={TD}>{isEdit ? <input className={`${INP} w-20`} type="number" step="0.01" value={d.y ?? n.y} onChange={e => setEditDraft(p => ({ ...p, y: +e.target.value }))} /> : n.y.toFixed(3)}</td>
                 <td className={TD}>{isEdit ? <input className={`${INP} w-20`} type="number" step="0.01" value={d.yaw ?? n.yaw} onChange={e => setEditDraft(p => ({ ...p, yaw: +e.target.value }))} /> : n.yaw.toFixed(3)}</td>
+                <td className={TD}>
+                  <button
+                    className={`px-2 py-0.5 text-[10px] font-bold rounded border transition-colors ${n.isLocked ? "bg-red-900/40 text-red-300 border-red-800/60 hover:bg-red-800/50" : "bg-[#111] text-[#555] border-[#333] hover:text-green-400"}`}
+                    onClick={() => toggleNodeLock(n)}
+                  >{n.isLocked ? "잠김" : "열림"}</button>
+                </td>
                 <td className={TD}>
                   {delConfirm === n.node_id ? (
                     <div className="flex gap-1 items-center">

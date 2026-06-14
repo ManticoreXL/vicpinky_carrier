@@ -89,6 +89,11 @@ export class TopologyService {
     return new Set(locked.map(n => n.node_id));
   }
 
+  async getAllLockedNodeIds(): Promise<string[]> {
+    const locked = await this.nodeModel.find({ isLocked: true }).lean().exec();
+    return locked.map(n => n.node_id);
+  }
+
   async findPath(
     startNodeId: string,
     endNodeId: string,
@@ -195,7 +200,11 @@ export class TopologyService {
     y: number,
     map_id: string,
   ): Promise<string | null> {
-    const nodes = await this.nodeModel.find({ map_id }).lean().exec();
+    // 잠긴 노드 제외 — 없으면 전체로 폴백
+    let nodes = await this.nodeModel.find({ map_id, isLocked: { $ne: true } }).lean().exec();
+    if (nodes.length === 0) {
+      nodes = await this.nodeModel.find({ map_id }).lean().exec();
+    }
     if (nodes.length === 0) return null;
 
     let nearest: string | null = null;

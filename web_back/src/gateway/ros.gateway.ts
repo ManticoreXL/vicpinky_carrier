@@ -322,8 +322,12 @@ export class RosGateway
     @MessageBody() filters: { status?: string; robot_id?: string; limit?: number },
     @ConnectedSocket() client: Socket,
   ) {
-    const tasks = await this.fmsService.list(filters);
+    const [tasks, lockedNodeIds] = await Promise.all([
+      this.fmsService.list(filters),
+      this.taskManager.getLockedNodeIds(),
+    ]);
     client.emit('fms_tasks', tasks);
+    client.emit('node_lock_init', lockedNodeIds);
   }
 
   // ── Nav2: 목표 지점 전송 ─────────────────────────────────────────────────
