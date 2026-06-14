@@ -119,6 +119,8 @@ export function useNestSocket() {
   const [tmAlerts, setTmAlerts] = useState<TaskManagerAlert[]>([]);
   // 로봇별 실시간 상태 (robot_id → status)
   const [robotStatuses, setRobotStatuses] = useState<Record<string, string>>({});
+  // 로봇별 점유 엣지 (robot_id → {from, to, mapId})
+  const [occupiedEdges, setOccupiedEdges] = useState<Record<string, { from: string; to: string; mapId: string }>>({});
 
   useEffect(() => {
     const s = io(BACKEND_URL, {
@@ -217,6 +219,11 @@ export function useNestSocket() {
       setRobotStatuses((prev) => ({ ...prev, [payload.robot_id]: payload.status }));
     });
 
+    // ── 엣지 점유 상태 ──────────────────────────────────────────────────────
+    socket.on("occupied_edges", (payload: Record<string, { from: string; to: string; mapId: string }>) => {
+      setOccupiedEdges(payload);
+    });
+
     return () => { s.disconnect(); setSocket(null); };
   }, []);
 
@@ -280,6 +287,6 @@ export function useNestSocket() {
     activeGoals, actionFeedbacks, actionResults,
     mapTimestamps, mapInfos,
     fmsTasks, tmAlerts,
-    robotStatuses,
+    robotStatuses, occupiedEdges,
   };
 }

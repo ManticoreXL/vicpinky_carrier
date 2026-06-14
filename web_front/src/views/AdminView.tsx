@@ -698,7 +698,7 @@ function EdgeSection() {
       <TableWrap>
         <thead>
           <tr className="border-b border-[#1e1e1e]">
-            {["edge_id","맵","출발 → 도착","방향","잠금",""].map(h => <th key={h} className={TH}>{h}</th>)}
+            {["edge_id","맵","출발 → 도착","방향","가중치","잠금",""].map(h => <th key={h} className={TH}>{h}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -735,6 +735,9 @@ function EdgeSection() {
                   <option value="BOTH_WAY">BOTH_WAY</option>
                   <option value="ONE_WAY">ONE_WAY</option>
                 </select>
+              </td>
+              <td className={TD}>
+                <input className={`${INP} w-16`} type="number" step="1" placeholder="1" value={addDraft.weight ?? ""} onChange={e => setAddDraft(d => ({ ...d, weight: +e.target.value }))} />
               </td>
               <td className={TD}><span className="text-[#444]">—</span></td>
               <td className={TD}>
@@ -781,6 +784,11 @@ function EdgeSection() {
                   {isEdit
                     ? <select className={SEL} value={d.direction ?? e.direction} onChange={ev => setEditDraft(p => ({ ...p, direction: ev.target.value as EdgeDirection }))}><option value="BOTH_WAY">BOTH_WAY</option><option value="ONE_WAY">ONE_WAY</option></select>
                     : <span className={e.direction === "BOTH_WAY" ? "text-cyan-500" : "text-yellow-600"}>{e.direction}</span>}
+                </td>
+                <td className={TD}>
+                  {isEdit
+                    ? <input className={`${INP} w-16`} type="number" step="1" value={d.weight ?? e.weight ?? 1} onChange={ev => setEditDraft(p => ({ ...p, weight: +ev.target.value }))} />
+                    : <span className="text-[#888]">{e.weight ?? 1}</span>}
                 </td>
                 <td className={TD}>
                   <button

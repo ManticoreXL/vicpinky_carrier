@@ -111,6 +111,14 @@ function deriveMapInfo(nodes: FNode[]): MapInfo {
   };
 }
 
+function distToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number) {
+  const l2 = (x2 - x1)**2 + (y2 - y1)**2;
+  if (l2 === 0) return Math.hypot(px - x1, py - y1);
+  let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
+}
+
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -135,6 +143,7 @@ export default function TopologyMapView({
   const [nodes,   setNodes]   = useState<FNode[]>([]);
   const [edges,   setEdges]   = useState<FEdge[]>([]);
   const [hover,   setHover]   = useState<FNode | null>(null);
+  const [hoverEdge, setHoverEdge] = useState<FEdge | null>(null);
 
   // ── 활성 경로에서 강조할 노드/엣지 도출 ──────────────────────────────────
 
@@ -246,7 +255,7 @@ export default function TopologyMapView({
       ctx.fillRect(offX, offY, effectiveInfo.width * scale, effectiveInfo.height * scale);
     }
 
-    // ── 엣지 렌더 — 검정 아웃라인 + 색상 선 ─────────────────────────────
+    // ── 엣지 렌더 — 가중치 기반 두께 + 검정 아웃라인 ─────────────────────
 
     edges.forEach(e => {
       const sn = nodes.find(n => n.node_id === e.startNode);
@@ -259,18 +268,32 @@ export default function TopologyMapView({
       const bwdKey     = `${e.endNode}→${e.startNode}`;
       const activeRobot = activeEdgeMap[fwdKey] ?? activeEdgeMap[bwdKey];
       const robotColor  = activeRobot ? robotColorMap[activeRobot] : null;
-      const lineColor   = robotColor ?? (e.isLocked ? "#f87171" : "#22d3ee");
-      const lw          = robotColor ? 3 : 2.5;
+
+      const w          = e.weight ?? 1;
+      const isBlocked  = w <= 0.1;
+      const isLow      = w < 1 && !isBlocked;
+
+      // 선 굵기 — 가중치 비례
+      const baseLw = robotColor
+        ? Math.min(7, 3 + w)
+        : isBlocked ? 2 : Math.max(2.5, Math.min(7, 1.5 + w * 1.8));
+
+      // 색상
+      const lineColor = robotColor
+        ?? (e.isLocked ? "#f87171" : isBlocked ? "#6b7280" : isLow ? "#6ee7b7" : "#22d3ee");
 
       ctx.save();
+
+      // 진입 불가: 파선
+      if (isBlocked)        { ctx.setLineDash([5, 5]); ctx.globalAlpha = 0.5; }
+      else if (isLow && !robotColor) { ctx.setLineDash([8, 4]); ctx.globalAlpha = 0.75; }
 
       // 1단계: 검정 아웃라인
       ctx.beginPath();
       ctx.moveTo(sx, sy);
       ctx.lineTo(ex, ey);
       ctx.strokeStyle = "rgba(0,0,0,0.7)";
-      ctx.lineWidth   = lw + 3;
-      ctx.globalAlpha = 1;
+      ctx.lineWidth   = baseLw + 3;
       ctx.stroke();
 
       // 2단계: 색상 선
@@ -278,39 +301,49 @@ export default function TopologyMapView({
       ctx.moveTo(sx, sy);
       ctx.lineTo(ex, ey);
       ctx.strokeStyle = lineColor;
-      ctx.lineWidth   = lw;
-      ctx.globalAlpha = robotColor ? 1 : 0.92;
+      ctx.lineWidth   = baseLw;
       ctx.stroke();
+
+      ctx.setLineDash([]);
       ctx.globalAlpha = 1;
 
-      // ONE_WAY 방향 화살표 (중간 지점)
+      // 가중치 라벨 (1이 아닐 때)
+      if (!isBlocked && w !== 1) {
+        const mx = (sx + ex) / 2, my = (sy + ey) / 2;
+        ctx.font         = "bold 9px monospace";
+        ctx.textAlign    = "center";
+        ctx.textBaseline = "middle";
+        ctx.lineWidth    = 3;
+        ctx.strokeStyle  = "rgba(0,0,0,0.9)";
+        ctx.strokeText(`w${w}`, mx, my - baseLw - 4);
+        ctx.fillStyle    = lineColor;
+        ctx.fillText(`w${w}`, mx, my - baseLw - 4);
+      }
+
+      // ONE_WAY 방향 화살표
       if (e.direction === "ONE_WAY") {
         const angle = Math.atan2(ey - sy, ex - sx);
         const mx = (sx + ex) / 2;
         const my = (sy + ey) / 2;
-        const al = robotColor ? 12 : 10;
-        // 아웃라인
+        const al = robotColor ? 13 : 11;
         ctx.beginPath();
         ctx.moveTo(mx + al * 0.3 * Math.cos(angle), my + al * 0.3 * Math.sin(angle));
         ctx.lineTo(mx - al * Math.cos(angle - 0.42), my - al * Math.sin(angle - 0.42));
         ctx.lineTo(mx - al * Math.cos(angle + 0.42), my - al * Math.sin(angle + 0.42));
         ctx.closePath();
-        ctx.fillStyle   = "rgba(0,0,0,0.7)";
+        ctx.fillStyle = "rgba(0,0,0,0.7)";
         ctx.fill();
-        // 색상 채움
         const al2 = al - 2;
         ctx.beginPath();
         ctx.moveTo(mx + al2 * 0.3 * Math.cos(angle), my + al2 * 0.3 * Math.sin(angle));
         ctx.lineTo(mx - al2 * Math.cos(angle - 0.42), my - al2 * Math.sin(angle - 0.42));
         ctx.lineTo(mx - al2 * Math.cos(angle + 0.42), my - al2 * Math.sin(angle + 0.42));
         ctx.closePath();
-        ctx.fillStyle   = lineColor;
-        ctx.globalAlpha = robotColor ? 1 : 0.92;
+        ctx.fillStyle = lineColor;
         ctx.fill();
-        ctx.globalAlpha = 1;
       }
 
-      // 활성 엣지 — 로봇 ID 라벨
+      // 로봇 라벨
       if (robotColor && activeRobot) {
         const mx = (sx + ex) / 2;
         const my = (sy + ey) / 2;
@@ -319,9 +352,9 @@ export default function TopologyMapView({
         ctx.textBaseline = "bottom";
         ctx.lineWidth    = 3;
         ctx.strokeStyle  = "#000";
-        ctx.strokeText(activeRobot, mx, my - 4);
+        ctx.strokeText(activeRobot, mx, my - baseLw - 1);
         ctx.fillStyle    = robotColor;
-        ctx.fillText(activeRobot, mx, my - 4);
+        ctx.fillText(activeRobot, mx, my - baseLw - 1);
       }
 
       ctx.restore();
@@ -467,14 +500,33 @@ export default function TopologyMapView({
     const rect = canvasRef.current!.getBoundingClientRect();
     const cx = e.clientX - rect.left;
     const cy = e.clientY - rect.top;
+    
+    // 1. 노드 먼저 확인
     for (const n of nodes) {
       const [nx, ny] = worldToCanvas(n.x, n.y, v);
       if (Math.hypot(cx - nx, cy - ny) <= 10) {
         if (hover?.node_id !== n.node_id) setHover(n);
+        if (hoverEdge) setHoverEdge(null);
         return;
       }
     }
     if (hover) setHover(null);
+
+    // 2. 엣지 확인
+    for (const edge of edges) {
+      const sn = nodes.find(n => n.node_id === edge.startNode);
+      const en = nodes.find(n => n.node_id === edge.endNode);
+      if (!sn || !en) continue;
+      const [sx, sy] = worldToCanvas(sn.x, sn.y, v);
+      const [ex, ey] = worldToCanvas(en.x, en.y, v);
+      
+      const d = distToSegment(cx, cy, sx, sy, ex, ey);
+      if (d <= 5) {
+        if (hoverEdge?.edge_id !== edge.edge_id) setHoverEdge(edge);
+        return;
+      }
+    }
+    if (hoverEdge) setHoverEdge(null);
   }
 
   // ── 렌더 ─────────────────────────────────────────────────────────────────
@@ -496,16 +548,32 @@ export default function TopologyMapView({
         ref={canvasRef}
         className="w-full h-full block"
         onMouseMove={handleMouseMove}
-        onMouseLeave={() => setHover(null)}
+        onMouseLeave={() => { setHover(null); setHoverEdge(null); }}
       />
 
-      {/* hover 좌표 — 우상단 */}
+      {/* hover 노드 툴팁 — 우상단 */}
       {hover && (
-        <div className="absolute top-1.5 right-2 text-[9px] font-mono text-[#888] bg-black/60 px-1.5 py-0.5 pointer-events-none">
+        <div className="absolute top-1.5 right-2 text-[9px] font-mono text-[#888] bg-black/80 px-2 py-1 border border-[#2a2a2a] pointer-events-none z-10 shadow-lg">
           <span style={{ color: activeNodeMap[hover.node_id] ? robotColorMap[activeNodeMap[hover.node_id]] : NODE_COLOR[hover.type] }}>
             {hover.node_id}
           </span>
           {"  "}x={hover.x.toFixed(3)}  y={hover.y.toFixed(3)}  yaw={hover.yaw.toFixed(3)}
+        </div>
+      )}
+
+      {/* hover 엣지 툴팁 — 우상단 (노드 툴팁 아래) */}
+      {hoverEdge && !hover && (
+        <div className="absolute top-1.5 right-2 flex flex-col gap-0.5 text-[9px] font-mono bg-black/80 px-2 py-1 border border-[#2a2a2a] pointer-events-none z-10 shadow-lg">
+          <div className="flex items-center gap-2 text-[#ccc]">
+            <span className="font-bold text-cyan-400">{hoverEdge.edge_id}</span>
+            {hoverEdge.isLocked && <span className="text-red-400">🔒 잠김</span>}
+          </div>
+          <div className="text-[#888]">
+            {hoverEdge.startNode} {hoverEdge.direction === "BOTH_WAY" ? "↔" : "→"} {hoverEdge.endNode}
+          </div>
+          <div className="text-amber-500/80">
+            가중치: {hoverEdge.weight ?? 1}
+          </div>
         </div>
       )}
 

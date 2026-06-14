@@ -55,6 +55,7 @@ interface Props {
   emitNavInitialPose: (robotId: string, x: number, y: number, yaw: number) => void;
   ackTmAlert:       (alertId: string) => void;
   setRobotHome:     (robotId: string, x: number, y: number, yaw: number) => void;
+  occupiedEdges?:   Record<string, { from: string; to: string; mapId: string }>;
 }
 
 // ── 유틸 ─────────────────────────────────────────────────────────────────────
@@ -228,7 +229,7 @@ export default function FmsView({
   rosMessages, fmsTasks, tmAlerts, socket,
   emitFmsDispatch, emitFmsCancel,
   emitNavGoal, emitNavInitialPose,
-  ackTmAlert, setRobotHome,
+  ackTmAlert, setRobotHome, occupiedEdges = {},
 }: Props) {
   const [filterTab,      setFilterTab]      = useState<FilterTab>("all");
   const [contentTab,     setContentTab]     = useState<ContentTab>("map");
@@ -361,6 +362,7 @@ export default function FmsView({
                 onSetHome={setRobotHome}
                 activePaths={activePaths}
                 robotPositions={robotPositions}
+                occupiedEdges={occupiedEdges}
                 onNodeClick={(nodeId) => {
                   setForm(f => ({
                     ...f,

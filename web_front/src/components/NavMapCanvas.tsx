@@ -49,6 +49,14 @@ function canvasToWorld(cx: number, cy: number, info: StaticMapInfo, scale: numbe
   };
 }
 
+function distToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number) {
+  const l2 = (x2 - x1)**2 + (y2 - y1)**2;
+  if (l2 === 0) return Math.hypot(px - x1, py - y1);
+  let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2;
+  t = Math.max(0, Math.min(1, t));
+  return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
+}
+
 function quatToYaw(q: { x: number; y: number; z: number; w: number }) {
   return Math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z));
 }
@@ -64,6 +72,8 @@ interface Props {
   activePaths?:     ActivePath[];
   robotPositions?:  Record<string, RobotPos>;
   onNodeClick?:     (nodeId: string) => void;
+  // robot_id → 현재 점유 중인 엣지 {from, to}
+  occupiedEdges?:   Record<string, { from: string; to: string; mapId: string }>;
 }
 
 interface DragState {
@@ -76,7 +86,7 @@ interface DragState {
 
 export default function NavMapCanvas({
   rosMessages, socket, onSendGoal, onSetInitialPose, onSetHome,
-  activePaths = [], robotPositions = {}, onNodeClick,
+  activePaths = [], robotPositions = {}, onNodeClick, occupiedEdges = {},
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef   = useRef<HTMLDivElement>(null);
@@ -86,12 +96,13 @@ export default function NavMapCanvas({
   const dragRef   = useRef<DragState | null>(null);
 
   // topology refs — don't add to draw deps
-  const topoNodesRef    = useRef<FNode[]>([]);
-  const topoEdgesRef    = useRef<FEdge[]>([]);
-  const activePathsRef  = useRef<ActivePath[]>(activePaths);
-  const robotPosRef     = useRef<Record<string, RobotPos>>(robotPositions);
-  const onNodeClickRef  = useRef(onNodeClick);
-  const drawRef         = useRef<() => void>(() => {});
+  const topoNodesRef      = useRef<FNode[]>([]);
+  const topoEdgesRef      = useRef<FEdge[]>([]);
+  const activePathsRef    = useRef<ActivePath[]>(activePaths);
+  const robotPosRef       = useRef<Record<string, RobotPos>>(robotPositions);
+  const onNodeClickRef    = useRef(onNodeClick);
+  const occupiedEdgesRef  = useRef<Record<string, { from: string; to: string; mapId: string }>>({});
+  const drawRef           = useRef<() => void>(() => {});
 
   const [availableMaps,   setAvailableMaps]   = useState<string[]>([]);
   const [selectedMap,     setSelectedMap]     = useState<string>("");
@@ -105,6 +116,7 @@ export default function NavMapCanvas({
   const [showCamera,      setShowCamera]      = useState(true);
   const [showTopology,    setShowTopology]    = useState(true);
   const [hoveredNodeId,   setHoveredNodeId]   = useState<string | null>(null);
+  const [hoveredEdgeId,   setHoveredEdgeId]   = useState<string | null>(null);
   const [topoStats,       setTopoStats]       = useState({ n: 0, e: 0 });
 
   const base = BACKEND_URL.replace(/\/$/, "");
@@ -113,6 +125,7 @@ export default function NavMapCanvas({
   useEffect(() => { activePathsRef.current = activePaths; drawRef.current(); }, [activePaths]);
   useEffect(() => { robotPosRef.current = robotPositions; }, [robotPositions]);
   useEffect(() => { onNodeClickRef.current = onNodeClick; }, [onNodeClick]);
+  useEffect(() => { occupiedEdgesRef.current = occupiedEdges; drawRef.current(); }, [occupiedEdges]);
 
   // ── 맵 목록 + 할당 로드 ──────────────────────────────────────────────────
 
@@ -281,7 +294,19 @@ export default function NavMapCanvas({
         }
       });
 
-      // 엣지 렌더 — 검정 아웃라인 + 색상 선으로 SLAM 맵 모든 배경에서 선명하게
+      // 점유 엣지 집합 구성 ("A→B" 키) — occupiedEdgesRef에서 읽음
+      const occupiedEdgeKeys = new Set<string>();
+      const occupiedEdgeRobotMap: Record<string, string> = {};
+      Object.entries(occupiedEdgesRef.current).forEach(([rid, oe]) => {
+        const k1 = `${oe.from}→${oe.to}`;
+        const k2 = `${oe.to}→${oe.from}`;
+        occupiedEdgeKeys.add(k1);
+        occupiedEdgeKeys.add(k2);
+        occupiedEdgeRobotMap[k1] = rid;
+        occupiedEdgeRobotMap[k2] = rid;
+      });
+
+      // 엣지 렌더 — 가중치 기반 두께 + 검정 아웃라인으로 SLAM 맵 배경에서 선명하게
       topoEdges.forEach(e => {
         const sn = topoNodes.find(n => n.node_id === e.startNode);
         const en = topoNodes.find(n => n.node_id === e.endNode);
@@ -290,21 +315,46 @@ export default function NavMapCanvas({
         const { cx: sx, cy: sy } = worldToCanvas(sn.x, sn.y, info, scale);
         const { cx: ex, cy: ey } = worldToCanvas(en.x, en.y, info, scale);
 
-        const fwdKey    = `${e.startNode}→${e.endNode}`;
-        const bwdKey    = `${e.endNode}→${e.startNode}`;
-        const ar        = activeEdgeMap[fwdKey] ?? activeEdgeMap[bwdKey];
-        const lineColor = ar ? robotColorMap[ar] : e.isLocked ? "#f87171" : "#22d3ee";
-        const lw        = ar ? 3 : 2.5;
+        const fwdKey     = `${e.startNode}→${e.endNode}`;
+        const bwdKey     = `${e.endNode}→${e.startNode}`;
+        const ar         = activeEdgeMap[fwdKey] ?? activeEdgeMap[bwdKey];
+        const isOccupied = occupiedEdgeKeys.has(fwdKey) || occupiedEdgeKeys.has(bwdKey);
+        const occRobot   = occupiedEdgeRobotMap[fwdKey] ?? occupiedEdgeRobotMap[bwdKey];
+        const w          = e.weight ?? 1;
+        const isBlocked  = w <= 0.1; // weight 임계값 이하 = 진입 불가
+        const isLow      = w < 1;    // 비메인 도로
+
+        // 선 굵기: 가중치 비례 (최소 2, 최대 6)
+        const baseLw = ar ? Math.min(6, 2 + w) : isBlocked ? 2 : Math.max(2, Math.min(6, 1 + w * 1.5));
+
+        // 색상 결정
+        let lineColor: string;
+        if (ar)         lineColor = robotColorMap[ar];
+        else if (isOccupied) lineColor = occRobot ? (robotColorMap[occRobot] ?? "#f97316") : "#f97316";
+        else if (e.isLocked) lineColor = "#f87171";
+        else if (isBlocked)  lineColor = "#6b7280";
+        else if (isLow)      lineColor = "#6ee7b7"; // 비메인 = 연초록
+        else                 lineColor = "#22d3ee"; // 메인 = 시안
 
         ctx.save();
 
-        // 1단계: 검정 아웃라인 — 밝은 맵 배경에서도 선이 보이도록
+        // 진입 불가 엣지: 파선으로 표시
+        if (isBlocked) {
+          ctx.setLineDash([5, 5]);
+          ctx.globalAlpha = 0.45;
+        } else if (isLow && !ar) {
+          ctx.setLineDash([8, 4]);
+          ctx.globalAlpha = 0.7;
+        } else {
+          ctx.globalAlpha = 1;
+        }
+
+        // 1단계: 검정 아웃라인 — 밝은 맵 배경에서도 보이도록
         ctx.beginPath();
         ctx.moveTo(sx, sy);
         ctx.lineTo(ex, ey);
         ctx.strokeStyle = "rgba(0,0,0,0.75)";
-        ctx.lineWidth   = lw + 3;
-        ctx.globalAlpha = 1;
+        ctx.lineWidth   = baseLw + 3;
         ctx.stroke();
 
         // 2단계: 색상 선
@@ -312,17 +362,30 @@ export default function NavMapCanvas({
         ctx.moveTo(sx, sy);
         ctx.lineTo(ex, ey);
         ctx.strokeStyle = lineColor;
-        ctx.lineWidth   = lw;
-        ctx.globalAlpha = ar ? 1 : 0.9;
+        ctx.lineWidth   = baseLw;
         ctx.stroke();
+
+        ctx.setLineDash([]);
         ctx.globalAlpha = 1;
+
+        // 가중치 숫자 라벨 (w != 1 일 때만 중앙에 표시)
+        if (!isBlocked && w !== 1) {
+          const mx = (sx + ex) / 2, my = (sy + ey) / 2;
+          ctx.font         = "bold 8px monospace";
+          ctx.textAlign    = "center";
+          ctx.textBaseline = "middle";
+          ctx.strokeStyle  = "rgba(0,0,0,0.9)";
+          ctx.lineWidth    = 3;
+          ctx.strokeText(`w${w}`, mx, my - baseLw - 3);
+          ctx.fillStyle    = lineColor;
+          ctx.fillText(`w${w}`, mx, my - baseLw - 3);
+        }
 
         // ONE_WAY 방향 화살표 (중간 지점)
         if (e.direction === "ONE_WAY") {
           const angle = Math.atan2(ey - sy, ex - sx);
           const mx = (sx + ex) / 2, my = (sy + ey) / 2;
           const al = ar ? 12 : 10;
-          // 아웃라인
           ctx.beginPath();
           ctx.moveTo(mx + al * 0.3 * Math.cos(angle), my + al * 0.3 * Math.sin(angle));
           ctx.lineTo(mx - al * Math.cos(angle - 0.42), my - al * Math.sin(angle - 0.42));
@@ -330,7 +393,6 @@ export default function NavMapCanvas({
           ctx.closePath();
           ctx.fillStyle = "rgba(0,0,0,0.75)";
           ctx.fill();
-          // 색상 채움
           const al2 = al - 2;
           ctx.beginPath();
           ctx.moveTo(mx + al2 * 0.3 * Math.cos(angle), my + al2 * 0.3 * Math.sin(angle));
@@ -338,23 +400,22 @@ export default function NavMapCanvas({
           ctx.lineTo(mx - al2 * Math.cos(angle + 0.42), my - al2 * Math.sin(angle + 0.42));
           ctx.closePath();
           ctx.fillStyle = lineColor;
-          ctx.globalAlpha = ar ? 1 : 0.9;
           ctx.fill();
-          ctx.globalAlpha = 1;
         }
 
-        // 활성 엣지 로봇 라벨
-        if (ar) {
+        // 활성 엣지 로봇 라벨 (경로 로봇 or 점유 로봇)
+        const labelRobot = ar ?? (isOccupied ? occRobot : null);
+        const labelColor = ar ? robotColorMap[ar] : (occRobot ? (robotColorMap[occRobot] ?? "#f97316") : null);
+        if (labelRobot && labelColor) {
           const mx = (sx + ex) / 2, my = (sy + ey) / 2;
           ctx.font         = "bold 8px monospace";
-          ctx.fillStyle    = "#000";
           ctx.textAlign    = "center";
           ctx.textBaseline = "bottom";
           ctx.lineWidth    = 3;
           ctx.strokeStyle  = "#000";
-          ctx.strokeText(ar, mx, my - 4);
-          ctx.fillStyle    = robotColorMap[ar];
-          ctx.fillText(ar, mx, my - 4);
+          ctx.strokeText(labelRobot, mx, my - baseLw - 1);
+          ctx.fillStyle    = labelColor;
+          ctx.fillText(labelRobot, mx, my - baseLw - 1);
         }
         ctx.restore();
       });
@@ -479,18 +540,44 @@ export default function NavMapCanvas({
     const info  = infoRef.current;
     const scale = scaleRef.current;
 
-    // hover 노드 감지
+    // hover 감지
     if (showTopology && info) {
+      let foundNode = false;
       for (const n of topoNodesRef.current) {
         const { cx, cy } = worldToCanvas(n.x, n.y, info, scale);
         if (Math.hypot(x - cx, y - cy) <= 12) {
           if (hoveredNodeId !== n.node_id) setHoveredNodeId(n.node_id);
+          if (hoveredEdgeId) setHoveredEdgeId(null);
           if (dragRef.current) { dragRef.current = { ...dragRef.current, cx: x, cy: y }; draw(); }
+          foundNode = true;
           return;
         }
       }
+      
+      if (!foundNode) {
+        if (hoveredNodeId) setHoveredNodeId(null);
+        
+        let foundEdge = false;
+        for (const edge of topoEdgesRef.current) {
+          const sn = topoNodesRef.current.find(n => n.node_id === edge.startNode);
+          const en = topoNodesRef.current.find(n => n.node_id === edge.endNode);
+          if (!sn || !en) continue;
+          
+          const { cx: sx, cy: sy } = worldToCanvas(sn.x, sn.y, info, scale);
+          const { cx: ex, cy: ey } = worldToCanvas(en.x, en.y, info, scale);
+          
+          if (distToSegment(x, y, sx, sy, ex, ey) <= 6) {
+            if (hoveredEdgeId !== edge.edge_id) setHoveredEdgeId(edge.edge_id);
+            foundEdge = true;
+            return;
+          }
+        }
+        if (!foundEdge && hoveredEdgeId) setHoveredEdgeId(null);
+      }
+    } else {
+      if (hoveredNodeId) setHoveredNodeId(null);
+      if (hoveredEdgeId) setHoveredEdgeId(null);
     }
-    if (hoveredNodeId) setHoveredNodeId(null);
 
     if (!dragRef.current) return;
     dragRef.current = { ...dragRef.current, cx: x, cy: y };
@@ -543,8 +630,9 @@ export default function NavMapCanvas({
     ? (rosMessages[`/${soloBot}/plan`]?.data as { poses?: unknown[] } | undefined)?.poses
     : undefined;
 
-  // hover 중인 노드 정보
+  // hover 중인 노드/엣지 정보
   const hNode = hoveredNodeId ? topoNodesRef.current.find(n => n.node_id === hoveredNodeId) : null;
+  const hEdge = hoveredEdgeId && !hNode ? topoEdgesRef.current.find(e => e.edge_id === hoveredEdgeId) : null;
 
   return (
     <div className="flex flex-col h-full bg-[#050505]">
@@ -760,6 +848,22 @@ export default function NavMapCanvas({
             {onNodeClick && (
               <div className="text-[8px] font-mono text-amber-400/70 mt-0.5">클릭하여 목표 설정</div>
             )}
+          </div>
+        )}
+
+        {/* hover 엣지 정보 */}
+        {hEdge && (
+          <div className="absolute top-2 right-2 bg-black/80 border border-[#222] px-2 py-1.5 pointer-events-none z-10 shadow-lg">
+            <div className="flex items-center gap-2 text-[#ccc]">
+              <span className="text-[10px] font-mono font-bold text-cyan-400">{hEdge.edge_id}</span>
+              {hEdge.isLocked && <span className="text-[9px] font-mono text-red-400">🔒 잠김</span>}
+            </div>
+            <div className="text-[9px] font-mono text-[#888] mt-0.5">
+              {hEdge.startNode} {hEdge.direction === "BOTH_WAY" ? "↔" : "→"} {hEdge.endNode}
+            </div>
+            <div className="text-[9px] font-mono text-amber-500/80">
+              가중치: {hEdge.weight ?? 1}
+            </div>
           </div>
         )}
 

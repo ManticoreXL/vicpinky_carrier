@@ -4,6 +4,9 @@ import { Model } from 'mongoose';
 import { Node, NodeDocument, NodeType } from './node.schema';
 import { Edge, EdgeDocument, EdgeDirection } from './edge.schema';
 
+// 이 임계값 이하인 엣지는 진입 불가 (비메인 도로 차단용)
+const MIN_WEIGHT = 0.1;
+
 @Injectable()
 export class TopologyService {
   constructor(
@@ -69,49 +72,62 @@ export class TopologyService {
     await this.edgeModel.updateOne({ edge_id }, { isLocked });
   }
 
-  // ── 경로 탐색 (다익스트라, 잠긴 엣지 제외, 가중치 반영) ──────────────────────────────────────
+  // ── 경로 탐색 ─────────────────────────────────────────────────────────────
+  //
+  // 정책:
+  //   - isLocked=true 엣지 → 완전 제외
+  //   - weight <= MIN_WEIGHT(0.1) → 진입 불가 (비메인 도로 차단)
+  //   - 비용 = 1/weight: 가중치 높을수록(메인 도로) 우선 선택
+  //   - occupiedEdges: "A→B" 형식으로 다른 로봇이 점유한 엣지
 
   async findPath(
     startNodeId: string,
     endNodeId: string,
     map_id: string,
+    occupiedEdges: Set<string> = new Set(),
   ): Promise<string[]> {
     if (startNodeId === endNodeId) return [startNodeId];
 
-    const edges = await this.edgeModel.find({ map_id, isLocked: false }).lean().exec();
+    const edges = await this.edgeModel
+      .find({ map_id, isLocked: false, weight: { $gt: MIN_WEIGHT } })
+      .lean()
+      .exec();
 
-    // 인접 리스트 구성: 노드 -> { 이웃, 가중치 }
-    const adj = new Map<string, { to: string; weight: number }[]>();
+    const adj = new Map<string, { to: string; cost: number }[]>();
+
     for (const edge of edges) {
-      const w = edge.weight ?? 1;
-      if (!adj.has(edge.startNode)) adj.set(edge.startNode, []);
-      adj.get(edge.startNode)!.push({ to: edge.endNode, weight: w });
+      const w    = edge.weight ?? 1;
+      const cost = 1 / w;            // 높은 가중치 = 낮은 비용 = 다익스트라 우선
+
+      const fwdKey = `${edge.startNode}→${edge.endNode}`;
+      if (!occupiedEdges.has(fwdKey)) {
+        if (!adj.has(edge.startNode)) adj.set(edge.startNode, []);
+        adj.get(edge.startNode)!.push({ to: edge.endNode, cost });
+      }
 
       if (edge.direction === EdgeDirection.BOTH_WAY) {
-        if (!adj.has(edge.endNode)) adj.set(edge.endNode, []);
-        adj.get(edge.endNode)!.push({ to: edge.startNode, weight: w });
+        const bwdKey = `${edge.endNode}→${edge.startNode}`;
+        if (!occupiedEdges.has(bwdKey)) {
+          if (!adj.has(edge.endNode)) adj.set(edge.endNode, []);
+          adj.get(edge.endNode)!.push({ to: edge.startNode, cost });
+        }
       }
     }
 
-    // 다익스트라 (우선순위 큐 대신 단순 배열 + 정렬 사용 - 노드 개수 적으므로 충분)
-    const dist = new Map<string, number>();
+    // 다익스트라 (소규모 그래프용 단순 배열 정렬)
+    const dist   = new Map<string, number>();
     const parent = new Map<string, string>();
     const pq: { id: string; d: number }[] = [{ id: startNodeId, d: 0 }];
-    
     dist.set(startNodeId, 0);
 
     while (pq.length > 0) {
       pq.sort((a, b) => a.d - b.d);
       const { id: u, d: distU } = pq.shift()!;
-
       if (u === endNodeId) return this.reconstructPath(parent, startNodeId, endNodeId);
+      if (distU > (dist.get(u) ?? Infinity)) continue;
 
-      const currentDist = dist.get(u) ?? Infinity;
-      if (distU > currentDist) continue;
-
-      for (const neighbor of adj.get(u) ?? []) {
-        const v = neighbor.to;
-        const alt = distU + neighbor.weight;
+      for (const { to: v, cost } of adj.get(u) ?? []) {
+        const alt = distU + cost;
         if (alt < (dist.get(v) ?? Infinity)) {
           dist.set(v, alt);
           parent.set(v, u);
@@ -120,15 +136,51 @@ export class TopologyService {
       }
     }
 
-    return []; // 경로 없음
+    return [];
   }
 
-  private reconstructPath(parent: Map<string, string>, start: string, end: string): string[] {
+  // ── 최근접 스테이션/충전소 탐색 ──────────────────────────────────────────
+  //
+  // 점유 대기 중인 로봇을 가장 가까운 STATION/CHARGER 노드로 안내할 때 사용
+
+  async findNearestStation(
+    fromNodeId: string,
+    map_id: string,
+  ): Promise<string | null> {
+    const stations = await this.nodeModel
+      .find({ map_id, type: { $in: [NodeType.STATION, NodeType.CHARGER] } })
+      .lean()
+      .exec();
+
+    if (stations.length === 0) return null;
+
+    let nearest: string | null = null;
+    let minHops = Infinity;
+
+    for (const st of stations) {
+      if (st.node_id === fromNodeId) return fromNodeId;
+      const path = await this.findPath(fromNodeId, st.node_id, map_id);
+      if (path.length > 0 && path.length < minHops) {
+        minHops  = path.length;
+        nearest  = st.node_id;
+      }
+    }
+
+    return nearest;
+  }
+
+  private reconstructPath(
+    parent: Map<string, string>,
+    start: string,
+    end: string,
+  ): string[] {
     const path: string[] = [];
     let cur = end;
     while (cur !== start) {
       path.unshift(cur);
-      cur = parent.get(cur)!;
+      const p = parent.get(cur);
+      if (!p) return [];
+      cur = p;
     }
     path.unshift(start);
     return path;
