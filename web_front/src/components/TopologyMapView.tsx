@@ -40,6 +40,28 @@ export interface RobotPos {
   y: number;
 }
 
+export function snapNodes(nodes: FNode[], threshold = 0.5): FNode[] {
+  if (!nodes || nodes.length === 0) return [];
+  const alignCoordinates = (values: number[], threshold: number) => {
+    const sorted = [...values].map((v, i) => ({ v, i })).sort((a, b) => a.v - b.v);
+    const aligned = new Array(values.length).fill(0);
+    let groupStart = 0;
+    for (let i = 1; i <= sorted.length; i++) {
+      if (i === sorted.length || sorted[i].v - sorted[i - 1].v > threshold) {
+        let sum = 0;
+        for (let j = groupStart; j < i; j++) sum += sorted[j].v;
+        const avg = sum / (i - groupStart);
+        for (let j = groupStart; j < i; j++) aligned[sorted[j].i] = avg;
+        groupStart = i;
+      }
+    }
+    return aligned;
+  };
+  const alignedX = alignCoordinates(nodes.map(n => n.x), threshold);
+  const alignedY = alignCoordinates(nodes.map(n => n.y), threshold);
+  return nodes.map((n, i) => ({ ...n, x: alignedX[i], y: alignedY[i] }));
+}
+
 interface ViewState {
   scale: number;
   offX: number;
@@ -176,10 +198,11 @@ export default function TopologyMapView({
         .then(r => r.json()).catch(() => []),
     ]).then(([ns, es]) => {
       const loadedNodes = Array.isArray(ns) ? ns as FNode[] : [];
-      const nodeIds = new Set(loadedNodes.map(n => n.node_id));
+      const snappedNodes = snapNodes(loadedNodes, 0.5);
+      const nodeIds = new Set(snappedNodes.map(n => n.node_id));
       const allEdges = Array.isArray(es) ? es as FEdge[] : [];
       const filteredEdges = allEdges.filter(e => nodeIds.has(e.startNode) && nodeIds.has(e.endNode));
-      setNodes(loadedNodes);
+      setNodes(snappedNodes);
       setEdges(filteredEdges);
     });
   }, [mapId]);
@@ -222,7 +245,7 @@ export default function TopologyMapView({
       ctx.fillRect(offX, offY, effectiveInfo.width * scale, effectiveInfo.height * scale);
     }
 
-    // ── 엣지 렌더 ─────────────────────────────────────────────────────────
+    // ── 엣지 렌더 — 검정 아웃라인 + 색상 선 ─────────────────────────────
 
     edges.forEach(e => {
       const sn = nodes.find(n => n.node_id === e.startNode);
@@ -231,45 +254,57 @@ export default function TopologyMapView({
       const [sx, sy] = worldToCanvas(sn.x, sn.y, view);
       const [ex, ey] = worldToCanvas(en.x, en.y, view);
 
-      // 어떤 로봇이 이 엣지를 지나는지 확인 (양방향 모두)
-      const fwdKey = `${e.startNode}→${e.endNode}`;
-      const bwdKey = `${e.endNode}→${e.startNode}`;
+      const fwdKey     = `${e.startNode}→${e.endNode}`;
+      const bwdKey     = `${e.endNode}→${e.startNode}`;
       const activeRobot = activeEdgeMap[fwdKey] ?? activeEdgeMap[bwdKey];
       const robotColor  = activeRobot ? robotColorMap[activeRobot] : null;
+      const lineColor   = robotColor ?? (e.isLocked ? "#f87171" : "#22d3ee");
+      const lw          = robotColor ? 3 : 2.5;
 
+      ctx.save();
+
+      // 1단계: 검정 아웃라인
       ctx.beginPath();
       ctx.moveTo(sx, sy);
       ctx.lineTo(ex, ey);
+      ctx.strokeStyle = "rgba(0,0,0,0.7)";
+      ctx.lineWidth   = lw + 3;
+      ctx.globalAlpha = 1;
+      ctx.stroke();
 
-      if (robotColor) {
-        ctx.strokeStyle = robotColor;
-        ctx.lineWidth   = 3.5;
-        ctx.globalAlpha = 0.85;
-      } else if (e.isLocked) {
-        ctx.strokeStyle = "#6b2424";
-        ctx.lineWidth   = 1.5;
-        ctx.globalAlpha = 1;
-      } else {
-        ctx.strokeStyle = "#374151";
-        ctx.lineWidth   = 1.5;
-        ctx.globalAlpha = 1;
-      }
+      // 2단계: 색상 선
+      ctx.beginPath();
+      ctx.moveTo(sx, sy);
+      ctx.lineTo(ex, ey);
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth   = lw;
+      ctx.globalAlpha = robotColor ? 1 : 0.92;
       ctx.stroke();
       ctx.globalAlpha = 1;
 
-      // ONE_WAY 화살표
+      // ONE_WAY 방향 화살표 (중간 지점)
       if (e.direction === "ONE_WAY") {
         const angle = Math.atan2(ey - sy, ex - sx);
         const mx = (sx + ex) / 2;
         const my = (sy + ey) / 2;
-        const al = robotColor ? 10 : 8;
+        const al = robotColor ? 12 : 10;
+        // 아웃라인
         ctx.beginPath();
-        ctx.moveTo(mx, my);
-        ctx.lineTo(mx - al * Math.cos(angle - 0.4), my - al * Math.sin(angle - 0.4));
-        ctx.lineTo(mx - al * Math.cos(angle + 0.4), my - al * Math.sin(angle + 0.4));
+        ctx.moveTo(mx + al * 0.3 * Math.cos(angle), my + al * 0.3 * Math.sin(angle));
+        ctx.lineTo(mx - al * Math.cos(angle - 0.42), my - al * Math.sin(angle - 0.42));
+        ctx.lineTo(mx - al * Math.cos(angle + 0.42), my - al * Math.sin(angle + 0.42));
         ctx.closePath();
-        ctx.fillStyle = robotColor ?? "#374151";
-        ctx.globalAlpha = robotColor ? 0.85 : 1;
+        ctx.fillStyle   = "rgba(0,0,0,0.7)";
+        ctx.fill();
+        // 색상 채움
+        const al2 = al - 2;
+        ctx.beginPath();
+        ctx.moveTo(mx + al2 * 0.3 * Math.cos(angle), my + al2 * 0.3 * Math.sin(angle));
+        ctx.lineTo(mx - al2 * Math.cos(angle - 0.42), my - al2 * Math.sin(angle - 0.42));
+        ctx.lineTo(mx - al2 * Math.cos(angle + 0.42), my - al2 * Math.sin(angle + 0.42));
+        ctx.closePath();
+        ctx.fillStyle   = lineColor;
+        ctx.globalAlpha = robotColor ? 1 : 0.92;
         ctx.fill();
         ctx.globalAlpha = 1;
       }
@@ -278,12 +313,17 @@ export default function TopologyMapView({
       if (robotColor && activeRobot) {
         const mx = (sx + ex) / 2;
         const my = (sy + ey) / 2;
-        ctx.font      = "bold 9px monospace";
-        ctx.fillStyle = robotColor;
-        ctx.textAlign = "center";
+        ctx.font         = "bold 9px monospace";
+        ctx.textAlign    = "center";
         ctx.textBaseline = "bottom";
+        ctx.lineWidth    = 3;
+        ctx.strokeStyle  = "#000";
+        ctx.strokeText(activeRobot, mx, my - 4);
+        ctx.fillStyle    = robotColor;
         ctx.fillText(activeRobot, mx, my - 4);
       }
+
+      ctx.restore();
     });
 
     // ── 노드 렌더 ─────────────────────────────────────────────────────────

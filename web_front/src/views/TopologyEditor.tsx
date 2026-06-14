@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { BACKEND_URL } from "../config";
 
+import { snapNodes } from "../components/TopologyMapView";
+
 // ── 타입 ─────────────────────────────────────────────────────────────────────
 
 interface MapInfo {
@@ -124,8 +126,9 @@ export default function TopologyEditor() {
       api<FNode[]>(`/api/fleet/topology/nodes?map_id=${mapId}`),
       api<FEdge[]>(`/api/fleet/topology/edges?map_id=${mapId}`),
     ]);
-    setNodes(ns);
-    setEdges(es);
+    const snappedNs = snapNodes(ns || [], 0.5);
+    setNodes(snappedNs);
+    setEdges(es || []);
   }, []);
 
   useEffect(() => {

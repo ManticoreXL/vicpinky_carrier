@@ -3,6 +3,7 @@ import type { Socket } from "socket.io-client";
 import { RosMessage } from "../hooks/useNestSocket";
 import { BACKEND_URL } from "../config";
 import CameraFeed from "./CameraFeed";
+import { snapNodes } from "./TopologyMapView";
 import type { FNode, FEdge, ActivePath, RobotPos } from "./TopologyMapView";
 
 // ── 타입 ─────────────────────────────────────────────────────────────────────
@@ -182,13 +183,14 @@ export default function NavMapCanvas({
         .then(r => r.json()).catch(() => []),
     ]).then(([ns, es]) => {
       const nodes = Array.isArray(ns) ? ns as FNode[] : [];
-      const nodeIds = new Set(nodes.map(n => n.node_id));
+      const snappedNodes = snapNodes(nodes, 0.5);
+      const nodeIds = new Set(snappedNodes.map(n => n.node_id));
       const allEdges = Array.isArray(es) ? es as FEdge[] : [];
       // startNode와 endNode 둘 다 현재 로드된 노드에 존재하는 엣지만 표시
       const edges = allEdges.filter(e => nodeIds.has(e.startNode) && nodeIds.has(e.endNode));
-      topoNodesRef.current = nodes;
+      topoNodesRef.current = snappedNodes;
       topoEdgesRef.current = edges;
-      setTopoStats({ n: nodes.length, e: edges.length });
+      setTopoStats({ n: snappedNodes.length, e: edges.length });
       drawRef.current();
     });
   }, [selectedMap, base]);
@@ -280,7 +282,7 @@ export default function NavMapCanvas({
         }
       });
 
-      // 엣지 렌더
+      // 엣지 렌더 — 검정 아웃라인 + 색상 선으로 SLAM 맵 모든 배경에서 선명하게
       topoEdges.forEach(e => {
         const sn = topoNodes.find(n => n.node_id === e.startNode);
         const en = topoNodes.find(n => n.node_id === e.endNode);
@@ -289,42 +291,71 @@ export default function NavMapCanvas({
         const { cx: sx, cy: sy } = worldToCanvas(sn.x, sn.y, info, scale);
         const { cx: ex, cy: ey } = worldToCanvas(en.x, en.y, info, scale);
 
-        const fwdKey = `${e.startNode}→${e.endNode}`;
-        const bwdKey = `${e.endNode}→${e.startNode}`;
-        const ar     = activeEdgeMap[fwdKey] ?? activeEdgeMap[bwdKey];
-        const edgeColor = ar ? robotColorMap[ar] : e.isLocked ? "#7f1d1d" : "#4b5563";
+        const fwdKey    = `${e.startNode}→${e.endNode}`;
+        const bwdKey    = `${e.endNode}→${e.startNode}`;
+        const ar        = activeEdgeMap[fwdKey] ?? activeEdgeMap[bwdKey];
+        const lineColor = ar ? robotColorMap[ar] : e.isLocked ? "#f87171" : "#22d3ee";
+        const lw        = ar ? 3 : 2.5;
 
         ctx.save();
+
+        // 1단계: 검정 아웃라인 — 밝은 맵 배경에서도 선이 보이도록
         ctx.beginPath();
         ctx.moveTo(sx, sy);
         ctx.lineTo(ex, ey);
-        ctx.strokeStyle = edgeColor;
-        ctx.lineWidth   = ar ? 3.5 : 1.5;
-        ctx.globalAlpha = ar ? 0.9 : 0.65;
+        ctx.strokeStyle = "rgba(0,0,0,0.75)";
+        ctx.lineWidth   = lw + 3;
+        ctx.globalAlpha = 1;
         ctx.stroke();
 
+        // 2단계: 색상 선
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(ex, ey);
+        ctx.strokeStyle = lineColor;
+        ctx.lineWidth   = lw;
+        ctx.globalAlpha = ar ? 1 : 0.9;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+
+        // ONE_WAY 방향 화살표 (중간 지점)
         if (e.direction === "ONE_WAY") {
           const angle = Math.atan2(ey - sy, ex - sx);
           const mx = (sx + ex) / 2, my = (sy + ey) / 2;
-          const al = ar ? 10 : 7;
+          const al = ar ? 12 : 10;
+          // 아웃라인
           ctx.beginPath();
-          ctx.moveTo(mx, my);
-          ctx.lineTo(mx - al * Math.cos(angle - 0.4), my - al * Math.sin(angle - 0.4));
-          ctx.lineTo(mx - al * Math.cos(angle + 0.4), my - al * Math.sin(angle + 0.4));
+          ctx.moveTo(mx + al * 0.3 * Math.cos(angle), my + al * 0.3 * Math.sin(angle));
+          ctx.lineTo(mx - al * Math.cos(angle - 0.42), my - al * Math.sin(angle - 0.42));
+          ctx.lineTo(mx - al * Math.cos(angle + 0.42), my - al * Math.sin(angle + 0.42));
           ctx.closePath();
-          ctx.fillStyle = edgeColor;
+          ctx.fillStyle = "rgba(0,0,0,0.75)";
           ctx.fill();
+          // 색상 채움
+          const al2 = al - 2;
+          ctx.beginPath();
+          ctx.moveTo(mx + al2 * 0.3 * Math.cos(angle), my + al2 * 0.3 * Math.sin(angle));
+          ctx.lineTo(mx - al2 * Math.cos(angle - 0.42), my - al2 * Math.sin(angle - 0.42));
+          ctx.lineTo(mx - al2 * Math.cos(angle + 0.42), my - al2 * Math.sin(angle + 0.42));
+          ctx.closePath();
+          ctx.fillStyle = lineColor;
+          ctx.globalAlpha = ar ? 1 : 0.9;
+          ctx.fill();
+          ctx.globalAlpha = 1;
         }
 
         // 활성 엣지 로봇 라벨
         if (ar) {
           const mx = (sx + ex) / 2, my = (sy + ey) / 2;
-          ctx.globalAlpha  = 1;
           ctx.font         = "bold 8px monospace";
-          ctx.fillStyle    = robotColorMap[ar];
+          ctx.fillStyle    = "#000";
           ctx.textAlign    = "center";
           ctx.textBaseline = "bottom";
-          ctx.fillText(ar, mx, my - 3);
+          ctx.lineWidth    = 3;
+          ctx.strokeStyle  = "#000";
+          ctx.strokeText(ar, mx, my - 4);
+          ctx.fillStyle    = robotColorMap[ar];
+          ctx.fillText(ar, mx, my - 4);
         }
         ctx.restore();
       });

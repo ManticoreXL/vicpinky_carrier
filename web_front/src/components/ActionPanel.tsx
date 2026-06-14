@@ -19,7 +19,7 @@ import type {
 
 // ── Action 정의 ────────────────────────────────────────────────────────────
 
-export type ActionKind = "carrier_task" | "navigate_to_pose";
+export type ActionKind = "carrier_task" | "navigate_to_pose" | "simple_move";
 
 interface ActionDef {
   label: string;
@@ -50,6 +50,28 @@ const ACTION_DEFS: Record<ActionKind, ActionDef> = {
       timeout_sec: parseFloat(v.timeout_sec ?? "0") || 0,
       extra_args: [],
     }),
+  },
+  simple_move: {
+    label: "단순 이동 (Nav2)",
+    actionType: "nav2_msgs/action/NavigateToPose",
+    fields: [
+      { key: "x", label: "X 좌표", placeholder: "1.0", type: "number" },
+      { key: "y", label: "Y 좌표", placeholder: "2.0", type: "number" },
+      { key: "yaw", label: "회전(Yaw)", placeholder: "0.0", type: "number" },
+    ],
+    buildGoal: (v) => {
+      const yaw = parseFloat(v.yaw ?? "0") || 0;
+      return {
+        pose: {
+          header: { frame_id: "map" },
+          pose: {
+            position:    { x: parseFloat(v.x ?? "0") || 0, y: parseFloat(v.y ?? "0") || 0, z: 0.0 },
+            orientation: { x: 0, y: 0, z: Math.sin(yaw / 2), w: Math.cos(yaw / 2) },
+          },
+        },
+        behavior_tree: "",
+      };
+    },
   },
   navigate_to_pose: {
     label: "NavigateToPose (Nav2)",
