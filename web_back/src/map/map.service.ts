@@ -19,11 +19,11 @@ export interface MapInfo {
   resolution: number;
   width: number;
   height: number;
-  origin: { position: { x: number; y: number; z: number } };
-  snapThreshold?: number;
-}
-    orientation: { x: number; y: number; z: number; w: number };
+  origin: { 
+    position: { x: number; y: number; z: number },
+    orientation: { x: number; y: number; z: number; w: number } 
   };
+  snapThreshold?: number;
 }
 
 interface StoredMap {

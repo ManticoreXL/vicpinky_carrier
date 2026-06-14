@@ -19,7 +19,8 @@ export class Robot {
   @Prop({ required: true, enum: RobotStatus, default: RobotStatus.OFFLINE, index: true })
   status: RobotStatus;
 
-  @Prop({ default: null })
+  // 💡 여기에 type: String을 명시하여 NestJS(Mongoose)가 타입을 헷갈리지 않게 해줍니다.
+  @Prop({ type: String, default: null })
   location: string | null; // 현재 위치한 node_id
 
   @Prop({ required: true })

@@ -33,6 +33,7 @@ interface RobotCache {
   batteryPct: number | null;
   posX:       number | null;
   posY:       number | null;
+  yaw:        number | null;
 }
 
 // ── 서비스 ────────────────────────────────────────────────────────────────────
@@ -102,7 +103,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     const botMatch = msg.topic.match(/^\/([^/]+)\//);
     if (botMatch) {
       const id   = botMatch[1];
-      const prev = this.robotCache.get(id) ?? { lastSeen: 0, batteryPct: null, posX: null, posY: null };
+      const prev = this.robotCache.get(id) ?? { lastSeen: 0, batteryPct: null, posX: null, posY: null, yaw: null };
       this.robotCache.set(id, { ...prev, lastSeen: now });
     }
 
@@ -112,7 +113,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       const id  = batMatch[1];
       let pct   = (msg.data as { percentage?: number })?.percentage ?? null;
       if (pct != null && pct <= 1.01) pct *= 100;
-      const prev = this.robotCache.get(id) ?? { lastSeen: now, batteryPct: null, posX: null, posY: null };
+      const prev = this.robotCache.get(id) ?? { lastSeen: now, batteryPct: null, posX: null, posY: null, yaw: null };
       this.robotCache.set(id, { ...prev, batteryPct: pct });
     }
 
