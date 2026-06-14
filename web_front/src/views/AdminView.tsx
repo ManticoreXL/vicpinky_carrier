@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, Fragment } from "react";
+import { useNestSocket } from "../hooks/useNestSocket";
 import { BACKEND_URL } from "../config";
+import TopologyEditor from "./TopologyEditor";
 
 // ── 타입 ─────────────────────────────────────────────────────────────────────
 
@@ -97,7 +99,7 @@ const TASK_TYPE_COLOR: Record<TaskType, string> = {
 
 // ── 섹션: 로봇 ───────────────────────────────────────────────────────────────
 
-function RobotSection() {
+function RobotSection({ liveStatuses }: { liveStatuses: Record<string, string> }) {
   const [robots, setRobots] = useState<Robot[]>([]);
   const [loading, setLoading] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -190,7 +192,24 @@ function RobotSection() {
                     ? <select className={SEL} value={editDraft.status ?? r.status} onChange={e => setEditDraft(d => ({ ...d, status: e.target.value as RobotStatus }))}>
                         {(["IDLE","MOVING","WORKING","ERROR","OFFLINE"] as RobotStatus[]).map(s => <option key={s}>{s}</option>)}
                       </select>
-                    : <span className={`font-bold ${STATUS_COLOR[r.status]}`}>{r.status}</span>}
+                    : (() => {
+                        const live = liveStatuses[r.robot_id];
+                        const display = (live ?? r.status) as RobotStatus;
+                        const isLive  = live != null;
+                        return (
+                          <span className="inline-flex items-center gap-1.5">
+                            {isLive && (
+                              <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${
+                                display === "OFFLINE" ? "bg-[#555]" :
+                                display === "IDLE"    ? "bg-green-400" :
+                                display === "MOVING"  ? "bg-blue-400"  :
+                                display === "WORKING" ? "bg-yellow-400": "bg-red-400"
+                              }`} title="실시간" />
+                            )}
+                            <span className={`font-bold ${STATUS_COLOR[display]}`}>{display}</span>
+                          </span>
+                        );
+                      })()}
                 </td>
                 <td className={TD}>{r.location ?? <span className="text-[#444]">—</span>}</td>
                 <td className={TD}>
@@ -923,9 +942,10 @@ function NodeTypeBadge({ type }: { type: NodeType }) {
 
 // ── 메인 AdminView ────────────────────────────────────────────────────────────
 
-type AdminTab = "robots" | "maps" | "nodes" | "edges" | "tasks";
+type AdminTab = "editor" | "robots" | "maps" | "nodes" | "edges" | "tasks";
 
 const TABS: { id: AdminTab; label: string }[] = [
+  { id: "editor", label: "⊞ 토폴로지 편집기" },
   { id: "robots", label: "로봇" },
   { id: "maps",   label: "맵 (FleetMap)" },
   { id: "nodes",  label: "노드" },
@@ -934,7 +954,8 @@ const TABS: { id: AdminTab; label: string }[] = [
 ];
 
 export default function AdminView() {
-  const [tab, setTab] = useState<AdminTab>("robots");
+  const [tab, setTab] = useState<AdminTab>("editor");
+  const { robotStatuses } = useNestSocket();
 
   return (
     <div className="h-full flex flex-col bg-[#050505] text-[#d4d4d4] overflow-hidden">
@@ -956,13 +977,19 @@ export default function AdminView() {
       </div>
 
       {/* 컨텐츠 */}
-      <div className="flex-1 overflow-y-auto p-5">
-        {tab === "robots" && <RobotSection />}
-        {tab === "maps"   && <MapSection />}
-        {tab === "nodes"  && <NodeSection />}
-        {tab === "edges"  && <EdgeSection />}
-        {tab === "tasks"  && <TaskSection />}
-      </div>
+      {tab === "editor" ? (
+        <div className="flex-1 overflow-hidden">
+          <TopologyEditor />
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto p-5">
+          {tab === "robots" && <RobotSection liveStatuses={robotStatuses} />}
+          {tab === "maps"   && <MapSection />}
+          {tab === "nodes"  && <NodeSection />}
+          {tab === "edges"  && <EdgeSection />}
+          {tab === "tasks"  && <TaskSection />}
+        </div>
+      )}
     </div>
   );
 }

@@ -10,10 +10,11 @@ import type { RosMessage } from '../ros/ros.types';
 
 // ── 상수 ─────────────────────────────────────────────────────────────────────
 
-const LOOP_MS         = 2_000;
-const ONLINE_MS       = 5_000;
-const BATTERY_MIN_PCT = 20;
-const GOAL_ARRIVE_M   = 0.35;
+const LOOP_MS          = 2_000;
+const ONLINE_MS        = 5_000;   // 태스크 할당 시 "온라인 판정" 기준 (ms)
+const OFFLINE_AFTER_MS = 10_000;  // 마지막 메시지 후 이 시간 초과 시 OFFLINE 처리 (ms)
+const BATTERY_MIN_PCT  = 20;
+const GOAL_ARRIVE_M    = 0.35;
 
 // ── 타입 ─────────────────────────────────────────────────────────────────────
 
@@ -51,6 +52,8 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   private readonly robotCache     = new Map<string, RobotCache>();
   // 배터리 알림 중복 방지
   private readonly lastBatteryAlert = new Map<string, number>();
+  // robotId → 직전 동기화 시점의 온라인 여부 (undefined = 미확인)
+  private readonly robotOnlineState = new Map<string, boolean>();
 
   constructor(
     private readonly fmsService:      FmsService,
@@ -179,8 +182,44 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
   private async tick() {
     if (!this.running) return;
-    try { await this.process(); } catch (e) { this.logger.error('루프 오류', e); }
+    try {
+      await this.syncOnlineStatus();
+      await this.process();
+    } catch (e) { this.logger.error('루프 오류', e); }
     this.loopTimer = setTimeout(() => void this.tick(), LOOP_MS);
+  }
+
+  // ── 온라인/오프라인 자동 전환 ─────────────────────────────────────────────
+
+  private async syncOnlineStatus() {
+    const now = Date.now();
+
+    for (const [robotId, cache] of this.robotCache.entries()) {
+      const isNowOnline = now - cache.lastSeen < OFFLINE_AFTER_MS;
+      const wasOnline   = this.robotOnlineState.get(robotId);
+
+      if (isNowOnline && wasOnline !== true) {
+        // 오프라인이었거나 최초 감지 → IDLE 복귀/등록
+        this.robotOnlineState.set(robotId, true);
+        await this.robotService.bringOnlineIfOffline(robotId);
+        if (wasOnline === false) {
+          // 명시적으로 오프라인 → 온라인 복귀
+          this.logger.log(`[온라인] ${robotId} 복귀`);
+          this.emit({ type: 'info', robotId, message: `${robotId} 온라인 복귀`, requiresAction: false });
+          this.server?.emit('robot_status_changed', { robot_id: robotId, status: 'IDLE' });
+        } else {
+          this.logger.log(`[온라인] ${robotId} 최초 감지`);
+          this.server?.emit('robot_status_changed', { robot_id: robotId, status: 'IDLE' });
+        }
+      } else if (!isNowOnline && wasOnline !== false) {
+        // 온라인이었거나 최초 타임아웃 → OFFLINE 처리
+        this.robotOnlineState.set(robotId, false);
+        await this.robotService.setOfflineIfIdle(robotId);
+        this.logger.warn(`[오프라인] ${robotId} — 마지막 수신 ${((now - cache.lastSeen) / 1000).toFixed(1)}s 전`);
+        this.emit({ type: 'robot_offline', robotId, message: `${robotId} 오프라인 (토픽 미수신)`, requiresAction: true });
+        this.server?.emit('robot_status_changed', { robot_id: robotId, status: 'OFFLINE' });
+      }
+    }
   }
 
   private async process() {

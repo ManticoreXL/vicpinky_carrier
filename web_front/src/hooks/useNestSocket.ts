@@ -117,6 +117,8 @@ export function useNestSocket() {
   const [fmsTasks, setFmsTasks] = useState<FmsTask[]>([]);
   // Task Manager 알림 (최근 50개 유지)
   const [tmAlerts, setTmAlerts] = useState<TaskManagerAlert[]>([]);
+  // 로봇별 실시간 상태 (robot_id → status)
+  const [robotStatuses, setRobotStatuses] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const s = io(BACKEND_URL, {
@@ -210,6 +212,11 @@ export function useNestSocket() {
       setTmAlerts((prev) => [alert, ...prev].slice(0, 50));
     });
 
+    // ── 로봇 상태 자동 변경 알림 ────────────────────────────────────────────
+    socket.on("robot_status_changed", (payload: { robot_id: string; status: string }) => {
+      setRobotStatuses((prev) => ({ ...prev, [payload.robot_id]: payload.status }));
+    });
+
     return () => { s.disconnect(); setSocket(null); };
   }, []);
 
@@ -273,5 +280,6 @@ export function useNestSocket() {
     activeGoals, actionFeedbacks, actionResults,
     mapTimestamps, mapInfos,
     fmsTasks, tmAlerts,
+    robotStatuses,
   };
 }

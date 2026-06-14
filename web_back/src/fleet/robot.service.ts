@@ -48,20 +48,45 @@ export class RobotService {
 
   /**
    * ROS 메시지로 처음 감지된 로봇을 DB에 자동 등록.
-   * 이미 존재하면 OFFLINE → IDLE 로 복귀시킨다.
+   * 이미 존재하면 OFFLINE → IDLE 로 복귀시킨다. (process() 루프에서 반환값 필요)
    */
   async autoRegister(robot_id: string): Promise<RobotDocument> {
-    // 없으면 INSERT, 있으면 아무것도 건드리지 않음
     await this.robotModel.updateOne(
       { robot_id },
       { $setOnInsert: { robot_id, ip: 'auto', ros_domain_id: 0, status: RobotStatus.IDLE } },
       { upsert: true },
     );
-    // OFFLINE 상태면 IDLE 복귀 (재연결)
     await this.robotModel.updateOne(
       { robot_id, status: RobotStatus.OFFLINE },
       { status: RobotStatus.IDLE },
     );
     return this.robotModel.findOne({ robot_id }).exec() as Promise<RobotDocument>;
+  }
+
+  /**
+   * ROS 토픽 수신 감지 → OFFLINE 이면 IDLE 로 전환, 신규면 등록.
+   * MOVING/WORKING 상태는 건드리지 않는다.
+   */
+  async bringOnlineIfOffline(robot_id: string): Promise<void> {
+    await this.robotModel.updateOne(
+      { robot_id },
+      { $setOnInsert: { robot_id, ip: 'auto', ros_domain_id: 0, status: RobotStatus.IDLE } },
+      { upsert: true },
+    );
+    await this.robotModel.updateOne(
+      { robot_id, status: RobotStatus.OFFLINE },
+      { status: RobotStatus.IDLE },
+    );
+  }
+
+  /**
+   * ROS 토픽 미수신 → IDLE 상태일 때만 OFFLINE 처리.
+   * MOVING/WORKING 중인 로봇은 건드리지 않는다 (태스크 로직이 별도 처리).
+   */
+  async setOfflineIfIdle(robot_id: string): Promise<void> {
+    await this.robotModel.updateOne(
+      { robot_id, status: RobotStatus.IDLE },
+      { status: RobotStatus.OFFLINE },
+    );
   }
 }
