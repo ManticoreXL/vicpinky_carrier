@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import type { Socket } from "socket.io-client";
 import { RosMessage, FmsTask, FmsDispatchPayload, TaskType, TaskStatus, TaskManagerAlert } from "../hooks/useNestSocket";
 import NavMapCanvas from "../components/NavMapCanvas";
+import TopologyMapView from "../components/TopologyMapView";
 import { BACKEND_URL } from "../config";
 
 // ── 상수 ─────────────────────────────────────────────────────────────────────
@@ -219,7 +220,7 @@ function TaskRow({ task, onCancel }: { task: FmsTask; onCancel: () => void }) {
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
 
 type FilterTab   = "all" | "active" | "PENDING" | "COMPLETED" | "FAILED";
-type ContentTab  = "fleet" | "map";
+type ContentTab  = "fleet" | "map" | "topology";
 
 export default function FmsView({
   rosMessages, fmsTasks, tmAlerts, socket,
@@ -230,6 +231,8 @@ export default function FmsView({
   const [filterTab,      setFilterTab]      = useState<FilterTab>("all");
   const [contentTab,     setContentTab]     = useState<ContentTab>("map");
   const [mapAssignments, setMapAssignments] = useState<Record<string, string>>({});
+  const [topoMapId,      setTopoMapId]      = useState("");
+  const [topoMaps,       setTopoMaps]       = useState<string[]>([]);
   const [form, setForm] = useState<{
     type: TaskType; targetNode: string; priority: number;
   }>({ type: "SUPPLY", targetNode: "", priority: 5 });
@@ -239,6 +242,14 @@ export default function FmsView({
     fetch(`${base}/api/map/assignments`)
       .then((r) => r.json())
       .then((d: Record<string, string>) => setMapAssignments(d))
+      .catch(() => {});
+    fetch(`${base}/api/fleet/maps`)
+      .then(r => r.json())
+      .then((ms: { map_id: string }[]) => {
+        const ids = ms.map(m => m.map_id);
+        setTopoMaps(ids);
+        if (ids.length > 0) setTopoMapId(ids[0]);
+      })
       .catch(() => {});
   }, []);
 
@@ -301,6 +312,7 @@ export default function FmsView({
         <div className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-none flex border-b border-[#111] bg-[#080808]">
             {([ { key: "map" as ContentTab, label: "◈ 네비게이션 맵" },
+                { key: "topology" as ContentTab, label: "⬡ 토폴로지 맵" },
                 { key: "fleet" as ContentTab, label: "⬡ 로봇 플릿" } ] as const).map(({ key, label }) => (
               <button key={key} onClick={() => setContentTab(key)}
                 className={`px-4 py-2 text-[10px] font-bold uppercase tracking-wider font-mono border-r border-[#111] transition-all ${
@@ -320,6 +332,29 @@ export default function FmsView({
                 onSetInitialPose={emitNavInitialPose}
                 onSetHome={setRobotHome}
               />
+            </div>
+          )}
+
+          {contentTab === "topology" && (
+            <div className="flex-1 flex flex-col overflow-hidden p-3 gap-2">
+              {/* 맵 선택 */}
+              <div className="flex items-center gap-2 flex-none">
+                <span className="text-[9px] font-mono text-[#444] uppercase tracking-widest">맵</span>
+                <select
+                  value={topoMapId}
+                  onChange={e => setTopoMapId(e.target.value)}
+                  className="bg-[#111] border border-[#333] rounded px-2 py-1 text-[11px] text-[#ddd] font-mono focus:outline-none focus:border-[#555]"
+                >
+                  <option value="">선택…</option>
+                  {topoMaps.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </div>
+              {/* 캔버스 */}
+              {topoMapId ? (
+                <TopologyMapView mapId={topoMapId} className="flex-1" />
+              ) : (
+                <div className="flex-1 flex items-center justify-center text-[#2a2a2a] text-xs font-mono">위에서 맵을 선택하세요</div>
+              )}
             </div>
           )}
 

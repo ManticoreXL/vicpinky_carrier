@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query, HttpCode } from '@nestjs/common';
 import { TopologyService } from './topology.service';
 import { Node, NodeType } from './node.schema';
 import { Edge } from './edge.schema';
@@ -32,6 +32,7 @@ export class TopologyController {
   }
 
   @Delete('nodes/:id')
+  @HttpCode(204)
   removeNode(@Param('id') id: string) { return this.topologyService.removeNode(id); }
 
   // ── Edges ────────────────────────────────────────────────────────────────
@@ -53,6 +54,7 @@ export class TopologyController {
   }
 
   @Delete('edges/:id')
+  @HttpCode(204)
   removeEdge(@Param('id') id: string) { return this.topologyService.removeEdge(id); }
 
   @Patch('edges/:id/lock')

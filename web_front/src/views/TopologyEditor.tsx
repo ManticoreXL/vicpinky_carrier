@@ -71,7 +71,10 @@ async function api<T>(path: string, opts?: RequestInit): Promise<T> {
     ...opts,
   });
   if (!r.ok) throw new Error(`${r.status}`);
-  return r.json() as Promise<T>;
+  if (r.status === 204) return undefined as T;
+  const text = await r.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
 }
 
 // ── 스타일 상수 ───────────────────────────────────────────────────────────────
@@ -83,9 +86,10 @@ const BTN = (c: string) => `px-2 py-1 text-[10px] font-bold uppercase tracking-w
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
 
 export default function TopologyEditor() {
-  const canvasRef  = useRef<HTMLCanvasElement>(null);
-  const imgRef     = useRef<HTMLImageElement | null>(null);
-  const viewRef    = useRef<ViewState | null>(null);
+  const canvasRef         = useRef<HTMLCanvasElement>(null);
+  const imgRef            = useRef<HTMLImageElement | null>(null);
+  const viewRef           = useRef<ViewState | null>(null);
+  const renderCallbackRef = useRef<() => void>(() => {});
 
   const [mapList,     setMapList]     = useState<string[]>([]);
   const [selMap,      setSelMap]      = useState("");
@@ -97,6 +101,7 @@ export default function TopologyEditor() {
   const [selEdgeId,   setSelEdgeId]   = useState<string | null>(null);
   const [edgeStart,   setEdgeStart]   = useState<string | null>(null);
   const [hover,       setHover]       = useState<[number, number] | null>(null);
+  const [hoverNode,   setHoverNode]   = useState<FNode | null>(null);
   const [err,         setErr]         = useState("");
 
   // 노드 추가 폼
@@ -132,7 +137,7 @@ export default function TopologyEditor() {
         setMapInfo(info);
         const img = new Image();
         img.src = `${BACKEND_URL}/api/map/static/${selMap}/image`;
-        img.onload = () => { imgRef.current = img; renderCanvas(); };
+        img.onload = () => { imgRef.current = img; renderCallbackRef.current(); };
       })
       .catch(() => setErr("맵 정보 로드 실패"));
 
@@ -256,15 +261,56 @@ export default function TopologyEditor() {
       ctx.fillText(n.node_id, cx + r + 2, cy);
     });
 
-    // 마우스 위치 십자선 + 좌표
+    // 마우스 위치 십자선
     if (hover) {
       const [hx, hy] = worldToCanvas(hover[0], hover[1], view);
       ctx.strokeStyle = "#ffffff22";
       ctx.lineWidth   = 1;
-      ctx.beginPath(); ctx.moveTo(hx, 0);   ctx.lineTo(hx, H);   ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(0, hy);   ctx.lineTo(W, hy);   ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(hx, 0); ctx.lineTo(hx, H); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, hy); ctx.lineTo(W, hy); ctx.stroke();
+
+      // 노드 위 호버 시 x/y/yaw 플로팅 툴팁
+      if (hoverNode) {
+        const lines = [
+          `x   ${hoverNode.x.toFixed(3)}`,
+          `y   ${hoverNode.y.toFixed(3)}`,
+          `yaw ${hoverNode.yaw.toFixed(3)} rad`,
+        ];
+        const pad = 7;
+        const lh  = 14;
+        const bw  = 148;
+        const bh  = pad * 2 + lh * (lines.length + 1);
+        let tx = hx + 16;
+        let ty = hy - bh / 2;
+        if (tx + bw > W) tx = hx - bw - 16;
+        if (ty < 2)      ty = 2;
+        if (ty + bh > H - 2) ty = H - bh - 2;
+
+        ctx.fillStyle   = "rgba(8,8,8,0.88)";
+        ctx.fillRect(tx, ty, bw, bh);
+        ctx.strokeStyle = "#2a2a2a";
+        ctx.lineWidth   = 1;
+        ctx.strokeRect(tx, ty, bw, bh);
+
+        // 노드 ID (헤더)
+        ctx.font         = "bold 10px monospace";
+        ctx.textAlign    = "left";
+        ctx.textBaseline = "top";
+        ctx.fillStyle    = NODE_COLOR[hoverNode.type] ?? "#888";
+        ctx.fillText(hoverNode.node_id, tx + pad, ty + pad);
+
+        // 좌표값
+        ctx.font      = "10px monospace";
+        ctx.fillStyle = "#aaaaaa";
+        lines.forEach((line, i) => {
+          ctx.fillText(line, tx + pad, ty + pad + lh * (i + 1));
+        });
+      }
     }
-  }, [mapInfo, nodes, edges, selNodeId, selEdgeId, edgeStart, hover]);
+  }, [mapInfo, nodes, edges, selNodeId, selEdgeId, edgeStart, hover, hoverNode]);
+
+  // renderCallbackRef를 항상 최신 renderCanvas로 유지 (img.onload 스테일 클로저 방지)
+  useEffect(() => { renderCallbackRef.current = renderCanvas; }, [renderCanvas]);
 
   // 맵 정보나 데이터 변경 시 재렌더
   useEffect(() => { renderCanvas(); }, [renderCanvas]);
@@ -318,11 +364,15 @@ export default function TopologyEditor() {
     const v = viewRef.current;
     if (!v) return;
     const rect = canvasRef.current!.getBoundingClientRect();
-    const [wx, wy] = canvasToWorld(e.clientX - rect.left, e.clientY - rect.top, v);
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+    const [wx, wy] = canvasToWorld(cx, cy, v);
     setHover([wx, wy]);
+    const n = hitNode(cx, cy);
+    setHoverNode(n);
   }
 
-  function handleMouseLeave() { setHover(null); }
+  function handleMouseLeave() { setHover(null); setHoverNode(null); }
 
   function handleClick(e: React.MouseEvent<HTMLCanvasElement>) {
     const v = viewRef.current;
@@ -488,8 +538,17 @@ export default function TopologyEditor() {
 
           {/* 좌표 표시 */}
           {hover && mapInfo && (
-            <span className="text-[10px] text-[#666] font-mono">
-              x={hover[0].toFixed(3)}  y={hover[1].toFixed(3)}
+            <span className="text-[10px] font-mono">
+              {hoverNode ? (
+                <span className="text-[#888]">
+                  <span style={{ color: NODE_COLOR[hoverNode.type] }}>{hoverNode.node_id}</span>
+                  {"  "}x={hoverNode.x.toFixed(3)}  y={hoverNode.y.toFixed(3)}  yaw={hoverNode.yaw.toFixed(3)}
+                </span>
+              ) : (
+                <span className="text-[#555]">
+                  x={hover[0].toFixed(3)}  y={hover[1].toFixed(3)}
+                </span>
+              )}
             </span>
           )}
 

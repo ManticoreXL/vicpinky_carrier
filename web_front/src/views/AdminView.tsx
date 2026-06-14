@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, Fragment } from "react";
 import { useNestSocket } from "../hooks/useNestSocket";
 import { BACKEND_URL } from "../config";
 import TopologyEditor from "./TopologyEditor";
+import TopologyMapView from "../components/TopologyMapView";
 
 // ── 타입 ─────────────────────────────────────────────────────────────────────
 
@@ -62,7 +63,10 @@ async function api<T>(path: string, opts?: RequestInit): Promise<T> {
     ...opts,
   });
   if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
-  return res.json() as Promise<T>;
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  if (!text) return undefined as T;
+  return JSON.parse(text) as T;
 }
 
 // ── 공통 스타일 ───────────────────────────────────────────────────────────────
@@ -503,16 +507,18 @@ function NodeSection() {
   const displayed = mapFilter ? nodes.filter(n => n.map_id === mapFilter) : nodes;
 
   return (
-    <div>
-      <div className="flex items-center gap-3 mb-2">
-        <SectionHeader title="노드" count={displayed.length} onAdd={() => { setAdding(true); setErr(""); }} onRefresh={load} loading={loading} noMargin />
-        <select className={`${SEL} w-40`} value={mapFilter} onChange={e => setMapFilter(e.target.value)}>
-          <option value="">전체 맵</option>
-          {maps.map(m => <option key={m} value={m}>{m}</option>)}
-        </select>
-      </div>
-      {err && <ErrBar msg={err} onClose={() => setErr("")} />}
-      <TableWrap>
+    <div className="flex gap-4 items-start">
+      {/* 테이블 영역 */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-3 mb-2">
+          <SectionHeader title="노드" count={displayed.length} onAdd={() => { setAdding(true); setErr(""); }} onRefresh={load} loading={loading} noMargin />
+          <select className={`${SEL} w-40`} value={mapFilter} onChange={e => setMapFilter(e.target.value)}>
+            <option value="">전체 맵</option>
+            {maps.map(m => <option key={m} value={m}>{m}</option>)}
+          </select>
+        </div>
+        {err && <ErrBar msg={err} onClose={() => setErr("")} />}
+        <TableWrap>
         <thead>
           <tr className="border-b border-[#1e1e1e]">
             {["node_id","map_id","타입","x","y","yaw",""].map(h => <th key={h} className={TH}>{h}</th>)}
@@ -583,6 +589,15 @@ function NodeSection() {
           })}
         </tbody>
       </TableWrap>
+      </div>
+
+      {/* 맵 미리보기 — 맵 필터 선택 시 우측 표시 */}
+      {mapFilter && (
+        <div className="w-[420px] flex-none sticky top-0">
+          <div className="text-[9px] text-[#444] uppercase tracking-widest mb-1 font-mono">{mapFilter}</div>
+          <TopologyMapView mapId={mapFilter} className="h-[420px]" />
+        </div>
+      )}
     </div>
   );
 }
@@ -660,7 +675,8 @@ function EdgeSection() {
   const displayed = mapFilter ? edges.filter(e => e.map_id === mapFilter) : edges;
 
   return (
-    <div>
+    <div className="flex gap-4 items-start">
+      <div className="flex-1 min-w-0">
       <div className="flex items-center gap-3 mb-2">
         <SectionHeader title="엣지" count={displayed.length} onAdd={() => { setAdding(true); setErr(""); }} onRefresh={load} loading={loading} noMargin />
         <select className={`${SEL} w-40`} value={mapFilter} onChange={e => setMapFilter(e.target.value)}>
@@ -761,6 +777,15 @@ function EdgeSection() {
           })}
         </tbody>
       </TableWrap>
+      </div>
+
+      {/* 맵 미리보기 */}
+      {mapFilter && (
+        <div className="w-[420px] flex-none sticky top-0">
+          <div className="text-[9px] text-[#444] uppercase tracking-widest mb-1 font-mono">{mapFilter}</div>
+          <TopologyMapView mapId={mapFilter} className="h-[420px]" />
+        </div>
+      )}
     </div>
   );
 }
@@ -771,11 +796,19 @@ function TaskSection() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState("");
+  const [mapPreview, setMapPreview] = useState("");
+  const [maps, setMaps] = useState<string[]>([]);
   const [adding, setAdding] = useState(false);
   const [addDraft, setAddDraft] = useState({ type: "SUPPLY" as TaskType, targetNode: "", priority: 5 });
   const [delConfirm, setDelConfirm] = useState<string | null>(null);
   const [cancelConfirm, setCancelConfirm] = useState<string | null>(null);
   const [err, setErr] = useState("");
+
+  useEffect(() => {
+    api<{ map_id: string }[]>("/api/fleet/maps")
+      .then(ms => setMaps(ms.map(m => m.map_id)))
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -812,12 +845,17 @@ function TaskSection() {
   }
 
   return (
-    <div>
+    <div className="flex gap-4 items-start">
+      <div className="flex-1 min-w-0">
       <div className="flex items-center gap-3 mb-2">
         <SectionHeader title="태스크" count={tasks.length} onAdd={() => { setAdding(true); setErr(""); }} onRefresh={load} loading={loading} noMargin />
         <select className={`${SEL} w-40`} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
           <option value="">전체 상태</option>
           {(["PENDING","ASSIGNED","RUNNING","COMPLETED","FAILED"] as TaskStatus[]).map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <select className={`${SEL} w-40`} value={mapPreview} onChange={e => setMapPreview(e.target.value)}>
+          <option value="">맵 미리보기…</option>
+          {maps.map(m => <option key={m} value={m}>{m}</option>)}
         </select>
       </div>
       {err && <ErrBar msg={err} onClose={() => setErr("")} />}
@@ -891,6 +929,15 @@ function TaskSection() {
           ))}
         </tbody>
       </TableWrap>
+      </div>
+
+      {/* 맵 미리보기 */}
+      {mapPreview && (
+        <div className="w-[420px] flex-none sticky top-0">
+          <div className="text-[9px] text-[#444] uppercase tracking-widest mb-1 font-mono">{mapPreview}</div>
+          <TopologyMapView mapId={mapPreview} className="h-[420px]" />
+        </div>
+      )}
     </div>
   );
 }
