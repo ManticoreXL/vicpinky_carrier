@@ -50,7 +50,7 @@ export class Task {
   assignedRobot: { robot_id: string | null; is_completed: boolean };
 
   /** 특정 로봇에게 배정 요청 (null = 임의 배정) */
-  @Prop({ default: null })
+  @Prop({ type: String, required: false, default: null })
   preferredRobotId: string | null;
 
   /** 경로 탐색으로 생성된 남은 waypoint 목록 */
