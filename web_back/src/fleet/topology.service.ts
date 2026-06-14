@@ -80,6 +80,15 @@ export class TopologyService {
   //   - 비용 = 1/weight: 가중치 높을수록(메인 도로) 우선 선택
   //   - occupiedEdges: "A→B" 형식으로 다른 로봇이 점유한 엣지
 
+  async setNodeLocked(node_id: string, isLocked: boolean): Promise<void> {
+    await this.nodeModel.updateOne({ node_id }, { isLocked });
+  }
+
+  async findLockedNodeIds(map_id: string): Promise<Set<string>> {
+    const locked = await this.nodeModel.find({ map_id, isLocked: true }).lean().exec();
+    return new Set(locked.map(n => n.node_id));
+  }
+
   async findPath(
     startNodeId: string,
     endNodeId: string,
@@ -87,6 +96,9 @@ export class TopologyService {
     occupiedEdges: Set<string> = new Set(),
   ): Promise<string[]> {
     if (startNodeId === endNodeId) return [startNodeId];
+
+    // 잠긴 노드 목록 조회 (출발·목적지 제외: 이미 거기 있거나 가야 하는 경우)
+    const lockedNodes = await this.findLockedNodeIds(map_id);
 
     const edges = await this.edgeModel
       .find({ map_id, isLocked: false, weight: { $gt: MIN_WEIGHT } })
@@ -96,6 +108,11 @@ export class TopologyService {
     const adj = new Map<string, { to: string; cost: number }[]>();
 
     for (const edge of edges) {
+      // 잠긴 노드를 경유하는 엣지 건너뜀 (출발·도착은 허용)
+      const startLocked = lockedNodes.has(edge.startNode) && edge.startNode !== startNodeId;
+      const endLocked   = lockedNodes.has(edge.endNode)   && edge.endNode   !== endNodeId;
+      if (startLocked || endLocked) continue;
+
       const w    = edge.weight ?? 1;
       const cost = 1 / w;            // 높은 가중치 = 낮은 비용 = 다익스트라 우선
 

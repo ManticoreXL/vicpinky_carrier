@@ -123,6 +123,8 @@ export function useNestSocket() {
   const [robotStatuses, setRobotStatuses] = useState<Record<string, string>>({});
   // 로봇별 점유 엣지 (robot_id → {from, to, mapId})
   const [occupiedEdges, setOccupiedEdges] = useState<Record<string, { from: string; to: string; mapId: string }>>({});
+  // 잠긴 노드 집합 (node_id)
+  const [lockedNodes, setLockedNodes] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const s = io(BACKEND_URL, {
@@ -226,6 +228,15 @@ export function useNestSocket() {
       setOccupiedEdges(payload);
     });
 
+    // ── 노드 잠금 상태 ──────────────────────────────────────────────────────
+    socket.on("node_lock_changed", ({ node_id, isLocked }: { node_id: string; isLocked: boolean }) => {
+      setLockedNodes(prev => {
+        const next = new Set(prev);
+        isLocked ? next.add(node_id) : next.delete(node_id);
+        return next;
+      });
+    });
+
     return () => { s.disconnect(); setSocket(null); };
   }, []);
 
@@ -255,6 +266,10 @@ export function useNestSocket() {
     socketRef.current?.emit("call_service", { serviceName, serviceType, request });
   }, []);
 
+  const emitNodeLock = useCallback((nodeId: string, isLocked: boolean) => {
+    socketRef.current?.emit("node_lock", { nodeId, isLocked });
+  }, []);
+
   const emitFmsDispatch = useCallback((payload: FmsDispatchPayload) => {
     socketRef.current?.emit("fms_dispatch_task", payload);
   }, []);
@@ -282,13 +297,13 @@ export function useNestSocket() {
 
   return {
     emitCmdVel, emitPublish, emitAction, cancelAction, callService,
-    emitFmsDispatch, emitFmsCancel,
+    emitFmsDispatch, emitFmsCancel, emitNodeLock,
     emitNavGoal, emitNavInitialPose,
     ackTmAlert, setRobotHome,
     nestConnected, rosMessages, socket,
     activeGoals, actionFeedbacks, actionResults,
     mapTimestamps, mapInfos,
     fmsTasks, tmAlerts,
-    robotStatuses, occupiedEdges,
+    robotStatuses, occupiedEdges, lockedNodes,
   };
 }

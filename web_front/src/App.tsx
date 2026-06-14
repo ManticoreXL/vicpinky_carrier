@@ -61,13 +61,13 @@ export default function App() {
   const { connected, error, subscribe, publish } = useRos();
   const {
     emitCmdVel, emitAction, cancelAction, callService,
-    emitFmsDispatch, emitFmsCancel,
+    emitFmsDispatch, emitFmsCancel, emitNodeLock,
     emitNavGoal, emitNavInitialPose,
     nestConnected, rosMessages, socket,
     activeGoals, actionFeedbacks, actionResults,
     mapTimestamps, mapInfos,
     fmsTasks, tmAlerts, ackTmAlert, setRobotHome,
-    robotStatuses, occupiedEdges,
+    robotStatuses, occupiedEdges, lockedNodes,
   } = useNestSocket();
   const [selectedRobot, setSelectedRobot] = useState<string>("vicpinky");
   const [appMode, setAppMode]             = useState<AppMode>("control");
@@ -159,6 +159,8 @@ export default function App() {
             ackTmAlert={ackTmAlert}
             setRobotHome={setRobotHome}
             occupiedEdges={occupiedEdges}
+            lockedNodes={lockedNodes}
+            onNodeLock={emitNodeLock}
           />
         </div>
       ) : isExplore ? (

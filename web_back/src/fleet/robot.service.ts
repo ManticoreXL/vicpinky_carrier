@@ -89,4 +89,12 @@ export class RobotService {
       { status: RobotStatus.OFFLINE },
     );
   }
+
+  /**
+   * 강제 종료(크래시) 등 비정상 오프라인 처리.
+   * MOVING 포함 모든 상태에서 OFFLINE 으로 전환한다.
+   */
+  async setOffline(robot_id: string): Promise<void> {
+    await this.robotModel.updateOne({ robot_id }, { status: RobotStatus.OFFLINE });
+  }
 }

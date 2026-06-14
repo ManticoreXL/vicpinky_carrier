@@ -12,7 +12,7 @@ import type { RosMessage } from '../ros/ros.types';
 
 const LOOP_MS          = 2_000;
 const ONLINE_MS        = 5_000;
-const OFFLINE_AFTER_MS = 10_000;
+const OFFLINE_AFTER_MS = 30_000;
 const BATTERY_MIN_PCT  = 20;
 
 // 위치 감지 반경
@@ -155,6 +155,93 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     await this.fmsService.setStatus(taskId, TaskStatus.FAILED, this.server, {
       completedAt: new Date(),
     });
+  }
+
+  // ── 노드 잠금 + 실시간 우회 재경로 ──────────────────────────────────────
+  //
+  // 노드를 잠그면 해당 노드를 경유 중인 모든 활성 로봇의 경로를 재계산한다.
+
+  async lockNode(nodeId: string, isLocked: boolean): Promise<void> {
+    await this.topologyService.setNodeLocked(nodeId, isLocked);
+    if (!this.server) return;
+
+    // 잠금 상태 브로드캐스트 (프론트 맵 시각화 즉시 업데이트)
+    this.server.emit('node_lock_changed', { node_id: nodeId, isLocked });
+
+    if (!isLocked) return; // 잠금 해제 시 재경로 불필요
+
+    // 잠긴 노드를 경유하는 활성 태스크 로봇 재경로
+    for (const [robotId, taskId] of this.activeTasks) {
+      const task = await this.fmsService.getTask(taskId);
+      if (!task || task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED) continue;
+
+      const pathQueue = task.pathQueue ?? [];
+      if (!pathQueue.some(id => id === nodeId)) continue; // 이 노드 미포함
+
+      this.logger.log(`[노드 폐쇄] ${robotId} 재경로 (차단 노드: ${nodeId})`);
+
+      // 현재 위치 기반으로 출발 노드 결정
+      const cache = this.robotCache.get(robotId);
+      const robot = await this.robotService.findById(robotId);
+      const targetNode = await this.topologyService.findNodeById(task.targetNode);
+      if (!targetNode) continue;
+
+      let startId: string | null = robot?.location ?? null;
+      if (!startId && cache?.posX != null && cache.posY != null) {
+        startId = await this.topologyService.findNearestNodeToPosition(
+          cache.posX, cache.posY, targetNode.map_id,
+        );
+      }
+      if (!startId || startId === task.targetNode) continue;
+
+      // 잠긴 노드 회피 경로 탐색 (findPath 내부에서 lockedNodes 자동 반영)
+      const newRaw = await this.topologyService.findPath(
+        startId, task.targetNode, targetNode.map_id, this.getOccupiedEdgeKeys(robotId),
+      );
+
+      if (newRaw.length === 0) {
+        this.logger.warn(`[노드 폐쇄] ${robotId}: 우회 경로 없음 — 대기`);
+        await this.fmsService.setWaitReason(taskId, `노드 ${nodeId} 폐쇄로 우회 경로 없음`);
+        // 현재 nav action 취소 (로봇 정지)
+        const goalId = this.navGoalIds.get(robotId);
+        if (goalId) {
+          this.rosService.cancelActionGoal(`/${robotId}/navigate_through_poses`, goalId);
+          this.navGoalIds.delete(robotId);
+        }
+        this.fmsService.publishStop(robotId);
+        continue;
+      }
+
+      // 새 경로로 navigate_through_poses 재발행
+      const newQueue = await this.interpolatePath(newRaw);
+      if (newQueue.length > 0 && newQueue[0] === startId) newQueue.shift();
+
+      // 기존 nav action 취소
+      const oldGoalId = this.navGoalIds.get(robotId);
+      if (oldGoalId) {
+        this.rosService.cancelActionGoal(`/${robotId}/navigate_through_poses`, oldGoalId);
+        this.navGoalIds.delete(robotId);
+      }
+
+      // DB pathQueue 업데이트 후 새 action 전송
+      await this.fmsService.updatePathQueue(taskId, newQueue, this.server);
+
+      const poses = await this.buildPoseList(newQueue);
+      if (poses.length > 0) {
+        const newGoalId = this.rosService.sendActionGoal(
+          {
+            actionName: `/${robotId}/navigate_through_poses`,
+            actionType:  'nav2_msgs/action/NavigateThroughPoses',
+            goal:        { poses, behavior_tree: '' },
+          },
+          undefined,
+          (result) => { void this.handleNavResult(robotId, taskId, result.status); },
+        );
+        this.navGoalIds.set(robotId, newGoalId);
+        this.logger.log(`[재경로] ${robotId}: ${newQueue.length} 포즈 (우회)`);
+        this.emit({ type: 'info', taskId, robotId, message: `${robotId} 노드 ${nodeId} 우회 재경로`, requiresAction: false });
+      }
+    }
   }
 
   // ── 점유 엣지 헬퍼 ───────────────────────────────────────────────────────
@@ -349,19 +436,44 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       if (isNowOnline && wasOnline !== true) {
         this.robotOnlineState.set(robotId, true);
         await this.robotService.bringOnlineIfOffline(robotId);
+        // 실제 DB 상태를 읽어서 emit (hardcode IDLE 방지 → MOVING 중이면 MOVING 유지)
+        const actualRobot = await this.robotService.findById(robotId);
+        const actualStatus = actualRobot?.status ?? 'IDLE';
         if (wasOnline === false) {
-          this.logger.log(`[온라인] ${robotId} 복귀`);
+          this.logger.log(`[온라인] ${robotId} 복귀 (상태: ${actualStatus})`);
           this.emit({ type: 'info', robotId, message: `${robotId} 온라인 복귀`, requiresAction: false });
-          this.server?.emit('robot_status_changed', { robot_id: robotId, status: 'IDLE' });
         } else {
-          this.logger.log(`[온라인] ${robotId} 최초 감지`);
-          this.server?.emit('robot_status_changed', { robot_id: robotId, status: 'IDLE' });
+          this.logger.log(`[온라인] ${robotId} 최초 감지 (상태: ${actualStatus})`);
         }
+        this.server?.emit('robot_status_changed', { robot_id: robotId, status: actualStatus });
+
       } else if (!isNowOnline && wasOnline !== false) {
         this.robotOnlineState.set(robotId, false);
-        await this.robotService.setOfflineIfIdle(robotId);
+
+        // MOVING 상태에서 강제 종료 시에도 OFFLINE 처리 (기존 setOfflineIfIdle 대체)
+        await this.robotService.setOffline(robotId);
+
+        // 진행 중이던 태스크/nav action 정리
+        const activeTaskId = this.activeTasks.get(robotId);
+        if (activeTaskId) {
+          const goalId = this.navGoalIds.get(robotId);
+          if (goalId) {
+            this.rosService.cancelActionGoal(`/${robotId}/navigate_through_poses`, goalId);
+            this.navGoalIds.delete(robotId);
+          }
+          this.activeTasks.delete(robotId);
+          this.occupiedEdges.delete(robotId);
+          this.broadcastOccupiedEdges();
+          // 태스크 FAILED 처리 (서버가 살아있는 경우)
+          if (this.server) {
+            await this.fmsService.setStatus(activeTaskId, TaskStatus.FAILED, this.server, {
+              completedAt: new Date(),
+            });
+          }
+        }
+
         this.logger.warn(`[오프라인] ${robotId}`);
-        this.emit({ type: 'robot_offline', robotId, message: `${robotId} 오프라인`, requiresAction: true });
+        this.emit({ type: 'robot_offline', robotId, message: `${robotId} 오프라인 (태스크 중단)`, requiresAction: true });
         this.server?.emit('robot_status_changed', { robot_id: robotId, status: 'OFFLINE' });
       }
     }

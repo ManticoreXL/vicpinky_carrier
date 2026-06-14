@@ -56,6 +56,8 @@ interface Props {
   ackTmAlert:       (alertId: string) => void;
   setRobotHome:     (robotId: string, x: number, y: number, yaw: number) => void;
   occupiedEdges?:   Record<string, { from: string; to: string; mapId: string }>;
+  lockedNodes?:     Set<string>;
+  onNodeLock?:      (nodeId: string, isLocked: boolean) => void;
 }
 
 // ── 유틸 ─────────────────────────────────────────────────────────────────────
@@ -234,6 +236,7 @@ export default function FmsView({
   emitFmsDispatch, emitFmsCancel,
   emitNavGoal, emitNavInitialPose,
   ackTmAlert, setRobotHome, occupiedEdges = {},
+  lockedNodes = new Set(), onNodeLock,
 }: Props) {
   const [filterTab,      setFilterTab]      = useState<FilterTab>("all");
   const [contentTab,     setContentTab]     = useState<ContentTab>("map");
@@ -372,6 +375,8 @@ export default function FmsView({
                 activePaths={activePaths}
                 robotPositions={robotPositions}
                 occupiedEdges={occupiedEdges}
+                lockedNodes={lockedNodes}
+                onNodeLock={onNodeLock}
                 onNodeClick={(nodeId) => {
                   setForm(f => ({
                     ...f,
@@ -401,13 +406,13 @@ export default function FmsView({
         </div>
 
         {/* ── 우측: Task Panel ───────────────────────────────────────────── */}
-        <div className="w-80 flex-none flex flex-col border-l border-red-900/20 bg-[#070707]">
+        <div className="w-72 flex-none flex flex-col border-l border-red-900/20 bg-[#070707] overflow-hidden">
 
           {/* 필터 탭 */}
           <div className="flex-none flex border-b border-[#111]">
             {TABS.map((tab) => (
               <button key={tab.key} onClick={() => setFilterTab(tab.key)}
-                className={`flex-1 py-2 text-[9px] font-bold uppercase tracking-wider font-mono transition-all ${
+                className={`flex-1 py-1.5 text-[9px] font-bold uppercase tracking-wider font-mono transition-all ${
                   filterTab === tab.key
                     ? "text-red-400 border-b border-red-600 bg-red-950/20"
                     : "text-[#333] hover:text-[#666]"
@@ -423,7 +428,7 @@ export default function FmsView({
           {/* 태스크 목록 */}
           <div className="flex-1 overflow-y-auto min-h-0">
             {filtered.length === 0 ? (
-              <div className="flex items-center justify-center h-20 text-[10px] text-[#2a2a2a] font-mono uppercase tracking-widest">태스크 없음</div>
+              <div className="flex items-center justify-center h-16 text-[10px] text-[#2a2a2a] font-mono uppercase tracking-widest">태스크 없음</div>
             ) : (
               filtered.map((task) => (
                 <TaskRow key={task._id} task={task} onCancel={() => emitFmsCancel(task._id)} />
@@ -431,16 +436,16 @@ export default function FmsView({
             )}
           </div>
 
-          {/* 관제탑 알림 */}
+          {/* 관제탑 알림 – 최대 80px로 축소 */}
           {tmAlerts.length > 0 && (
-            <div className="flex-none border-t border-[#111] max-h-44 overflow-y-auto">
-              <p className="sticky top-0 bg-[#080808] px-3 py-1 text-[9px] font-bold text-amber-500/70 uppercase tracking-[0.25em] font-mono border-b border-[#111] z-10">
-                ⚠ 관제탑 알림 ({tmAlerts.filter((a) => a.requiresAction).length})
+            <div className="flex-none border-t border-[#111] max-h-20 overflow-y-auto">
+              <p className="sticky top-0 bg-[#080808] px-2 py-0.5 text-[8px] font-bold text-amber-500/70 uppercase tracking-[0.2em] font-mono border-b border-[#111] z-10">
+                ⚠ 알림 ({tmAlerts.filter((a) => a.requiresAction).length})
               </p>
               {tmAlerts.map((alert) => (
                 <div key={alert.id}
-                  className={`flex items-start gap-2 px-3 py-2 border-b border-[#0d0d0d] ${alert.requiresAction ? "bg-amber-950/10" : ""}`}>
-                  <span className={`mt-0.5 text-[8px] flex-none ${
+                  className={`flex items-center gap-1.5 px-2 py-1 border-b border-[#0d0d0d] ${alert.requiresAction ? "bg-amber-950/10" : ""}`}>
+                  <span className={`text-[8px] flex-none ${
                     alert.type === "battery"       ? "text-amber-400" :
                     alert.type === "task_failed"   ? "text-red-400"   :
                     alert.type === "robot_offline" ? "text-red-400"   :
@@ -453,31 +458,28 @@ export default function FmsView({
                      alert.type === "assigned"      ? "▶" :
                      alert.type === "completed"     ? "✓" : "ℹ"}
                   </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[9px] font-mono text-[#888] leading-tight">{alert.message}</p>
-                    <p className="text-[8px] font-mono text-[#333] mt-0.5">{new Date(alert.timestamp).toLocaleTimeString("ko-KR")}</p>
-                  </div>
-                  <button onClick={() => ackTmAlert(alert.id)} className="text-[9px] text-[#333] hover:text-[#666] flex-none">✕</button>
+                  <p className="flex-1 text-[8px] font-mono text-[#777] leading-tight truncate">{alert.message}</p>
+                  <button onClick={() => ackTmAlert(alert.id)} className="text-[8px] text-[#333] hover:text-[#666] flex-none">✕</button>
                 </div>
               ))}
             </div>
           )}
 
           {/* 태스크 생성 폼 */}
-          <div className="flex-none border-t border-[#111] p-3 flex flex-col gap-2.5">
+          <div className="flex-none border-t border-[#111] p-2 flex flex-col gap-1.5 bg-[#070707]">
             <p className="text-[9px] font-bold text-[#333] uppercase tracking-[0.25em] font-mono">NEW TASK</p>
 
             {/* 타입 */}
             <div className="grid grid-cols-5 gap-px">
               {(["SUPPLY","PROCESS","DISTRIBUTE","CHARGE","SIMPLE_MOVE"] as TaskType[]).map((t) => (
                 <button key={t} onClick={() => setForm((f) => ({ ...f, type: t }))}
-                  className={`py-1 text-[8px] font-mono font-bold uppercase transition-all ${
+                  className={`py-0.5 text-[8px] font-mono font-bold uppercase transition-all ${
                     form.type === t
-                      ? t === "SUPPLY"     ? "bg-blue-900/40 text-blue-400"   :
-                        t === "PROCESS"    ? "bg-amber-900/40 text-amber-400" :
-                        t === "DISTRIBUTE" ? "bg-purple-900/40 text-purple-400" :
-                        t === "SIMPLE_MOVE" ? "bg-cyan-900/40 text-cyan-400" :
-                                             "bg-green-900/40 text-green-400"
+                      ? t === "SUPPLY"      ? "bg-blue-900/40 text-blue-400"     :
+                        t === "PROCESS"     ? "bg-amber-900/40 text-amber-400"   :
+                        t === "DISTRIBUTE"  ? "bg-purple-900/40 text-purple-400" :
+                        t === "SIMPLE_MOVE" ? "bg-cyan-900/40 text-cyan-400"     :
+                                              "bg-green-900/40 text-green-400"
                       : "text-[#333] hover:text-[#666]"
                   }`}>
                   {TASK_LABELS[t]}
@@ -491,14 +493,14 @@ export default function FmsView({
               placeholder="Target Node ID (예: station_A)"
               value={form.targetNode}
               onChange={(e) => setForm((f) => ({ ...f, targetNode: e.target.value }))}
-              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] text-[#888] text-[10px] font-mono px-2 py-1.5 placeholder-[#2a2a2a] focus:outline-none focus:border-red-900/60"
+              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] text-[#888] text-[10px] font-mono px-2 py-1 placeholder-[#2a2a2a] focus:outline-none focus:border-red-900/60"
             />
 
             {/* 로봇 지정 */}
             <select
               value={form.robotId}
               onChange={(e) => setForm((f) => ({ ...f, robotId: e.target.value }))}
-              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] text-[#888] text-[10px] font-mono px-2 py-1.5 focus:outline-none focus:border-red-900/60 appearance-none"
+              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] text-[#888] text-[10px] font-mono px-2 py-1 focus:outline-none focus:border-red-900/60 appearance-none"
             >
               <option value="">── 로봇 자동 배정 ──</option>
               {ROBOTS.filter((r) => r.type !== "arm").map((r) => {
@@ -512,28 +514,31 @@ export default function FmsView({
             </select>
 
             {/* 연속 선택 토글 */}
-            <label className="flex items-center gap-2 cursor-pointer group">
-              <div className={`w-3 h-3 border flex items-center justify-center transition-colors ${
+            <label
+              className="flex items-center gap-1.5 cursor-pointer group"
+              onClick={() => setMultiNodeMode((m) => !m)}
+            >
+              <div className={`w-2.5 h-2.5 border flex items-center justify-center transition-colors flex-none ${
                 multiNodeMode ? "bg-red-900/50 border-red-500" : "bg-[#0a0a0a] border-[#333]"
               }`}>
-                {multiNodeMode && <div className="w-1.5 h-1.5 bg-red-400" />}
+                {multiNodeMode && <div className="w-1 h-1 bg-red-400" />}
               </div>
-              <span className="text-[9px] font-mono text-[#666] group-hover:text-[#aaa] transition-colors">
-                지도에서 노드 클릭 시 연속 추가 (다중 경로)
+              <span className="text-[8px] font-mono text-[#555] group-hover:text-[#888] transition-colors">
+                연속 노드 추가 모드
               </span>
             </label>
 
             {/* 우선순위 */}
-            <div className="flex items-center gap-2">
-              <span className="text-[9px] font-mono text-[#444] uppercase tracking-widest w-4">P</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[8px] font-mono text-[#444] uppercase w-3">P</span>
               <div className="flex flex-1">
                 {([1,3,5,7,10] as const).map((p) => (
                   <button key={p} onClick={() => setForm((f) => ({ ...f, priority: p }))}
                     className={`flex-1 py-0.5 text-[8px] font-mono font-bold border-r border-[#111] last:border-0 transition-all ${
                       form.priority === p
-                        ? p <= 2 ? "bg-red-900/40 text-red-400" :
+                        ? p <= 2 ? "bg-red-900/40 text-red-400"   :
                           p <= 4 ? "bg-amber-900/40 text-amber-400" :
-                          p <= 6 ? "bg-blue-900/40 text-blue-400" : "bg-[#111] text-[#555]"
+                          p <= 6 ? "bg-blue-900/40 text-blue-400"  : "bg-[#111] text-[#555]"
                         : "text-[#333] hover:text-[#666]"
                     }`}>
                     {p <= 2 ? "긴급" : p <= 4 ? "높음" : p <= 6 ? "보통" : p <= 8 ? "낮음" : "최저"}
@@ -545,7 +550,7 @@ export default function FmsView({
             {/* 디스패치 */}
             <button onClick={handleDispatch}
               disabled={!form.targetNode.trim()}
-              className="w-full py-2 border border-red-900/50 bg-red-950/20 text-red-400 text-[10px] font-black uppercase tracking-[0.2em] font-mono hover:bg-red-950/40 transition-all disabled:opacity-30 disabled:cursor-not-allowed">
+              className="w-full py-1.5 border border-red-900/50 bg-red-950/20 text-red-400 text-[10px] font-black uppercase tracking-[0.2em] font-mono hover:bg-red-950/40 transition-all disabled:opacity-30 disabled:cursor-not-allowed">
               ▶ DISPATCH
             </button>
           </div>

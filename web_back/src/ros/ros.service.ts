@@ -132,8 +132,8 @@ export class RosService implements OnModuleInit, OnModuleDestroy {
         topic: name,
         type: messageType,
       });
-      this.logger.debug(`구독: ${name}`);
     });
+    this.logger.log(`rosbridge 구독 완료: ${SUBSCRIBED_TOPICS.length}개 토픽`);
   }
 
   // ── 토픽 발행 ───────────────────────────────────────────────────────────

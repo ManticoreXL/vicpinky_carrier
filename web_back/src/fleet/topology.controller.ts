@@ -57,6 +57,11 @@ export class TopologyController {
   @HttpCode(204)
   removeEdge(@Param('id') id: string) { return this.topologyService.removeEdge(id); }
 
+  @Patch('nodes/:id/lock')
+  lockNode(@Param('id') id: string, @Body('isLocked') isLocked: boolean) {
+    return this.topologyService.setNodeLocked(id, isLocked);
+  }
+
   @Patch('edges/:id/lock')
   lockEdge(@Param('id') id: string, @Body('isLocked') isLocked: boolean) {
     return this.topologyService.setLocked(id, isLocked);

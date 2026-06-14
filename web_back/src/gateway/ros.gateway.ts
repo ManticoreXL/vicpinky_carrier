@@ -301,6 +301,14 @@ export class RosGateway
     this.server.emit('task_manager_home_set', { robotId, x, y, yaw });
   }
 
+  /** 노드 잠금/해제 — 잠금 시 해당 노드 경유 로봇 자동 우회 재경로 */
+  @SubscribeMessage('node_lock')
+  async handleNodeLock(
+    @MessageBody() { nodeId, isLocked }: { nodeId: string; isLocked: boolean },
+  ) {
+    await this.taskManager.lockNode(nodeId, isLocked);
+  }
+
   @SubscribeMessage('fms_cancel_task')
   async handleFmsCancel(
     @MessageBody() { taskId }: { taskId: string },

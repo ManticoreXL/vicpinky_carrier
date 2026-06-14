@@ -28,6 +28,10 @@ export class Node {
 
   @Prop({ required: true })
   yaw: number;
+
+  /** 노드 폐쇄 여부 — true 이면 경로 탐색에서 제외 (다익스트라 우회) */
+  @Prop({ default: false })
+  isLocked: boolean;
 }
 
 export const NodeSchema = SchemaFactory.createForClass(Node);

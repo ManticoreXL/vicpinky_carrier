@@ -72,6 +72,8 @@ interface Props {
   activePaths?:     ActivePath[];
   robotPositions?:  Record<string, RobotPos>;
   onNodeClick?:     (nodeId: string) => void;
+  onNodeLock?:      (nodeId: string, isLocked: boolean) => void;
+  lockedNodes?:     Set<string>;
   // robot_id → 현재 점유 중인 엣지 {from, to}
   occupiedEdges?:   Record<string, { from: string; to: string; mapId: string }>;
 }
@@ -86,7 +88,7 @@ interface DragState {
 
 export default function NavMapCanvas({
   rosMessages, socket, onSendGoal, onSetInitialPose, onSetHome,
-  activePaths = [], robotPositions = {}, onNodeClick, occupiedEdges = {},
+  activePaths = [], robotPositions = {}, onNodeClick, onNodeLock, lockedNodes = new Set(), occupiedEdges = {},
 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef   = useRef<HTMLDivElement>(null);
@@ -101,6 +103,8 @@ export default function NavMapCanvas({
   const activePathsRef    = useRef<ActivePath[]>(activePaths);
   const robotPosRef       = useRef<Record<string, RobotPos>>(robotPositions);
   const onNodeClickRef    = useRef(onNodeClick);
+  const onNodeLockRef     = useRef(onNodeLock);
+  const lockedNodesRef    = useRef<Set<string>>(lockedNodes);
   const occupiedEdgesRef  = useRef<Record<string, { from: string; to: string; mapId: string }>>({});
   const drawRef           = useRef<() => void>(() => {});
 
@@ -125,6 +129,8 @@ export default function NavMapCanvas({
   useEffect(() => { activePathsRef.current = activePaths; drawRef.current(); }, [activePaths]);
   useEffect(() => { robotPosRef.current = robotPositions; }, [robotPositions]);
   useEffect(() => { onNodeClickRef.current = onNodeClick; }, [onNodeClick]);
+  useEffect(() => { onNodeLockRef.current = onNodeLock; }, [onNodeLock]);
+  useEffect(() => { lockedNodesRef.current = lockedNodes; drawRef.current(); }, [lockedNodes]);
   useEffect(() => { occupiedEdgesRef.current = occupiedEdges; drawRef.current(); }, [occupiedEdges]);
 
   // ── 맵 목록 + 할당 로드 ──────────────────────────────────────────────────
@@ -421,12 +427,14 @@ export default function NavMapCanvas({
       });
 
       // 노드 렌더
+      const lockedSet = lockedNodesRef.current;
       topoNodes.forEach(n => {
         const { cx, cy } = worldToCanvas(n.x, n.y, info, scale);
-        const ar  = activeNodeMap[n.node_id];
-        const rc  = ar ? robotColorMap[ar] : null;
-        const isHov = n.node_id === hoveredNodeId;
-        const r   = rc ? 9 : isHov ? 8 : 6;
+        const ar      = activeNodeMap[n.node_id];
+        const rc      = ar ? robotColorMap[ar] : null;
+        const isHov   = n.node_id === hoveredNodeId;
+        const isLock  = lockedSet.has(n.node_id);
+        const r       = rc ? 9 : isHov ? 8 : 6;
 
         if (rc) {
           ctx.beginPath();
@@ -437,18 +445,29 @@ export default function NavMapCanvas({
 
         ctx.beginPath();
         ctx.arc(cx, cy, r, 0, Math.PI * 2);
-        ctx.fillStyle = NODE_COLOR[n.type] ?? "#888";
+        ctx.fillStyle = isLock ? "#dc2626" : (NODE_COLOR[n.type] ?? "#888");
         ctx.fill();
 
-        if (rc || isHov) {
-          ctx.strokeStyle = rc ?? "#fff";
-          ctx.lineWidth   = rc ? 2.5 : 1.5;
+        if (rc || isHov || isLock) {
+          ctx.strokeStyle = isLock ? "#fca5a5" : (rc ?? "#fff");
+          ctx.lineWidth   = isLock ? 2 : rc ? 2.5 : 1.5;
           ctx.stroke();
         }
 
+        // 잠긴 노드: X 마커
+        if (isLock) {
+          ctx.save();
+          ctx.strokeStyle = "#fff";
+          ctx.lineWidth   = 1.5;
+          const d = r * 0.55;
+          ctx.beginPath(); ctx.moveTo(cx - d, cy - d); ctx.lineTo(cx + d, cy + d); ctx.stroke();
+          ctx.beginPath(); ctx.moveTo(cx + d, cy - d); ctx.lineTo(cx - d, cy + d); ctx.stroke();
+          ctx.restore();
+        }
+
         // 라벨
-        ctx.fillStyle    = rc ?? (isHov ? "#fff" : "#ffffffcc");
-        ctx.font         = rc ? "bold 9px monospace" : "9px monospace";
+        ctx.fillStyle    = isLock ? "#fca5a5" : (rc ?? (isHov ? "#fff" : "#ffffffcc"));
+        ctx.font         = (rc || isLock) ? "bold 9px monospace" : "9px monospace";
         ctx.textAlign    = "left";
         ctx.textBaseline = "bottom";
         ctx.fillText(n.node_id, cx + r + 2, cy);
@@ -524,6 +543,19 @@ export default function NavMapCanvas({
         const { cx, cy } = worldToCanvas(n.x, n.y, info, scale);
         if (Math.hypot(x - cx, y - cy) <= 12) {
           onNodeClickRef.current(n.node_id);
+          return;
+        }
+      }
+    }
+
+    // 우클릭 시 노드 잠금 토글 우선 처리
+    if (e.button === 2 && showTopology && onNodeLockRef.current && info) {
+      for (const n of topoNodesRef.current) {
+        const { cx, cy } = worldToCanvas(n.x, n.y, info, scale);
+        if (Math.hypot(x - cx, y - cy) <= 12) {
+          const nowLocked = lockedNodesRef.current.has(n.node_id);
+          onNodeLockRef.current(n.node_id, !nowLocked);
+          e.preventDefault();
           return;
         }
       }
