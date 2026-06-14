@@ -14,7 +14,11 @@ const LOOP_MS          = 2_000;
 const ONLINE_MS        = 5_000;
 const OFFLINE_AFTER_MS = 10_000;
 const BATTERY_MIN_PCT  = 20;
-const GOAL_ARRIVE_M    = 0.35;
+
+// 위치 감지 반경
+const COORD_PASS_M  = 0.8;  // 가상 coord 통과 감지 (빠른 반응)
+const NODE_PASS_M   = 1.5;  // 중간 노드 통과 감지 (navigate_through_poses 진행 중 위치 추적용)
+const NODE_ARRIVE_M = 0.5;  // 최종 목적지 도착 감지 (action result 백업)
 
 // ── 타입 ─────────────────────────────────────────────────────────────────────
 
@@ -54,6 +58,8 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
   // robotId → 현재 활성 taskId
   private readonly activeTasks      = new Map<string, string>();
+  // robotId → navigate_through_poses action goal ID (취소용)
+  private readonly navGoalIds       = new Map<string, string>();
   // robotId → 현재 통과 중인 엣지 (점유 추적)
   private readonly occupiedEdges    = new Map<string, OccupiedEdge>();
   // robotId → 홈 위치
@@ -102,6 +108,54 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   }
 
   ackAlert(_alertId: string) { /* 클라이언트 UI용 */ }
+
+  // ── 태스크 취소 + 로봇 즉시 정지 ────────────────────────────────────────
+  //
+  // fmsService.cancel()은 상태만 변경하므로, 로봇 정지는 여기서 처리한다.
+
+  async cancelTask(taskId: string): Promise<void> {
+    if (!this.server) return;
+
+    const task = await this.fmsService.getTask(taskId);
+    if (!task) return;
+    if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED) return;
+
+    const robotId = task.assignedRobot?.robot_id;
+
+    if (robotId) {
+      // 1. Nav2 navigate_through_poses action 취소 (정식 취소 → 로봇이 즉시 감속/정지)
+      const goalId = this.navGoalIds.get(robotId);
+      if (goalId) {
+        this.rosService.cancelActionGoal(`/${robotId}/navigate_through_poses`, goalId);
+        this.navGoalIds.delete(robotId);
+      }
+
+      // 2. cmd_vel=0 (action 취소가 늦을 경우 백업)
+      for (let i = 0; i < 3; i++) {
+        this.fmsService.publishStop(robotId);
+      }
+
+      // 3. activeTasks / occupiedEdges 정리
+      this.activeTasks.delete(robotId);
+      this.occupiedEdges.delete(robotId);
+      this.broadcastOccupiedEdges();
+
+      // 3. 로봇 상태 IDLE 복귀
+      await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
+
+      this.emit({
+        type: 'info', taskId, robotId,
+        message: `${robotId} 태스크 취소 — 현재 위치에서 정지`,
+        requiresAction: false,
+      });
+      this.logger.log(`[취소] ${robotId} 정지 (task: ${taskId})`);
+    }
+
+    // 4. DB 상태 FAILED 처리
+    await this.fmsService.setStatus(taskId, TaskStatus.FAILED, this.server, {
+      completedAt: new Date(),
+    });
+  }
 
   // ── 점유 엣지 헬퍼 ───────────────────────────────────────────────────────
 
@@ -197,7 +251,11 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     return result.length > 0 ? result : path.slice(1);
   }
 
-  // ── Waypoint 도착 감지 ────────────────────────────────────────────────────
+  // ── 경유 노드 통과 감지 (위치 추적 전용) ────────────────────────────────
+  //
+  // navigate_through_poses action이 실제 경로 실행을 담당하므로,
+  // 여기서는 next-goal 발행 없이 위치·점유·UI 진행만 업데이트한다.
+  // 최종 목적지 완료는 handleNavResult가 처리 (이 함수는 백업으로도 동작).
 
   private async checkWaypointArrival(robotId: string, x: number, y: number, yaw: number) {
     const taskId = this.activeTasks.get(robotId);
@@ -213,78 +271,62 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     const remaining = [...(task.pathQueue ?? [])];
     if (remaining.length === 0) return;
 
-    const nextNodeId = remaining[0];
-    let targetX: number, targetY: number, targetYaw: number;
+    const nextId = remaining[0];
+    let targetX: number, targetY: number;
     let isVirtual = false;
 
-    if (nextNodeId.startsWith('coord:')) {
-      const parts = nextNodeId.split(':');
-      targetX   = parseFloat(parts[1]);
-      targetY   = parseFloat(parts[2]);
-      targetYaw = parseFloat(parts[3]);
+    if (nextId.startsWith('coord:')) {
+      const parts = nextId.split(':');
+      targetX = parseFloat(parts[1]); targetY = parseFloat(parts[2]);
       isVirtual = true;
     } else {
-      const node = await this.topologyService.findNodeById(nextNodeId);
+      const node = await this.topologyService.findNodeById(nextId);
       if (!node) return;
-      targetX = node.x; targetY = node.y; targetYaw = node.yaw;
+      targetX = node.x; targetY = node.y;
     }
 
-    if (Math.hypot(x - targetX, y - targetY) > GOAL_ARRIVE_M) return;
+    // 통과 반경: 중간 coord=0.8m, 중간 노드=1.5m (navigate_through_poses 속도 유지),
+    //            최종 노드=0.5m (action result 백업 완료 감지)
+    const isFinal = !isVirtual && remaining.length === 1;
+    const threshold = isVirtual ? COORD_PASS_M : (isFinal ? NODE_ARRIVE_M : NODE_PASS_M);
 
-    // 실제 노드 도착 시 위치 갱신 + 점유 엣지 업데이트
+    if (Math.hypot(x - targetX, y - targetY) > threshold) return;
+
     if (!isVirtual) {
-      const prevLoc = (await this.robotService.findById(robotId))?.location;
-      await this.robotService.updateLocation(robotId, nextNodeId);
+      // 실제 노드 통과/도착: 위치·점유 갱신
+      await this.robotService.updateLocation(robotId, nextId);
 
-      // 이전 엣지 해제 후 다음 실제 노드 간 엣지 점유
       const nextActual = remaining.slice(1).find(id => !id.startsWith('coord:'));
       if (nextActual) {
-        const node = await this.topologyService.findNodeById(nextNodeId);
-        this.occupiedEdges.set(robotId, {
-          from: nextNodeId, to: nextActual, mapId: node?.map_id ?? '',
-        });
-        this.logger.debug(`[점유] ${robotId}: ${nextNodeId}→${nextActual}`);
+        const node = await this.topologyService.findNodeById(nextId);
+        this.occupiedEdges.set(robotId, { from: nextId, to: nextActual, mapId: node?.map_id ?? '' });
+        this.logger.debug(`[통과] ${robotId}: ${nextId}→${nextActual}`);
       } else {
         this.occupiedEdges.delete(robotId);
       }
-
-      // 점유 상태 브로드캐스트 (프론트 시각화용)
       this.broadcastOccupiedEdges();
 
-      void prevLoc; // suppress unused variable warning
+      if (isFinal) {
+        // 최종 목적지: action result 백업 완료 처리
+        this.activeTasks.delete(robotId);
+        this.navGoalIds.delete(robotId);
+        this.occupiedEdges.delete(robotId);
+        this.broadcastOccupiedEdges();
+
+        await this.fmsService.setStatus(taskId, TaskStatus.COMPLETED, this.server, {
+          completedAt: new Date(),
+          assignedRobot: { robot_id: robotId, is_completed: true },
+        });
+        await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
+        this.emit({ type: 'completed', taskId, robotId, message: `${robotId} 태스크 완료 (${task.targetNode})`, requiresAction: false });
+        this.fmsService.publishInitialPose(robotId, x, y, yaw);
+        this.returnHome(robotId);
+        return;
+      }
     }
 
     remaining.shift();
-
-    if (remaining.length > 0) {
-      await this.fmsService.updatePathQueue(taskId, remaining, this.server);
-      const nextId = remaining[0];
-      let nx: number, ny: number, nyaw: number;
-      if (nextId.startsWith('coord:')) {
-        const parts = nextId.split(':');
-        nx = parseFloat(parts[1]); ny = parseFloat(parts[2]); nyaw = parseFloat(parts[3]);
-      } else {
-        const nextNode = await this.topologyService.findNodeById(nextId);
-        if (!nextNode) return;
-        nx = nextNode.x; ny = nextNode.y; nyaw = nextNode.yaw;
-      }
-      this.fmsService.publishGoal(robotId, nx, ny, nyaw);
-      this.emit({ type: 'info', taskId, robotId, message: `${robotId} → ${nextId} 이동 중`, requiresAction: false });
-    } else {
-      // 최종 목적지 도착
-      this.activeTasks.delete(robotId);
-      this.occupiedEdges.delete(robotId);
-      this.broadcastOccupiedEdges();
-
-      await this.fmsService.setStatus(taskId, TaskStatus.COMPLETED, this.server, {
-        completedAt: new Date(),
-        assignedRobot: { robot_id: robotId, is_completed: true },
-      });
-      await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
-      this.emit({ type: 'completed', taskId, robotId, message: `${robotId} 태스크 완료 (${task.targetNode})`, requiresAction: false });
-      this.fmsService.publishInitialPose(robotId, x, y, yaw);
-      this.returnHome(robotId);
-    }
+    await this.fmsService.updatePathQueue(taskId, remaining, this.server);
   }
 
   // ── 메인 처리 루프 ───────────────────────────────────────────────────────
@@ -356,9 +398,23 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
     for (const task of pending) {
       if (!freeRobots.length) break;
-      const robot   = freeRobots.shift()!;
+      const taskId = (task._id as { toString(): string }).toString();
+
+      // 지정 로봇이 있으면 그 로봇만 사용, 없으면 임의 배정
+      let robot: RobotDocument;
+      const preferredId = task.preferredRobotId;
+      if (preferredId) {
+        const idx = freeRobots.findIndex((r) => r.robot_id === preferredId);
+        if (idx === -1) {
+          await this.fmsService.setWaitReason(taskId, `지정 로봇 ${preferredId} 대기 중`);
+          continue;
+        }
+        robot = freeRobots.splice(idx, 1)[0];
+      } else {
+        robot = freeRobots.shift()!;
+      }
+
       const robotId = robot.robot_id;
-      const taskId  = (task._id as { toString(): string }).toString();
 
       // 온라인 확인
       const cache  = this.robotCache.get(robotId);
@@ -457,14 +513,34 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
         pathQueue = await this.interpolatePath(rawPath);
         if (pathQueue.length > 0 && pathQueue[0] === robot.location) pathQueue.shift();
 
+      } else if (!robot.location) {
+        // robot.location 없음 — 캐시된 AMCL 위치로 가장 가까운 노드를 출발점으로 탐색
+        const cache2 = this.robotCache.get(robotId);
+        const targetNode2 = await this.topologyService.findNodeById(task.targetNode);
+        if (cache2?.posX != null && cache2.posY != null && targetNode2) {
+          const nearestId = await this.topologyService.findNearestNodeToPosition(
+            cache2.posX, cache2.posY, targetNode2.map_id,
+          );
+          if (nearestId && nearestId !== task.targetNode) {
+            const rawPath2 = await this.topologyService.findPath(
+              nearestId, task.targetNode, targetNode2.map_id, this.getOccupiedEdgeKeys(robotId),
+            );
+            if (rawPath2.length > 0) {
+              pathQueue = await this.interpolatePath(rawPath2);
+              // 이미 가장 가까운 노드 근처에 있으므로 출발 노드는 제거
+              if (pathQueue.length > 0 && pathQueue[0] === nearestId) pathQueue.shift();
+            }
+          }
+        }
+        if (pathQueue.length === 0) pathQueue = [task.targetNode];
       } else {
+        // robot.location === task.targetNode (이미 목적지)
         pathQueue = [task.targetNode];
       }
 
       // ── 태스크 할당 + 첫 엣지 점유 등록 ──────────────────────────────────
       this.activeTasks.set(robotId, taskId);
 
-      // 첫 번째 실제 노드 간 엣지 점유
       const firstActual = pathQueue.find(id => !id.startsWith('coord:'));
       if (firstActual && robot.location) {
         const node = await this.topologyService.findNodeById(firstActual);
@@ -477,26 +553,113 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       await this.fmsService.assignToRobot(taskId, robotId, pathQueue, this.server!);
       await this.robotService.updateStatus(robotId, RobotStatus.MOVING);
 
-      // 첫 waypoint로 이동 시작
-      const firstId = pathQueue[0];
-      let firstX: number, firstY: number, firstYaw: number;
-      if (firstId?.startsWith('coord:')) {
-        const parts = firstId.split(':');
-        firstX = parseFloat(parts[1]); firstY = parseFloat(parts[2]); firstYaw = parseFloat(parts[3]);
-      } else if (firstId) {
-        const firstNode = await this.topologyService.findNodeById(firstId);
-        firstX = firstNode?.x ?? 0; firstY = firstNode?.y ?? 0; firstYaw = firstNode?.yaw ?? 0;
+      // ── navigate_through_poses action 으로 전체 경로를 한 번에 전송 ──────
+      // 중간 노드에서 속도를 줄이지 않고 최종 목적지에서만 정지
+      const poses = await this.buildPoseList(pathQueue);
+      if (poses.length > 0) {
+        const goalId = this.rosService.sendActionGoal(
+          {
+            actionName: `/${robotId}/navigate_through_poses`,
+            actionType:  'nav2_msgs/action/NavigateThroughPoses',
+            goal:        { poses, behavior_tree: '' },
+          },
+          undefined,
+          (result) => { void this.handleNavResult(robotId, taskId, result.status); },
+        );
+        this.navGoalIds.set(robotId, goalId);
+        this.logger.log(`[navigate_through_poses] ${robotId}: ${poses.length} 포즈 전송`);
       } else {
-        firstX = 0; firstY = 0; firstYaw = 0;
+        // 경로가 없으면 단순 goal_pose (목적지가 현재 위치와 같은 경우 등)
+        const targetNode = await this.topologyService.findNodeById(task.targetNode);
+        if (targetNode) {
+          this.fmsService.publishGoal(robotId, targetNode.x, targetNode.y, targetNode.yaw);
+        }
       }
-      this.fmsService.publishGoal(robotId, firstX, firstY, firstYaw);
 
       this.emit({
         type: 'assigned', taskId, robotId,
-        message: `${robotId} → [${task.type}] P${task.priority} (${task.targetNode}) 할당`,
+        message: `${robotId} → [${task.type}] P${task.priority} (${task.targetNode}) 할당 (${poses.length} 포즈)`,
         requiresAction: false,
       });
     }
+  }
+
+  // ── navigate_through_poses 결과 처리 ────────────────────────────────────
+  //
+  // action result status:
+  //   4 = SUCCEEDED, 5 = CANCELED (cancelTask에서 처리), 6 = ABORTED
+
+  private async handleNavResult(robotId: string, taskId: string, status: number) {
+    if (!this.server) return;
+
+    const task = await this.fmsService.getTask(taskId);
+    // 이미 취소/완료된 경우 무시
+    if (!task || task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED) {
+      this.navGoalIds.delete(robotId);
+      return;
+    }
+
+    this.navGoalIds.delete(robotId);
+
+    if (status === 4) {
+      // SUCCEEDED: 모든 포즈 완료
+      await this.robotService.updateLocation(robotId, task.targetNode);
+      this.activeTasks.delete(robotId);
+      this.occupiedEdges.delete(robotId);
+      this.broadcastOccupiedEdges();
+
+      const cache = this.robotCache.get(robotId);
+      const cx = cache?.posX ?? 0, cy = cache?.posY ?? 0, cyaw = cache?.yaw ?? 0;
+
+      await this.fmsService.setStatus(taskId, TaskStatus.COMPLETED, this.server, {
+        completedAt:   new Date(),
+        assignedRobot: { robot_id: robotId, is_completed: true },
+      });
+      await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
+      this.emit({ type: 'completed', taskId, robotId, message: `${robotId} 태스크 완료 (${task.targetNode})`, requiresAction: false });
+      this.fmsService.publishInitialPose(robotId, cx, cy, cyaw);
+      this.returnHome(robotId);
+
+    } else if (status === 6) {
+      // ABORTED: Nav2 내부 실패
+      this.activeTasks.delete(robotId);
+      this.occupiedEdges.delete(robotId);
+      this.broadcastOccupiedEdges();
+      await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
+      await this.fmsService.setStatus(taskId, TaskStatus.FAILED, this.server, { completedAt: new Date() });
+      this.emit({ type: 'task_failed', taskId, robotId, message: `${robotId} 내비게이션 실패 (ABORTED)`, requiresAction: false });
+    }
+    // status 5 (CANCELED) → cancelTask에서 이미 FAILED 처리
+  }
+
+  // ── navigate_through_poses용 포즈 목록 생성 ──────────────────────────────
+
+  private async buildPoseList(pathQueue: string[]): Promise<Record<string, unknown>[]> {
+    const now = Date.now() / 1000;
+    const poses: Record<string, unknown>[] = [];
+
+    for (const id of pathQueue) {
+      let x: number, y: number, yaw: number;
+
+      if (id.startsWith('coord:')) {
+        const p = id.split(':');
+        x = parseFloat(p[1]); y = parseFloat(p[2]); yaw = parseFloat(p[3]);
+      } else {
+        const node = await this.topologyService.findNodeById(id);
+        if (!node) continue;
+        x = node.x; y = node.y; yaw = node.yaw;
+      }
+
+      poses.push({
+        header: { stamp: { sec: Math.floor(now), nanosec: 0 }, frame_id: 'map' },
+        pose: {
+          position:    { x, y, z: 0 },
+          orientation: { x: 0, y: 0, z: Math.sin(yaw / 2), w: Math.cos(yaw / 2) },
+        },
+      });
+    }
+
+    return poses;
   }
 
   // ── 점유 상태 브로드캐스트 ───────────────────────────────────────────────

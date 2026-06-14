@@ -179,8 +179,12 @@ function RobotCard({
 function TaskRow({ task, onCancel }: { task: FmsTask; onCancel: () => void }) {
   const canCancel = task.status === "PENDING" || task.status === "ASSIGNED" || task.status === "RUNNING";
   const prio      = task.priority ?? 5;
-  const robotShort = task.assignedRobot?.robot_id
-    ?.replace("vicpinky", "VP").replace("tb3_0", "TB") ?? "—";
+  const assignedId = task.assignedRobot?.robot_id;
+  const robotShort = assignedId
+    ? assignedId.replace("vicpinky", "VP").replace("tb3_0", "TB")
+    : task.preferredRobotId
+    ? `⋯${task.preferredRobotId.replace("tb3_0", "TB")}`
+    : "—";
   const pathDone   = task.pathQueue?.length === 0 && task.status === "RUNNING";
 
   return (
@@ -236,8 +240,8 @@ export default function FmsView({
   const [mapAssignments, setMapAssignments] = useState<Record<string, string>>({});
   const [multiNodeMode,  setMultiNodeMode]  = useState(false);
   const [form, setForm] = useState<{
-    type: TaskType; targetNode: string; priority: number;
-  }>({ type: "SUPPLY", targetNode: "", priority: 5 });
+    type: TaskType; targetNode: string; priority: number; robotId: string;
+  }>({ type: "SUPPLY", targetNode: "", priority: 5, robotId: "" });
 
   useEffect(() => {
     const base = BACKEND_URL.replace(/\/$/, "");
@@ -301,7 +305,12 @@ export default function FmsView({
 
   const handleDispatch = () => {
     if (!form.targetNode.trim()) return;
-    emitFmsDispatch({ type: form.type, targetNode: form.targetNode.trim(), priority: form.priority });
+    emitFmsDispatch({
+      type:             form.type,
+      targetNode:       form.targetNode.trim(),
+      priority:         form.priority,
+      preferredRobotId: form.robotId || undefined,
+    });
     setForm((f) => ({ ...f, targetNode: "" }));
   };
 
@@ -484,7 +493,24 @@ export default function FmsView({
               onChange={(e) => setForm((f) => ({ ...f, targetNode: e.target.value }))}
               className="w-full bg-[#0a0a0a] border border-[#1a1a1a] text-[#888] text-[10px] font-mono px-2 py-1.5 placeholder-[#2a2a2a] focus:outline-none focus:border-red-900/60"
             />
-            
+
+            {/* 로봇 지정 */}
+            <select
+              value={form.robotId}
+              onChange={(e) => setForm((f) => ({ ...f, robotId: e.target.value }))}
+              className="w-full bg-[#0a0a0a] border border-[#1a1a1a] text-[#888] text-[10px] font-mono px-2 py-1.5 focus:outline-none focus:border-red-900/60 appearance-none"
+            >
+              <option value="">── 로봇 자동 배정 ──</option>
+              {ROBOTS.filter((r) => r.type !== "arm").map((r) => {
+                const online = isOnline(rosMessages, r.id);
+                return (
+                  <option key={r.id} value={r.id} disabled={!online}>
+                    {r.label}{!online ? " (오프라인)" : ""}
+                  </option>
+                );
+              })}
+            </select>
+
             {/* 연속 선택 토글 */}
             <label className="flex items-center gap-2 cursor-pointer group">
               <div className={`w-3 h-3 border flex items-center justify-center transition-colors ${

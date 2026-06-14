@@ -35,7 +35,8 @@ export class FmsController {
 
   @Delete('tasks/:id/cancel')
   async cancel(@Param('id') id: string) {
-    await this.fmsService.cancel(id, null);
+    // taskManager가 로봇 즉시 정지 + 상태 정리까지 처리
+    await this.taskManager.cancelTask(id);
     return { ok: true };
   }
 

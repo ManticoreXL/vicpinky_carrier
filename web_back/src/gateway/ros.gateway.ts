@@ -305,7 +305,8 @@ export class RosGateway
   async handleFmsCancel(
     @MessageBody() { taskId }: { taskId: string },
   ) {
-    await this.fmsService.cancel(taskId, this.server);
+    // taskManager가 로봇 즉시 정지 + 상태 정리까지 처리
+    await this.taskManager.cancelTask(taskId);
   }
 
   @SubscribeMessage('fms_get_tasks')

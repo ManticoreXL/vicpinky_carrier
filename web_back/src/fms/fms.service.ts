@@ -10,6 +10,7 @@ export interface CreateTaskDto {
   type: TaskType;
   targetNode: string;
   priority?: number;
+  preferredRobotId?: string;
 }
 
 // task_id 자동 생성 헬퍼
@@ -29,13 +30,15 @@ export class FmsService {
   // ── TaskManager용: 우선순위 큐에 등록 ────────────────────────────────────
   async createQueued(dto: CreateTaskDto): Promise<TaskDocument> {
     const task = await this.taskModel.create({
-      task_id:    dto.task_id ?? genTaskId(),
-      type:       dto.type,
-      targetNode: dto.targetNode,
-      priority:   dto.priority ?? 5,
-      status:     TaskStatus.PENDING,
+      task_id:          dto.task_id ?? genTaskId(),
+      type:             dto.type,
+      targetNode:       dto.targetNode,
+      priority:         dto.priority ?? 5,
+      status:           TaskStatus.PENDING,
+      preferredRobotId: dto.preferredRobotId ?? null,
     });
-    this.logger.log(`태스크 등록: ${task.task_id} [${dto.type}→${dto.targetNode}] P${dto.priority ?? 5}`);
+    const robotLabel = dto.preferredRobotId ? ` → ${dto.preferredRobotId}` : '';
+    this.logger.log(`태스크 등록: ${task.task_id} [${dto.type}→${dto.targetNode}] P${dto.priority ?? 5}${robotLabel}`);
     return task;
   }
 
@@ -111,6 +114,18 @@ export class FmsService {
           position:    { x, y, z: 0 },
           orientation: { x: 0, y: 0, z: Math.sin(yaw / 2), w: Math.cos(yaw / 2) },
         },
+      },
+    });
+  }
+
+  // ── ROS 발행: 즉시 정지 (cmd_vel zero) ────────────────────────────────────
+  publishStop(robotId: string): void {
+    this.rosService.publish({
+      topicName:   `/${robotId}/cmd_vel`,
+      messageType: 'geometry_msgs/Twist',
+      message: {
+        linear:  { x: 0, y: 0, z: 0 },
+        angular: { x: 0, y: 0, z: 0 },
       },
     });
   }

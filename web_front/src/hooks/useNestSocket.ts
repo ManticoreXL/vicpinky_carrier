@@ -71,6 +71,7 @@ export interface FmsTask {
   status: TaskStatus;
   priority: number;
   targetNode: string;
+  preferredRobotId?: string | null;
   waitReason?: string;
   assignedRobot: { robot_id: string | null; is_completed: boolean };
   pathQueue: string[];
@@ -85,6 +86,7 @@ export interface FmsDispatchPayload {
   type: TaskType;
   targetNode: string;
   priority?: number;
+  preferredRobotId?: string;
 }
 
 export interface TaskManagerAlert {

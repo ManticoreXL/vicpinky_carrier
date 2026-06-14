@@ -169,6 +169,27 @@ export class TopologyService {
     return nearest;
   }
 
+  // ── 좌표 기준 최근접 노드 탐색 ──────────────────────────────────────────────
+  // robot.location 이 null일 때 AMCL 위치로 출발 노드를 결정하는 데 사용
+
+  async findNearestNodeToPosition(
+    x: number,
+    y: number,
+    map_id: string,
+  ): Promise<string | null> {
+    const nodes = await this.nodeModel.find({ map_id }).lean().exec();
+    if (nodes.length === 0) return null;
+
+    let nearest: string | null = null;
+    let minDist = Infinity;
+
+    for (const node of nodes) {
+      const d = Math.hypot(node.x - x, node.y - y);
+      if (d < minDist) { minDist = d; nearest = node.node_id; }
+    }
+    return nearest;
+  }
+
   private reconstructPath(
     parent: Map<string, string>,
     start: string,
