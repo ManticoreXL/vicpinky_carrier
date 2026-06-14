@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import type { Socket } from "socket.io-client";
 import { RosMessage, FmsTask, FmsDispatchPayload, TaskType, TaskStatus, TaskManagerAlert } from "../hooks/useNestSocket";
 import NavMapCanvas from "../components/NavMapCanvas";
-import TopologyMapView from "../components/TopologyMapView";
+import TopologyMapView, { type ActivePath, type RobotPos } from "../components/TopologyMapView";
 import { BACKEND_URL } from "../config";
 
 // ── 상수 ─────────────────────────────────────────────────────────────────────
@@ -271,6 +271,42 @@ export default function FmsView({
     return fmsTasks.filter((t) => t.status === filterTab);
   }, [fmsTasks, filterTab]);
 
+  // ── 토폴로지 맵 오버레이 데이터 ───────────────────────────────────────────
+
+  // 진행 중인 태스크 → 활성 경로
+  const activePaths = useMemo<ActivePath[]>(() => {
+    return fmsTasks
+      .filter(t =>
+        (t.status === "RUNNING" || t.status === "ASSIGNED") &&
+        t.assignedRobot?.robot_id &&
+        (t.pathQueue?.length ?? 0) > 0,
+      )
+      .map(t => ({
+        robotId:    t.assignedRobot.robot_id!,
+        pathQueue:  t.pathQueue ?? [],
+        fromNodeId: undefined,   // 백엔드에서 robot.location을 별도 제공 시 채울 수 있음
+      }));
+  }, [fmsTasks]);
+
+  // rosMessages에서 로봇 실제 위치 추출 (amcl_pose > odom 순)
+  const robotPositions = useMemo<Record<string, RobotPos>>(() => {
+    const result: Record<string, RobotPos> = {};
+    activePaths.forEach(({ robotId }) => {
+      const amcl = rosMessages[`/${robotId}/amcl_pose`]?.data as {
+        pose?: { pose?: { position?: { x?: number; y?: number } } }
+      } | undefined;
+      const pos = amcl?.pose?.pose?.position;
+      if (pos?.x != null) { result[robotId] = { x: pos.x, y: pos.y ?? 0 }; return; }
+
+      const odom = rosMessages[`/${robotId}/odom`]?.data as {
+        pose?: { pose?: { position?: { x?: number; y?: number } } }
+      } | undefined;
+      const opos = odom?.pose?.pose?.position;
+      if (opos?.x != null) result[robotId] = { x: opos.x, y: opos.y ?? 0 };
+    });
+    return result;
+  }, [activePaths, rosMessages]);
+
   const handleDispatch = () => {
     if (!form.targetNode.trim()) return;
     emitFmsDispatch({ type: form.type, targetNode: form.targetNode.trim(), priority: form.priority });
@@ -351,7 +387,12 @@ export default function FmsView({
               </div>
               {/* 캔버스 */}
               {topoMapId ? (
-                <TopologyMapView mapId={topoMapId} className="flex-1" />
+                <TopologyMapView
+                  mapId={topoMapId}
+                  className="flex-1"
+                  activePaths={activePaths}
+                  robotPositions={robotPositions}
+                />
               ) : (
                 <div className="flex-1 flex items-center justify-center text-[#2a2a2a] text-xs font-mono">위에서 맵을 선택하세요</div>
               )}

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useRos } from "./hooks/useRos";
 import { useNestSocket } from "./hooks/useNestSocket";
-import { RobotId } from "./types/robots";
+import type { RosMessage } from "./hooks/useNestSocket";
 import StatusBadge from "./components/StatusBadge";
 import RobotSidebar from "./components/RobotSidebar";
 import VicPinkyPanel from "./components/panels/BigPinkyPanel";
@@ -66,8 +66,9 @@ export default function App() {
     activeGoals, actionFeedbacks, actionResults,
     mapTimestamps, mapInfos,
     fmsTasks, tmAlerts, ackTmAlert, setRobotHome,
+    robotStatuses,
   } = useNestSocket();
-  const [selectedRobot, setSelectedRobot] = useState<RobotId>("vicpinky");
+  const [selectedRobot, setSelectedRobot] = useState<string>("vicpinky");
   const [appMode, setAppMode]             = useState<AppMode>("control");
 
   const { notifications, confirmNotification } = useBatteryAlerts(rosMessages);
@@ -174,9 +175,11 @@ export default function App() {
             subscribe={subscribe}
             selectedRobot={selectedRobot}
             onSelect={setSelectedRobot}
+            rosMessages={displayMessages}
+            liveStatuses={robotStatuses}
           />
           <main className="flex-1 overflow-y-auto p-5 bg-[#050505] min-w-0">
-            {selectedRobot === "vicpinky" && (
+            {selectedRobot === "vicpinky" ? (
               <VicPinkyPanel
                 subscribe={subscribe}
                 publish={publish}
@@ -189,26 +192,7 @@ export default function App() {
                 actionResults={actionResults}
                 callService={callService}
               />
-            )}
-            {(selectedRobot === "tb3_01" ||
-              selectedRobot === "tb3_02" ||
-              selectedRobot === "tb3_03" ||
-              selectedRobot === "tb3_04") && (
-              <TurtlebotPanel
-                subscribe={subscribe}
-                publish={publish}
-                botId={selectedRobot}
-                emitCmdVel={emitCmdVel}
-                rosMessages={displayMessages}
-                emitAction={emitAction}
-                cancelAction={cancelAction}
-                activeGoals={activeGoals}
-                actionFeedbacks={actionFeedbacks}
-                actionResults={actionResults}
-                callService={callService}
-              />
-            )}
-            {selectedRobot === "omx" && (
+            ) : selectedRobot === "omx" ? (
               <OmxPanel
                 subscribe={subscribe}
                 publish={publish}
@@ -219,7 +203,27 @@ export default function App() {
                 actionResults={actionResults}
                 callService={callService}
               />
-            )}
+            ) : selectedRobot.startsWith("tb3") ? (
+              <TurtlebotPanel
+                subscribe={subscribe}
+                publish={publish}
+                botId={selectedRobot as "tb3_01"|"tb3_02"|"tb3_03"|"tb3_04"}
+                emitCmdVel={emitCmdVel}
+                rosMessages={displayMessages}
+                emitAction={emitAction}
+                cancelAction={cancelAction}
+                activeGoals={activeGoals}
+                actionFeedbacks={actionFeedbacks}
+                actionResults={actionResults}
+                callService={callService}
+              />
+            ) : selectedRobot ? (
+              <GenericRobotPanel
+                robotId={selectedRobot}
+                rosMessages={displayMessages}
+                liveStatus={robotStatuses[selectedRobot]}
+              />
+            ) : null}
           </main>
           <ControlCameraPanel selectedRobot={selectedRobot} socket={socket} />
         </div>
@@ -242,6 +246,142 @@ export default function App() {
     </div>
   );
 }
+
+// ── 제네릭 로봇 패널 (DB에 있지만 전용 패널 없는 로봇) ──────────────────────
+
+function parseUrdf(xmlStr: string) {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xmlStr, "application/xml");
+    if (doc.querySelector("parsererror")) return null;
+    const robot = doc.querySelector("robot");
+    if (!robot) return null;
+    const joints = Array.from(doc.querySelectorAll("joint"));
+    return {
+      modelName:  robot.getAttribute("name") ?? "unknown",
+      linkCount:  doc.querySelectorAll("link").length,
+      jointCount: joints.length,
+      jointNames: joints.map(j => j.getAttribute("name") ?? "").filter(Boolean),
+    };
+  } catch { return null; }
+}
+
+function GenericRobotPanel({
+  robotId, rosMessages, liveStatus,
+}: { robotId: string; rosMessages: Record<string, RosMessage>; liveStatus?: string }) {
+  const p = (topic: string) => rosMessages[`/${robotId}/${topic}`]?.data;
+
+  const batData = p("battery_state") as { percentage?: number } | undefined;
+  const batPct  = batData?.percentage != null
+    ? Math.round(batData.percentage > 1 ? batData.percentage : batData.percentage * 100)
+    : null;
+
+  const odom = p("odom") as { pose?: { pose?: { position?: { x?: number; y?: number }; orientation?: { z?: number; w?: number } } } } | undefined;
+  const pos  = odom?.pose?.pose?.position;
+  const ori  = odom?.pose?.pose?.orientation;
+  const yaw  = ori ? Math.atan2(2 * (ori.w ?? 0) * (ori.z ?? 0), 1 - 2 * (ori.z ?? 0) ** 2) : null;
+
+  const rdRaw = p("robot_description") as string | { data?: string } | undefined;
+  const rdStr = typeof rdRaw === "string" ? rdRaw : (rdRaw as { data?: string })?.data ?? null;
+  const urdf  = rdStr ? parseUrdf(rdStr) : null;
+
+  // 수신된 토픽 목록
+  const receivedTopics = Object.keys(rosMessages)
+    .filter(t => t.startsWith(`/${robotId}/`))
+    .map(t => t.replace(`/${robotId}/`, ""))
+    .slice(0, 12);
+
+  const STATUS_C: Record<string, string> = {
+    IDLE: "text-green-400", MOVING: "text-blue-400", WORKING: "text-yellow-400",
+    ERROR: "text-red-400",  OFFLINE: "text-[#555]",
+  };
+
+  return (
+    <div className="max-w-lg space-y-4">
+      {/* 헤더 */}
+      <div className="flex items-center gap-3 pb-3 border-b border-[#1a1a1a]">
+        <div className="w-10 h-10 rounded border border-[#222] bg-[#0d0d0d] flex items-center justify-center text-xl select-none">
+          🤖
+        </div>
+        <div>
+          <h2 className="text-sm font-black uppercase tracking-widest text-[#c0c0c0] font-mono">{robotId}</h2>
+          <span className={`text-[10px] font-bold font-mono ${STATUS_C[liveStatus ?? ""] ?? "text-[#555]"}`}>
+            {liveStatus ?? "UNKNOWN"}
+          </span>
+        </div>
+      </div>
+
+      {/* URDF 정보 */}
+      <Section label="ROBOT MODEL (URDF)">
+        {urdf ? (
+          <div className="space-y-1.5">
+            <Row label="Model"   value={urdf.modelName} accent />
+            <Row label="Links"   value={String(urdf.linkCount)} />
+            <Row label="Joints"  value={String(urdf.jointCount)} />
+            {urdf.jointNames.length > 0 && (
+              <div>
+                <span className="text-[9px] text-[#333] font-mono uppercase tracking-widest">Joint names</span>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {urdf.jointNames.map(n => (
+                    <span key={n} className="px-1.5 py-0.5 text-[8px] font-mono bg-[#111] border border-[#222] text-[#666] rounded">{n}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="text-[10px] text-[#2a2a2a] font-mono">/{robotId}/robot_description 대기 중…</p>
+        )}
+      </Section>
+
+      {/* 센서 데이터 */}
+      <Section label="SENSOR DATA">
+        {batPct !== null && <Row label="Battery" value={`${batPct}%`} />}
+        {pos?.x != null && (
+          <>
+            <Row label="Pos X" value={pos.x.toFixed(3)} />
+            <Row label="Pos Y" value={(pos.y ?? 0).toFixed(3)} />
+          </>
+        )}
+        {yaw != null && <Row label="Yaw" value={`${(yaw * 180 / Math.PI).toFixed(1)}°`} />}
+        {batPct === null && pos?.x == null && (
+          <p className="text-[10px] text-[#2a2a2a] font-mono">토픽 대기 중…</p>
+        )}
+      </Section>
+
+      {/* 수신 토픽 */}
+      {receivedTopics.length > 0 && (
+        <Section label="ACTIVE TOPICS">
+          <div className="flex flex-wrap gap-1">
+            {receivedTopics.map(t => (
+              <span key={t} className="px-1.5 py-0.5 text-[8px] font-mono bg-[#0d0d0d] border border-[#1a1a1a] text-[#555] rounded">{t}</span>
+            ))}
+          </div>
+        </Section>
+      )}
+    </div>
+  );
+}
+
+function Section({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="border border-[#1a1a1a] rounded bg-[#080808] p-3">
+      <p className="text-[9px] font-bold text-[#444] uppercase tracking-[0.25em] font-mono mb-2">{label}</p>
+      {children}
+    </div>
+  );
+}
+
+function Row({ label, value, accent }: { label: string; value: string; accent?: boolean }) {
+  return (
+    <div className="flex justify-between text-[10px] font-mono py-0.5">
+      <span className="text-[#444]">{label}</span>
+      <span className={accent ? "text-green-400 font-bold" : "text-[#888]"}>{value}</span>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function ModeBtn({
   mode, active, onClick, border, children,

@@ -1,169 +1,249 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { SubscribeFn } from "../hooks/useRos";
-import { RobotId } from "../types/robots";
+import type { RosMessage } from "../hooks/useNestSocket";
+import { BACKEND_URL } from "../config";
 import { useThrottled } from "../hooks/useThrottled";
 
-interface VicPinkyStatus { x: number | null; y: number | null; scanReceived: boolean }
-interface BotStatus { mode: string; detected: boolean; battery: number | null }
-interface OmxStatus { omx1: string; omx2: string }
+// ── 타입 ─────────────────────────────────────────────────────────────────────
 
-const TURTLEBOTS = ["tb3_01", "tb3_02", "tb3_03", "tb3_04"] as const;
-const initBot = (): BotStatus => ({ mode: "unknown", detected: false, battery: null });
-
-interface Props {
-  subscribe: SubscribeFn;
-  selectedRobot: RobotId;
-  onSelect: (id: RobotId) => void;
+interface DbRobot {
+  robot_id: string;
+  ip: string;
+  ros_domain_id: number;
+  status: "IDLE" | "MOVING" | "WORKING" | "ERROR" | "OFFLINE";
+  location?: string | null;
 }
 
-export default function RobotSidebar({ subscribe, selectedRobot, onSelect }: Props) {
-  const [vp, setVp]     = useState<VicPinkyStatus>({ x: null, y: null, scanReceived: false });
-  const [bots, setBots] = useState<Record<string, BotStatus>>(
-    Object.fromEntries(TURTLEBOTS.map((id) => [id, initBot()]))
-  );
-  const [omx, setOmx] = useState<OmxStatus>({ omx1: "unknown", omx2: "unknown" });
+interface UrdfInfo {
+  modelName: string;
+  linkCount: number;
+  jointCount: number;
+  jointNames: string[];
+}
 
-  // 1초 단위 표시
-  const displayVp   = useThrottled(vp,   1000);
-  const displayBots = useThrottled(bots, 1000);
-  const displayOmx  = useThrottled(omx,  1000);
+// ── URDF XML 파서 ─────────────────────────────────────────────────────────────
 
+function parseUrdf(xmlStr: string): UrdfInfo | null {
+  try {
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(xmlStr, "application/xml");
+    if (doc.querySelector("parsererror")) return null;
+    const robot = doc.querySelector("robot");
+    if (!robot) return null;
+    const joints = Array.from(doc.querySelectorAll("joint"));
+    return {
+      modelName:  robot.getAttribute("name") ?? "unknown",
+      linkCount:  doc.querySelectorAll("link").length,
+      jointCount: joints.length,
+      jointNames: joints.map(j => j.getAttribute("name") ?? "").filter(Boolean).slice(0, 4),
+    };
+  } catch { return null; }
+}
+
+// ── 상태 색상 ─────────────────────────────────────────────────────────────────
+
+const STATUS_DOT: Record<string, string> = {
+  IDLE:    "bg-green-500",
+  MOVING:  "bg-blue-400 animate-pulse",
+  WORKING: "bg-yellow-400 animate-pulse",
+  ERROR:   "bg-red-500",
+  OFFLINE: "bg-[#333]",
+};
+
+const STATUS_TEXT: Record<string, string> = {
+  IDLE:    "text-green-500",
+  MOVING:  "text-blue-400",
+  WORKING: "text-yellow-400",
+  ERROR:   "text-red-500",
+  OFFLINE: "text-[#333]",
+};
+
+// ── Props ─────────────────────────────────────────────────────────────────────
+
+interface Props {
+  subscribe:     SubscribeFn;
+  selectedRobot: string;
+  onSelect:      (id: string) => void;
+  rosMessages:   Record<string, RosMessage>;
+  liveStatuses?: Record<string, string>;
+}
+
+// ── 컴포넌트 ──────────────────────────────────────────────────────────────────
+
+export default function RobotSidebar({
+  subscribe, selectedRobot, onSelect, rosMessages, liveStatuses = {},
+}: Props) {
+  const [dbRobots, setDbRobots] = useState<DbRobot[]>([]);
+
+  const fetchRobots = useCallback(async () => {
+    try {
+      const r = await fetch(`${BACKEND_URL}/api/fleet/robots`);
+      if (r.ok) setDbRobots(await r.json() as DbRobot[]);
+    } catch {}
+  }, []);
+
+  // 초기 로드 + 10초마다 갱신
   useEffect(() => {
-    const subs: (ROSLIB.Topic | null)[] = [];
+    void fetchRobots();
+    const t = setInterval(() => void fetchRobots(), 10_000);
+    return () => clearInterval(t);
+  }, [fetchRobots]);
 
-    // VicPinky — odom으로 위치 표시, scan으로 수신 여부 확인
-    subs.push(subscribe<{
-      pose: { pose: { position: { x: number; y: number } } }
-    }>("/vicpinky/odom", "nav_msgs/Odometry",
-      (m) => setVp((p) => ({
-        ...p,
-        x: Math.round(m.pose.pose.position.x * 100) / 100,
-        y: Math.round(m.pose.pose.position.y * 100) / 100,
-      }))));
-    subs.push(subscribe<{ ranges: number[] }>("/vicpinky/scan", "sensor_msgs/LaserScan",
-      () => setVp((p) => ({ ...p, scanReceived: true }))));
-
-    // TurtleBot3 × 4
-    TURTLEBOTS.forEach((id) => {
-      subs.push(subscribe<{ data: string }>(`/${id}/mode`, "std_msgs/String",
-        (m) => setBots((p) => ({ ...p, [id]: { ...p[id], mode: m.data } }))));
-      subs.push(subscribe<{ data: boolean }>(`/${id}/yolo/person_detected`, "std_msgs/Bool",
-        (m) => setBots((p) => ({ ...p, [id]: { ...p[id], detected: m.data } }))));
-      subs.push(subscribe<{ percentage: number }>(`/${id}/battery_state`, "sensor_msgs/BatteryState",
-        (m) => setBots((p) => ({
-          ...p,
-          [id]: { ...p[id], battery: Math.round(m.percentage > 1 ? m.percentage : m.percentage * 100) },
-        }))));
+  // DB 로봇에 대해 robot_description + 배터리 rosbridge 구독
+  useEffect(() => {
+    const subs: (ReturnType<SubscribeFn> | null)[] = [];
+    dbRobots.forEach(({ robot_id }) => {
+      // robot_description은 NestJS rosMessages에서 읽음; rosbridge로도 구독해 둠
+      subs.push(subscribe<{ data: string }>(
+        `/${robot_id}/robot_description`, "std_msgs/String", () => {},
+      ));
     });
+    return () => subs.forEach(s => s?.unsubscribe());
+  }, [subscribe, dbRobots]);
 
-    // OMX (토픽 준비 중 — vicpinky 네임스페이스)
-    subs.push(subscribe<{ data: string }>("/vicpinky/omx1/state", "std_msgs/String",
-      (m) => setOmx((p) => ({ ...p, omx1: m.data }))));
-    subs.push(subscribe<{ data: string }>("/vicpinky/omx2/state", "std_msgs/String",
-      (m) => setOmx((p) => ({ ...p, omx2: m.data }))));
-
-    return () => subs.forEach((s) => s?.unsubscribe());
-  }, [subscribe]);
+  const displayMessages = useThrottled(rosMessages, 800);
 
   return (
-    <aside className="w-48 flex-none bg-[#080808] border-r border-red-900/30 flex flex-col overflow-y-auto">
-      {/* 이동 로봇 */}
-      <section className="px-2.5 pt-3">
-        <SectionLabel>이동 로봇</SectionLabel>
+    <aside className="w-52 flex-none bg-[#080808] border-r border-red-900/30 flex flex-col overflow-y-auto">
+      {/* 헤더 */}
+      <div className="px-3 pt-3 pb-1.5 border-b border-[#111]">
+        <p className="text-[9px] font-bold text-red-900/60 uppercase tracking-[0.3em] flex items-center gap-1">
+          <span className="w-3 h-px bg-red-900/50" />
+          ROBOT FLEET
+          <span className="ml-auto text-[#333]">{dbRobots.length}</span>
+        </p>
+      </div>
 
-        <RobotItem id="vicpinky" icon="▶" label="VICPINKY"
-          selected={selectedRobot === "vicpinky"} onSelect={onSelect}>
-          {displayVp.x !== null ? (
-            <>
-              <StatRow label="X" value={`${displayVp.x.toFixed(2)} m`} />
-              <StatRow label="Y" value={`${displayVp.y?.toFixed(2) ?? "—"} m`} />
-            </>
-          ) : (
-            <StatRow label="odom" value="대기 중" />
-          )}
-          <StatRow label="LIDAR" value={displayVp.scanReceived ? "수신 중" : "대기 중"} />
-        </RobotItem>
-
-        {TURTLEBOTS.map((id, i) => {
-          const s = displayBots[id];
-          return (
-            <RobotItem key={id} id={id} icon="▶" label={`TB3-0${i + 1}`}
-              selected={selectedRobot === id} onSelect={onSelect}>
-              <StatRow label="모드" value={s.mode} />
-              {s.detected && (
-                <span className="text-[10px] text-red-500 font-mono font-bold danger-pulse">⚠ PERSON</span>
-              )}
-              {s.battery !== null && <BatteryRow pct={s.battery} />}
-            </RobotItem>
-          );
-        })}
-      </section>
-
-      {/* 로봇 팔 */}
-      <section className="px-2.5 pt-2 pb-4 mt-2 border-t border-red-900/20">
-        <SectionLabel>로봇 팔</SectionLabel>
-        <RobotItem id="omx" icon="▶" label="OMX ARM"
-          selected={selectedRobot === "omx"} onSelect={onSelect}>
-          <StatRow label="OMX1" value={displayOmx.omx1} />
-          <StatRow label="OMX2" value={displayOmx.omx2} />
-        </RobotItem>
-      </section>
+      {/* 로봇 목록 */}
+      <div className="flex-1 overflow-y-auto py-1">
+        {dbRobots.length === 0 ? (
+          <p className="px-3 py-4 text-[9px] text-[#2a2a2a] font-mono text-center">DB에 로봇 없음</p>
+        ) : (
+          dbRobots.map(robot => (
+            <RobotItem
+              key={robot.robot_id}
+              robot={robot}
+              selected={selectedRobot === robot.robot_id}
+              onSelect={onSelect}
+              rosMessages={displayMessages}
+              liveStatus={liveStatuses[robot.robot_id]}
+            />
+          ))
+        )}
+      </div>
     </aside>
   );
 }
 
-/* ── sub-components ─────────────────────────────────── */
+// ── 로봇 카드 ─────────────────────────────────────────────────────────────────
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-[9px] font-bold text-red-900/70 uppercase tracking-[0.3em] mb-2 px-1 flex items-center gap-1">
-      <span className="w-3 h-px bg-red-900/60" />
-      {children}
-    </p>
-  );
-}
-
-function RobotItem({ id, icon, label, selected, onSelect, children }: {
-  id: RobotId; icon: string; label: string;
-  selected: boolean; onSelect: (id: RobotId) => void;
-  children?: React.ReactNode;
+function RobotItem({
+  robot, selected, onSelect, rosMessages, liveStatus,
+}: {
+  robot: DbRobot;
+  selected: boolean;
+  onSelect: (id: string) => void;
+  rosMessages: Record<string, RosMessage>;
+  liveStatus?: string;
 }) {
+  const { robot_id } = robot;
+  const p = (topic: string) => rosMessages[`/${robot_id}/${topic}`]?.data;
+
+  // 배터리
+  const batData = p("battery_state") as { percentage?: number } | undefined;
+  const batPct  = batData?.percentage != null
+    ? Math.round(batData.percentage > 1 ? batData.percentage : batData.percentage * 100)
+    : null;
+
+  // 위치
+  const odom = p("odom") as { pose?: { pose?: { position?: { x?: number; y?: number } } } } | undefined;
+  const pos  = odom?.pose?.pose?.position;
+
+  // URDF
+  const rdRaw  = p("robot_description") as { data?: string } | string | undefined;
+  const rdStr  = typeof rdRaw === "string" ? rdRaw
+               : (rdRaw as { data?: string } | undefined)?.data ?? null;
+  const urdf   = rdStr ? parseUrdf(rdStr) : null;
+
+  // 실시간 상태 (socket > DB 순)
+  const displayStatus = (liveStatus ?? robot.status) as keyof typeof STATUS_DOT;
+
   return (
     <button
-      onClick={() => onSelect(id)}
+      onClick={() => onSelect(robot_id)}
       className={`w-full text-left px-2.5 py-2 mb-0.5 transition-all border-l-2 ${
         selected
           ? "bg-red-950/30 border-red-600 shadow-sm shadow-red-900/30"
-          : "border-transparent hover:bg-[#111111] hover:border-red-900/40"
+          : "border-transparent hover:bg-[#111] hover:border-red-900/40"
       }`}
     >
-      <div className="flex items-center gap-2">
-        <span className={`text-[10px] font-bold ${selected ? "text-red-500" : "text-[#333333]"}`}>{icon}</span>
-        <span className={`text-[11px] font-bold tracking-widest uppercase font-mono ${
-          selected ? "text-[#c0c0c0]" : "text-[#555555]"
-        }`}>{label}</span>
+      {/* 헤더 행: dot + ID + 상태 */}
+      <div className="flex items-center gap-1.5 mb-1">
+        <span className={`w-1.5 h-1.5 rounded-full flex-none ${STATUS_DOT[displayStatus] ?? "bg-[#333]"}`} />
+        <span className={`text-[11px] font-black tracking-widest uppercase font-mono flex-1 truncate ${
+          selected ? "text-[#c0c0c0]" : "text-[#555]"
+        }`}>{robot_id}</span>
+        <span className={`text-[8px] font-mono font-bold ${STATUS_TEXT[displayStatus] ?? "text-[#333]"}`}>
+          {displayStatus}
+        </span>
       </div>
-      <div className="pl-5 mt-1 flex flex-col gap-0.5">{children}</div>
+
+      {/* URDF 정보 카드 */}
+      {urdf ? (
+        <div className="ml-3 mb-1 px-2 py-1 bg-[#0d1a0d] border border-green-900/30 rounded-sm">
+          <div className="flex items-center gap-1 mb-0.5">
+            <span className="text-[8px] text-green-600 font-bold uppercase tracking-wider">URDF</span>
+            <span className="text-[9px] font-mono text-green-400 truncate">{urdf.modelName}</span>
+          </div>
+          <div className="flex gap-2 text-[8px] font-mono text-[#555]">
+            <span><span className="text-[#888]">{urdf.linkCount}</span> links</span>
+            <span><span className="text-[#888]">{urdf.jointCount}</span> joints</span>
+          </div>
+          {urdf.jointNames.length > 0 && (
+            <div className="mt-0.5 text-[7px] font-mono text-[#333] truncate">
+              {urdf.jointNames.join(" · ")}{urdf.jointCount > 4 ? " …" : ""}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="ml-3 mb-1 flex items-center gap-1">
+          <span className="text-[8px] font-mono text-[#2a2a2a]">URDF 대기 중</span>
+        </div>
+      )}
+
+      {/* 센서 데이터 */}
+      <div className="ml-3 flex flex-col gap-0.5">
+        {batPct !== null && <BatteryRow pct={batPct} />}
+        {pos?.x != null && (
+          <div className="flex justify-between text-[9px] font-mono">
+            <span className="text-[#333]">POS</span>
+            <span className="text-[#666]">{(pos.x ?? 0).toFixed(2)}, {(pos.y ?? 0).toFixed(2)}</span>
+          </div>
+        )}
+        {robot.location && (
+          <div className="flex justify-between text-[9px] font-mono">
+            <span className="text-[#333]">NODE</span>
+            <span className="text-[#555] truncate max-w-[80px]">{robot.location}</span>
+          </div>
+        )}
+      </div>
     </button>
   );
 }
 
-function StatRow({ label, value }: { label: string; value: string }) {
-  const isDim = value === "unknown" || value === "대기 중" || value === "—";
-  return (
-    <div className="flex items-center justify-between text-[10px]">
-      <span className="text-[#333333] font-mono">{label}</span>
-      <span className={`font-mono ${isDim ? "text-[#2a2a2a]" : "text-[#888888]"}`}>{value}</span>
-    </div>
-  );
-}
+// ── 배터리 행 ─────────────────────────────────────────────────────────────────
 
 function BatteryRow({ pct }: { pct: number }) {
-  const color = pct < 20 ? "text-red-500" : pct < 50 ? "text-[#888888]" : "text-green-600";
+  const color = pct < 20 ? "text-red-500" : pct < 50 ? "text-amber-400" : "text-green-500";
+  const barW  = `${Math.max(4, pct)}%`;
+  const barC  = pct < 20 ? "bg-red-600" : pct < 50 ? "bg-amber-500" : "bg-green-600";
   return (
-    <div className="flex items-center justify-between text-[10px]">
-      <span className="text-[#333333] font-mono">BAT</span>
-      <span className={`font-mono font-bold ${color}`}>{pct}%</span>
+    <div className="flex items-center gap-1.5 text-[9px] font-mono">
+      <span className="text-[#333]">BAT</span>
+      <div className="flex-1 h-1 bg-[#1a1a1a] rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${barC}`} style={{ width: barW }} />
+      </div>
+      <span className={`font-bold ${color}`}>{pct}%</span>
     </div>
   );
 }
