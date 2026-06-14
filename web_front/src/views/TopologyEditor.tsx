@@ -30,6 +30,7 @@ interface FEdge {
   endNode: string;
   direction: "ONE_WAY" | "BOTH_WAY";
   isLocked: boolean;
+  weight?: number;
 }
 
 type Mode = "select" | "node" | "edge";
@@ -661,6 +662,9 @@ export default function TopologyEditor() {
                 <option value="ONE_WAY">ONE_WAY</option>
               </select>
             </Field>
+            <Field label="가중치">
+              <input className={INP} type="number" step="1" value={addEdge.weight ?? 1} onChange={e => setAddEdge(d => ({ ...d, weight: +e.target.value }))} />
+            </Field>
             <div className="flex gap-1 mt-2">
               <button className={BTN("bg-green-900/40 text-green-300 border-green-800/60 hover:bg-green-800/50 flex-1")} onClick={saveEdge}>저장</button>
               <button className={BTN("bg-[#111] text-[#555] border-[#333] hover:text-[#aaa] flex-1")} onClick={() => setAddEdge(null)}>취소</button>
@@ -716,6 +720,9 @@ export default function TopologyEditor() {
                     : "bg-[#111] text-[#555] border-[#333] hover:text-green-400"
                 }`}
               >{(editEdge.isLocked ?? selEdge.isLocked) ? "잠김 — 클릭으로 해제" : "열림 — 클릭으로 잠금"}</button>
+            </Field>
+            <Field label="가중치">
+              <input className={INP} type="number" step="1" value={editEdge.weight ?? selEdge.weight ?? 1} onChange={e => setEditEdge(d => ({ ...d, weight: +e.target.value }))} />
             </Field>
             <div className="flex gap-1 mt-2">
               <button className={BTN("bg-blue-900/40 text-blue-300 border-blue-800/60 hover:bg-blue-800/50 flex-1")} onClick={updateEdge}>수정</button>

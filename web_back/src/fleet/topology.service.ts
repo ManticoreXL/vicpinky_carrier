@@ -69,7 +69,7 @@ export class TopologyService {
     await this.edgeModel.updateOne({ edge_id }, { isLocked });
   }
 
-  // ── 경로 탐색 (BFS, 잠긴 엣지 제외) ──────────────────────────────────────
+  // ── 경로 탐색 (다익스트라, 잠긴 엣지 제외, 가중치 반영) ──────────────────────────────────────
 
   async findPath(
     startNodeId: string,
@@ -80,31 +80,43 @@ export class TopologyService {
 
     const edges = await this.edgeModel.find({ map_id, isLocked: false }).lean().exec();
 
-    // 인접 리스트 구성 (방향 고려)
-    const adj = new Map<string, string[]>();
+    // 인접 리스트 구성: 노드 -> { 이웃, 가중치 }
+    const adj = new Map<string, { to: string; weight: number }[]>();
     for (const edge of edges) {
+      const w = edge.weight ?? 1;
       if (!adj.has(edge.startNode)) adj.set(edge.startNode, []);
-      adj.get(edge.startNode)!.push(edge.endNode);
+      adj.get(edge.startNode)!.push({ to: edge.endNode, weight: w });
 
       if (edge.direction === EdgeDirection.BOTH_WAY) {
         if (!adj.has(edge.endNode)) adj.set(edge.endNode, []);
-        adj.get(edge.endNode)!.push(edge.startNode);
+        adj.get(edge.endNode)!.push({ to: edge.startNode, weight: w });
       }
     }
 
-    // BFS
-    const visited = new Set<string>([startNodeId]);
+    // 다익스트라 (우선순위 큐 대신 단순 배열 + 정렬 사용 - 노드 개수 적으므로 충분)
+    const dist = new Map<string, number>();
     const parent = new Map<string, string>();
-    const queue = [startNodeId];
+    const pq: { id: string; d: number }[] = [{ id: startNodeId, d: 0 }];
+    
+    dist.set(startNodeId, 0);
 
-    while (queue.length > 0) {
-      const current = queue.shift()!;
-      for (const neighbor of adj.get(current) ?? []) {
-        if (visited.has(neighbor)) continue;
-        visited.add(neighbor);
-        parent.set(neighbor, current);
-        if (neighbor === endNodeId) return this.reconstructPath(parent, startNodeId, endNodeId);
-        queue.push(neighbor);
+    while (pq.length > 0) {
+      pq.sort((a, b) => a.d - b.d);
+      const { id: u, d: distU } = pq.shift()!;
+
+      if (u === endNodeId) return this.reconstructPath(parent, startNodeId, endNodeId);
+
+      const currentDist = dist.get(u) ?? Infinity;
+      if (distU > currentDist) continue;
+
+      for (const neighbor of adj.get(u) ?? []) {
+        const v = neighbor.to;
+        const alt = distU + neighbor.weight;
+        if (alt < (dist.get(v) ?? Infinity)) {
+          dist.set(v, alt);
+          parent.set(v, u);
+          pq.push({ id: v, d: alt });
+        }
       }
     }
 

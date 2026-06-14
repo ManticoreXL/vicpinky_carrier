@@ -27,6 +27,9 @@ export class Edge {
 
   @Prop({ default: false })
   isLocked: boolean;
+
+  @Prop({ default: 1 })
+  weight: number;
 }
 
 export const EdgeSchema = SchemaFactory.createForClass(Edge);

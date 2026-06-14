@@ -233,6 +233,7 @@ export default function FmsView({
   const [filterTab,      setFilterTab]      = useState<FilterTab>("all");
   const [contentTab,     setContentTab]     = useState<ContentTab>("map");
   const [mapAssignments, setMapAssignments] = useState<Record<string, string>>({});
+  const [multiNodeMode,  setMultiNodeMode]  = useState(false);
   const [form, setForm] = useState<{
     type: TaskType; targetNode: string; priority: number;
   }>({ type: "SUPPLY", targetNode: "", priority: 5 });
@@ -360,7 +361,12 @@ export default function FmsView({
                 onSetHome={setRobotHome}
                 activePaths={activePaths}
                 robotPositions={robotPositions}
-                onNodeClick={(nodeId) => setForm(f => ({ ...f, targetNode: nodeId }))}
+                onNodeClick={(nodeId) => {
+                  setForm(f => ({
+                    ...f,
+                    targetNode: multiNodeMode ? (f.targetNode ? `${f.targetNode}, ${nodeId}` : nodeId) : nodeId
+                  }))
+                }}
               />
             </div>
           )}
@@ -476,6 +482,18 @@ export default function FmsView({
               onChange={(e) => setForm((f) => ({ ...f, targetNode: e.target.value }))}
               className="w-full bg-[#0a0a0a] border border-[#1a1a1a] text-[#888] text-[10px] font-mono px-2 py-1.5 placeholder-[#2a2a2a] focus:outline-none focus:border-red-900/60"
             />
+            
+            {/* 연속 선택 토글 */}
+            <label className="flex items-center gap-2 cursor-pointer group">
+              <div className={`w-3 h-3 border flex items-center justify-center transition-colors ${
+                multiNodeMode ? "bg-red-900/50 border-red-500" : "bg-[#0a0a0a] border-[#333]"
+              }`}>
+                {multiNodeMode && <div className="w-1.5 h-1.5 bg-red-400" />}
+              </div>
+              <span className="text-[9px] font-mono text-[#666] group-hover:text-[#aaa] transition-colors">
+                지도에서 노드 클릭 시 연속 추가 (다중 경로)
+              </span>
+            </label>
 
             {/* 우선순위 */}
             <div className="flex items-center gap-2">

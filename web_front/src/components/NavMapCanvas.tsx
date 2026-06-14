@@ -457,8 +457,8 @@ export default function NavMapCanvas({
     const info  = infoRef.current;
     const scale = scaleRef.current;
 
-    // 노드 클릭 우선 처리
-    if (showTopology && onNodeClickRef.current && info) {
+    // 좌클릭 시 노드 클릭 우선 처리
+    if (e.button === 0 && showTopology && onNodeClickRef.current && info) {
       for (const n of topoNodesRef.current) {
         const { cx, cy } = worldToCanvas(n.x, n.y, info, scale);
         if (Math.hypot(x - cx, y - cy) <= 12) {
@@ -504,9 +504,22 @@ export default function NavMapCanvas({
 
     const info  = infoRef.current;
     const scale = scaleRef.current;
-    const { wx, wy } = canvasToWorld(sx, sy, info, scale);
     const dx = cx - sx, dy = cy - sy;
-    const yaw = (Math.abs(dx) + Math.abs(dy)) > 5 ? Math.atan2(-dy, dx) : 0;
+    const isClick = Math.abs(dx) < 5 && Math.abs(dy) < 5;
+    
+    let wx: number, wy: number, yaw: number;
+    const hNode = hoveredNodeId ? topoNodesRef.current.find(n => n.node_id === hoveredNodeId) : null;
+
+    if (hNode && isClick) {
+      wx = hNode.x;
+      wy = hNode.y;
+      yaw = hNode.yaw;
+    } else {
+      const wPos = canvasToWorld(sx, sy, info, scale);
+      wx = wPos.wx;
+      wy = wPos.wy;
+      yaw = isClick ? 0 : Math.atan2(-dy, dx);
+    }
 
     for (const id of selectedBots) {
       if (type === "goal")      onSendGoal(id, wx, wy, yaw);

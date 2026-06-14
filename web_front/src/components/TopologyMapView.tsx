@@ -28,6 +28,7 @@ export interface FEdge {
   endNode: string;
   direction: "ONE_WAY" | "BOTH_WAY";
   isLocked: boolean;
+  weight?: number;
 }
 
 export interface ActivePath {

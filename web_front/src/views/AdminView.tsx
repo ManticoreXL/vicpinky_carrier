@@ -41,6 +41,7 @@ interface FleetEdge {
   endNode: string;
   direction: EdgeDirection;
   isLocked: boolean;
+  weight?: number;
 }
 
 interface Task {

@@ -120,19 +120,53 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     const amclMatch = msg.topic.match(/^\/([^/]+)\/amcl_pose$/);
     if (amclMatch) {
       const id  = amclMatch[1];
-      const pos = (msg.data as { pose?: { pose?: { position?: { x?: number; y?: number } } } })
-        ?.pose?.pose?.position;
+      const poseData = (msg.data as { pose?: { pose?: { position?: { x?: number; y?: number }; orientation?: { x?: number; y?: number; z?: number; w?: number } } } })?.pose?.pose;
+      const pos = poseData?.position;
+      const ori = poseData?.orientation;
       if (pos?.x != null) {
-        const prev = this.robotCache.get(id) ?? { lastSeen: now, batteryPct: null, posX: null, posY: null };
-        this.robotCache.set(id, { ...prev, posX: pos.x, posY: pos.y ?? 0 });
-        void this.checkWaypointArrival(id, pos.x, pos.y ?? 0);
+        const prev = this.robotCache.get(id) ?? { lastSeen: now, batteryPct: null, posX: null, posY: null, yaw: null };
+        let yaw = 0;
+        if (ori) {
+          yaw = Math.atan2(2 * ((ori.w ?? 1) * (ori.z ?? 0) + (ori.x ?? 0) * (ori.y ?? 0)), 1 - 2 * ((ori.y ?? 0) ** 2 + (ori.z ?? 0) ** 2));
+        }
+        this.robotCache.set(id, { ...prev, posX: pos.x, posY: pos.y ?? 0, yaw });
+        void this.checkWaypointArrival(id, pos.x, pos.y ?? 0, yaw);
       }
     }
   }
 
+  private async interpolatePath(path: string[]): Promise<string[]> {
+    const result: string[] = [];
+    for (let i = 0; i < path.length - 1; i++) {
+      const startId = path[i];
+      const endId = path[i + 1];
+      const start = await this.topologyService.findNodeById(startId);
+      const end = await this.topologyService.findNodeById(endId);
+      if (!start || !end) {
+        result.push(endId);
+        continue;
+      }
+      
+      const dx = end.x - start.x;
+      const dy = end.y - start.y;
+      const dist = Math.hypot(dx, dy);
+      const numPoints = Math.floor(dist / 0.5); // 0.5m 간격 웨이포인트
+      
+      // 실제 시작 노드는 이미 포함되어 있거나 처리됨. 여기서는 중간 웨이포인트만.
+      for (let j = 1; j <= numPoints; j++) {
+        const rx = start.x + (dx * j) / (numPoints + 1);
+        const ry = start.y + (dy * j) / (numPoints + 1);
+        const yaw = Math.atan2(dy, dx);
+        result.push(`coord:${rx.toFixed(3)}:${ry.toFixed(3)}:${yaw.toFixed(3)}`);
+      }
+      result.push(endId);
+    }
+    return result.length > 0 ? result : path;
+  }
+
   // ── Waypoint 도착 감지 ────────────────────────────────────────────────────
 
-  private async checkWaypointArrival(robotId: string, x: number, y: number) {
+  private async checkWaypointArrival(robotId: string, x: number, y: number, yaw: number) {
     const taskId = this.activeTasks.get(robotId);
     if (!taskId || !this.server) return;
 
@@ -146,24 +180,45 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     if (remaining.length === 0) return;
 
     const nextNodeId = remaining[0];
-    const node = await this.topologyService.findNodeById(nextNodeId);
-    if (!node) return;
+    let targetX: number, targetY: number, targetYaw: number;
+    let isVirtual = false;
 
-    const dist = Math.hypot(x - node.x, y - node.y);
+    if (nextNodeId.startsWith('coord:')) {
+      const parts = nextNodeId.split(':');
+      targetX = parseFloat(parts[1]);
+      targetY = parseFloat(parts[2]);
+      targetYaw = parseFloat(parts[3]);
+      isVirtual = true;
+    } else {
+      const node = await this.topologyService.findNodeById(nextNodeId);
+      if (!node) return;
+      targetX = node.x; targetY = node.y; targetYaw = node.yaw;
+    }
+
+    const dist = Math.hypot(x - targetX, y - targetY);
     if (dist > GOAL_ARRIVE_M) return;
 
-    // 현재 waypoint 도착 → 로봇 위치 갱신
-    await this.robotService.updateLocation(robotId, nextNodeId);
+    // 현재 waypoint 도착 → 위치 갱신 (실제 노드일 때만)
+    if (!isVirtual) {
+      await this.robotService.updateLocation(robotId, nextNodeId);
+    }
     remaining.shift();
 
     if (remaining.length > 0) {
       // 다음 waypoint로 이동
       await this.fmsService.updatePathQueue(taskId, remaining, this.server);
-      const nextNode = await this.topologyService.findNodeById(remaining[0]);
-      if (nextNode) {
-        this.fmsService.publishGoal(robotId, nextNode.x, nextNode.y, nextNode.yaw);
-        this.emit({ type: 'info', taskId, robotId, message: `${robotId} → ${remaining[0]} 이동 중`, requiresAction: false });
+      const nextId = remaining[0];
+      let nx: number, ny: number, nyaw: number;
+      if (nextId.startsWith('coord:')) {
+        const parts = nextId.split(':');
+        nx = parseFloat(parts[1]); ny = parseFloat(parts[2]); nyaw = parseFloat(parts[3]);
+      } else {
+        const nextNode = await this.topologyService.findNodeById(nextId);
+        if (!nextNode) return;
+        nx = nextNode.x; ny = nextNode.y; nyaw = nextNode.yaw;
       }
+      this.fmsService.publishGoal(robotId, nx, ny, nyaw);
+      this.emit({ type: 'info', taskId, robotId, message: `${robotId} → ${nextId} 이동 중`, requiresAction: false });
     } else {
       // 최종 목적지 도착 → 태스크 완료
       this.activeTasks.delete(robotId);
@@ -174,6 +229,10 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       });
       await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
       this.emit({ type: 'completed', taskId, robotId, message: `${robotId} 태스크 완료 (${task.targetNode})`, requiresAction: false });
+      
+      // 이동 종료 후 현재 위치를 InitialPose로 강제 전송
+      this.fmsService.publishInitialPose(robotId, x, y, yaw);
+      
       this.returnHome(robotId);
     }
   }
@@ -288,11 +347,16 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
         // targetNode가 어느 맵인지 찾기
         const targetNode = await this.topologyService.findNodeById(task.targetNode);
         if (targetNode) {
-          pathQueue = await this.topologyService.findPath(
+          let rawPath = await this.topologyService.findPath(
             robot.location, task.targetNode, targetNode.map_id,
           );
-          // 시작 노드는 이미 있으므로 제외
-          if (pathQueue.length > 0 && pathQueue[0] === robot.location) pathQueue.shift();
+          if (rawPath.length > 0) {
+            pathQueue = await this.interpolatePath(rawPath);
+            // 시작 노드는 이미 있으므로 제외 (실제 노드이든 가상 노드이든 시작점은 제외할 필요가 있음)
+            if (pathQueue.length > 0 && pathQueue[0] === robot.location) {
+              pathQueue.shift();
+            }
+          }
         }
         if (pathQueue.length === 0) {
           await this.fmsService.setWaitReason(taskId, `경로 없음: ${robot.location} → ${task.targetNode}`);
@@ -313,11 +377,20 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       await this.robotService.updateStatus(robotId, RobotStatus.MOVING);
 
       // 첫 번째 waypoint로 이동 시작
-      const firstNodeId = pathQueue[0];
-      const firstNode   = await this.topologyService.findNodeById(firstNodeId);
-      if (firstNode) {
-        this.fmsService.publishGoal(robotId, firstNode.x, firstNode.y, firstNode.yaw);
+      const firstId = pathQueue[0];
+      let firstX: number, firstY: number, firstYaw: number;
+      if (firstId.startsWith('coord:')) {
+        const parts = firstId.split(':');
+        firstX = parseFloat(parts[1]); firstY = parseFloat(parts[2]); firstYaw = parseFloat(parts[3]);
+      } else {
+        const firstNode = await this.topologyService.findNodeById(firstId);
+        if (firstNode) {
+          firstX = firstNode.x; firstY = firstNode.y; firstYaw = firstNode.yaw;
+        } else {
+          firstX = 0; firstY = 0; firstYaw = 0;
+        }
       }
+      this.fmsService.publishGoal(robotId, firstX, firstY, firstYaw);
 
       this.emit({
         type: 'assigned', taskId, robotId,
