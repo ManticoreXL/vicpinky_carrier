@@ -51,4 +51,15 @@ export class FleetMapService {
     if (!doc) throw new NotFoundException(`Map ${map_id} 없음`);
     return doc;
   }
+
+  /** 특정 로봇의 초기 위치 삭제 */
+  async deleteInitPosition(map_id: string, robot_id: string): Promise<FleetMapDocument> {
+    const doc = await this.mapModel.findOneAndUpdate(
+      { map_id },
+      { $unset: { [`init_position.${robot_id}`]: '' } },
+      { new: true },
+    );
+    if (!doc) throw new NotFoundException(`Map ${map_id} 없음`);
+    return doc;
+  }
 }

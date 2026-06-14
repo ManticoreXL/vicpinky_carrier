@@ -9,12 +9,13 @@ import TurtlebotPanel from "./components/panels/TurtlebotPanel";
 import OmxPanel from "./components/panels/OmxPanel";
 import ExploreView from "./views/ExploreView";
 import FmsView from "./views/FmsView";
+import AdminView from "./views/AdminView";
 import BatteryAlertModal from "./components/BatteryAlertModal";
 import ControlCameraPanel from "./components/ControlCameraPanel";
 import { useBatteryAlerts } from "./hooks/useBatteryAlerts";
 import { useThrottled } from "./hooks/useThrottled";
 
-type AppMode = "control" | "explore" | "fms";
+type AppMode = "control" | "explore" | "fms" | "admin";
 
 const MODE_THEME = {
   control: {
@@ -44,6 +45,15 @@ const MODE_THEME = {
     bgActive:     "bg-[#1a0f00]",
     shadow:       "shadow-amber-900/40",
   },
+  admin: {
+    accent:       "text-indigo-400",
+    border:       "border-indigo-900/50",
+    borderLight:  "border-indigo-900/30",
+    logoBorder:   "border-indigo-800/60",
+    bg:           "bg-indigo-950/40",
+    bgActive:     "bg-[#07001a]",
+    shadow:       "shadow-indigo-900/40",
+  },
 } as const;
 
 export default function App() {
@@ -64,6 +74,7 @@ export default function App() {
   const displayMessages = useThrottled(rosMessages, 1000);
   const isExplore = appMode === "explore";
   const isFms     = appMode === "fms";
+  const isAdmin   = appMode === "admin";
 
   return (
     <div className="flex flex-col h-screen bg-[#050505] text-[#d4d4d4]">
@@ -80,14 +91,14 @@ export default function App() {
                           ${MODE_THEME[appMode].bg}
                           ${MODE_THEME[appMode].accent}
                           ${MODE_THEME[appMode].shadow}`}>
-            {isExplore ? "SOS" : isFms ? "FMS" : "ROS"}
+            {isExplore ? "SOS" : isFms ? "FMS" : isAdmin ? "ADM" : "ROS"}
           </div>
           <div>
             <h1 className="text-xs font-bold text-[#c0c0c0] leading-tight tracking-[0.2em] uppercase">
-              {isExplore ? "DISASTER RECON SYSTEM" : isFms ? "FLEET MANAGEMENT SYSTEM" : "ROS2 관제 시스템"}
+              {isExplore ? "DISASTER RECON SYSTEM" : isFms ? "FLEET MANAGEMENT SYSTEM" : isAdmin ? "ADMIN PANEL" : "ROS2 관제 시스템"}
             </h1>
             <p className="text-[10px] text-[#444444] leading-tight font-mono tracking-widest">
-              {isExplore ? "재난 탐사 모니터링" : isFms ? "TASK DISPATCH & MONITORING" : "ROBOT CONTROL INTERFACE"}
+              {isExplore ? "재난 탐사 모니터링" : isFms ? "TASK DISPATCH & MONITORING" : isAdmin ? "ROBOT · MAP · NODE · EDGE · TASK" : "ROBOT CONTROL INTERFACE"}
             </p>
           </div>
         </div>
@@ -98,7 +109,8 @@ export default function App() {
           <div className="flex border border-[#222222] rounded overflow-hidden">
             <ModeBtn mode="control" active={appMode === "control"} onClick={() => setAppMode("control")} border>◈ 관제</ModeBtn>
             <ModeBtn mode="fms"     active={appMode === "fms"}     onClick={() => setAppMode("fms")}     border>⬡ FMS</ModeBtn>
-            <ModeBtn mode="explore" active={appMode === "explore"} onClick={() => setAppMode("explore")}      >⚠ 탐사</ModeBtn>
+            <ModeBtn mode="explore" active={appMode === "explore"} onClick={() => setAppMode("explore")} border>⚠ 탐사</ModeBtn>
+            <ModeBtn mode="admin"   active={appMode === "admin"}   onClick={() => setAppMode("admin")}        >⚙ 관리</ModeBtn>
           </div>
 
           {/* 상태 표시 */}
@@ -127,7 +139,11 @@ export default function App() {
       </header>
 
       {/* ── 본문 ──────────────────────────────────────────────────────────── */}
-      {isFms ? (
+      {isAdmin ? (
+        <div className="flex-1 overflow-hidden">
+          <AdminView />
+        </div>
+      ) : isFms ? (
         <div className="flex-1 overflow-hidden">
           <FmsView
             rosMessages={displayMessages}
@@ -218,6 +234,7 @@ export default function App() {
         <span className="tracking-widest uppercase">
           {isExplore ? "DISASTER RECON — TACTICAL MONITORING" :
            isFms     ? "FLEET MANAGEMENT — TASK DISPATCH" :
+           isAdmin   ? "ADMIN — ROBOT · MAP · NODE · EDGE · TASK" :
                        "ROS2 WEB DASHBOARD"}
         </span>
         <span>ROSBRIDGE :9090 · NESTJS :3001</span>
@@ -229,6 +246,7 @@ export default function App() {
 function ModeBtn({
   mode, active, onClick, border, children,
 }: { mode: AppMode; active: boolean; onClick: () => void; border?: boolean; children: React.ReactNode }) {
+  if (!(mode in MODE_THEME)) return null;
   const t = MODE_THEME[mode];
   return (
     <button

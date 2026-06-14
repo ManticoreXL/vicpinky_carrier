@@ -119,19 +119,24 @@ export class FmsService {
   async setStatus(
     taskId: string,
     status: TaskStatus,
-    server: Server,
+    server: Server | null,
     extra: Record<string, unknown> = {},
   ): Promise<void> {
     await this.taskModel.updateOne({ _id: taskId }, { status, ...extra });
-    server.emit('fms_task_updated', { _id: taskId, status, ...extra });
+    server?.emit('fms_task_updated', { _id: taskId, status, ...extra });
   }
 
   // ── 취소 ──────────────────────────────────────────────────────────────────
-  async cancel(taskId: string, server: Server): Promise<void> {
+  async cancel(taskId: string, server: Server | null): Promise<void> {
     const task = await this.taskModel.findById(taskId);
     if (!task) return;
     if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED) return;
     await this.setStatus(taskId, TaskStatus.FAILED, server, { completedAt: new Date() });
+  }
+
+  // ── 단건 삭제 (DB에서 완전 제거) ─────────────────────────────────────────
+  async remove(taskId: string): Promise<void> {
+    await this.taskModel.deleteOne({ _id: taskId });
   }
 
   // ── 목록 조회 ─────────────────────────────────────────────────────────────

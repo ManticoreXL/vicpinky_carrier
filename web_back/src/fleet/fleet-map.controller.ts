@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, HttpCode } from '@nestjs/common';
 import { FleetMapService } from './fleet-map.service';
 import { FleetMap } from './fleet-map.schema';
 
@@ -35,5 +35,11 @@ export class FleetMapController {
     @Body() pos: { x: number; y: number; yaw: number },
   ) {
     return this.fleetMapService.setInitPosition(id, robotId, pos);
+  }
+
+  @Delete(':id/init-position/:robotId')
+  @HttpCode(200)
+  deleteInitPosition(@Param('id') id: string, @Param('robotId') robotId: string) {
+    return this.fleetMapService.deleteInitPosition(id, robotId);
   }
 }

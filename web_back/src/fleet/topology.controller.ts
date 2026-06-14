@@ -14,6 +14,12 @@ export class TopologyController {
     return this.topologyService.findAllNodes(map_id);
   }
 
+  // static 경로는 반드시 동적 경로(:id)보다 먼저 선언해야 충돌이 없다
+  @Get('nodes/by-type/:map_id/:type')
+  findByType(@Param('map_id') map_id: string, @Param('type') type: NodeType) {
+    return this.topologyService.findNodesByType(map_id, type);
+  }
+
   @Get('nodes/:id')
   findNode(@Param('id') id: string) { return this.topologyService.findNodeById(id); }
 
@@ -27,11 +33,6 @@ export class TopologyController {
 
   @Delete('nodes/:id')
   removeNode(@Param('id') id: string) { return this.topologyService.removeNode(id); }
-
-  @Get('nodes/by-type/:map_id/:type')
-  findByType(@Param('map_id') map_id: string, @Param('type') type: NodeType) {
-    return this.topologyService.findNodesByType(map_id, type);
-  }
 
   // ── Edges ────────────────────────────────────────────────────────────────
 
