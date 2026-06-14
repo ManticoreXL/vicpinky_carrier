@@ -5,6 +5,7 @@ import type { RosMessage } from "./hooks/useNestSocket";
 import StatusBadge from "./components/StatusBadge";
 import RobotSidebar from "./components/RobotSidebar";
 import VicPinkyPanel from "./components/panels/BigPinkyPanel";
+import PinkyBotPanel from "./components/panels/PinkyBotPanel";
 import TurtlebotPanel from "./components/panels/TurtlebotPanel";
 import OmxPanel from "./components/panels/OmxPanel";
 import ExploreView from "./views/ExploreView";
@@ -190,6 +191,12 @@ export default function App() {
                 activeGoals={activeGoals}
                 actionFeedbacks={actionFeedbacks}
                 actionResults={actionResults}
+                callService={callService}
+              />
+            ) : selectedRobot === "pinky" ? (
+              <PinkyBotPanel
+                rosMessages={displayMessages}
+                emitCmdVel={emitCmdVel}
                 callService={callService}
               />
             ) : selectedRobot === "omx" ? (

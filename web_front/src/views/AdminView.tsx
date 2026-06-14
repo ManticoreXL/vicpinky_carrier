@@ -606,9 +606,9 @@ function NodeSection() {
 
 function EdgeSection() {
   const [edges, setEdges] = useState<FleetEdge[]>([]);
+  const [allNodes, setAllNodes] = useState<FleetNode[]>([]);
   const [loading, setLoading] = useState(false);
   const [mapFilter, setMapFilter] = useState("");
-  const [maps, setMaps] = useState<string[]>([]);
   const [editId, setEditId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<Partial<FleetEdge>>({});
   const [adding, setAdding] = useState(false);
@@ -616,10 +616,10 @@ function EdgeSection() {
   const [delConfirm, setDelConfirm] = useState<string | null>(null);
   const [err, setErr] = useState("");
 
-  // 맵 목록 별도 fetch
-  useEffect(() => {
-    api<FleetMap[]>("/api/fleet/maps")
-      .then(ms => setMaps(ms.map(m => m.map_id)))
+  // 전체 노드 로드 (엣지 등록 시 노드 목록 제공용)
+  const loadNodes = useCallback(() => {
+    api<FleetNode[]>("/api/fleet/topology/nodes")
+      .then(ns => setAllNodes(ns))
       .catch(() => {});
   }, []);
 
@@ -628,12 +628,15 @@ function EdgeSection() {
     try {
       const all = await api<FleetEdge[]>("/api/fleet/topology/edges" + (mapFilter ? `?map_id=${mapFilter}` : ""));
       setEdges(all);
-      setMaps(prev => [...new Set([...prev, ...all.map(e => e.map_id)])]);
     } catch {}
     setLoading(false);
   }, [mapFilter]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => { void load(); loadNodes(); }, [load, loadNodes]);
+
+  // 노드에서 맵 목록 도출 (엣지 map_id는 항상 노드의 map_id와 일치해야 함)
+  const nodeMaps = [...new Set(allNodes.map(n => n.map_id))].sort();
+  const nodesForMap = (mapId: string) => allNodes.filter(n => n.map_id === mapId);
 
   async function save() {
     if (!editId) return;
@@ -645,7 +648,10 @@ function EdgeSection() {
 
   async function add() {
     if (!addDraft.edge_id || !addDraft.map_id || !addDraft.startNode || !addDraft.endNode) {
-      setErr("edge_id, map_id, startNode, endNode 필수"); return;
+      setErr("edge_id, 맵, 출발 노드, 도착 노드 필수"); return;
+    }
+    if (addDraft.startNode === addDraft.endNode) {
+      setErr("출발 노드와 도착 노드가 같을 수 없습니다"); return;
     }
     try {
       await api("/api/fleet/topology/edges", { method: "POST", body: JSON.stringify(addDraft) });
@@ -674,6 +680,9 @@ function EdgeSection() {
 
   const displayed = mapFilter ? edges.filter(e => e.map_id === mapFilter) : edges;
 
+  // 드롭다운 공통 스타일
+  const NSEL = `${SEL} min-w-[80px]`;
+
   return (
     <div className="flex gap-4 items-start">
       <div className="flex-1 min-w-0">
@@ -681,14 +690,14 @@ function EdgeSection() {
         <SectionHeader title="엣지" count={displayed.length} onAdd={() => { setAdding(true); setErr(""); }} onRefresh={load} loading={loading} noMargin />
         <select className={`${SEL} w-40`} value={mapFilter} onChange={e => setMapFilter(e.target.value)}>
           <option value="">전체 맵</option>
-          {maps.map(m => <option key={m} value={m}>{m}</option>)}
+          {nodeMaps.map(m => <option key={m} value={m}>{m}</option>)}
         </select>
       </div>
       {err && <ErrBar msg={err} onClose={() => setErr("")} />}
       <TableWrap>
         <thead>
           <tr className="border-b border-[#1e1e1e]">
-            {["edge_id","map_id","출발 → 도착","방향","잠금",""].map(h => <th key={h} className={TH}>{h}</th>)}
+            {["edge_id","맵","출발 → 도착","방향","잠금",""].map(h => <th key={h} className={TH}>{h}</th>)}
           </tr>
         </thead>
         <tbody>
@@ -696,14 +705,28 @@ function EdgeSection() {
             <tr className="border-b border-[#1a1a1a] bg-[#0e1a0e]">
               <td className={TD}><input className={INP} placeholder="E01" value={addDraft.edge_id ?? ""} onChange={e => setAddDraft(d => ({ ...d, edge_id: e.target.value }))} /></td>
               <td className={TD}>
-                <input className={INP} placeholder="floor_1" list="edge-maps-list" value={addDraft.map_id ?? ""} onChange={e => setAddDraft(d => ({ ...d, map_id: e.target.value }))} />
-                <datalist id="edge-maps-list">{maps.map(m => <option key={m} value={m} />)}</datalist>
+                <select className={NSEL} value={addDraft.map_id ?? ""} onChange={e => setAddDraft(d => ({ ...d, map_id: e.target.value, startNode: "", endNode: "" }))}>
+                  <option value="">맵 선택</option>
+                  {nodeMaps.map(m => <option key={m} value={m}>{m}</option>)}
+                </select>
               </td>
               <td className={TD}>
                 <div className="flex items-center gap-1">
-                  <input className={`${INP} w-20`} placeholder="N01" value={addDraft.startNode ?? ""} onChange={e => setAddDraft(d => ({ ...d, startNode: e.target.value }))} />
+                  <select className={NSEL} value={addDraft.startNode ?? ""} disabled={!addDraft.map_id}
+                    onChange={e => setAddDraft(d => ({ ...d, startNode: e.target.value, endNode: d.endNode === e.target.value ? "" : d.endNode }))}>
+                    <option value="">출발</option>
+                    {nodesForMap(addDraft.map_id ?? "").map(n => (
+                      <option key={n.node_id} value={n.node_id}>{n.node_id}</option>
+                    ))}
+                  </select>
                   <span className="text-[#444]">→</span>
-                  <input className={`${INP} w-20`} placeholder="N02" value={addDraft.endNode ?? ""} onChange={e => setAddDraft(d => ({ ...d, endNode: e.target.value }))} />
+                  <select className={NSEL} value={addDraft.endNode ?? ""} disabled={!addDraft.startNode}
+                    onChange={e => setAddDraft(d => ({ ...d, endNode: e.target.value }))}>
+                    <option value="">도착</option>
+                    {nodesForMap(addDraft.map_id ?? "").filter(n => n.node_id !== addDraft.startNode).map(n => (
+                      <option key={n.node_id} value={n.node_id}>{n.node_id}</option>
+                    ))}
+                  </select>
                 </div>
               </td>
               <td className={TD}>
@@ -716,7 +739,7 @@ function EdgeSection() {
               <td className={TD}>
                 <div className="flex gap-1">
                   <button className={BTN("bg-green-900/40 text-green-300 border-green-800/60")} onClick={add}>저장</button>
-                  <button className={BTN("bg-[#111] text-[#555] border-[#333]")} onClick={() => setAdding(false)}>취소</button>
+                  <button className={BTN("bg-[#111] text-[#555] border-[#333]")} onClick={() => { setAdding(false); setAddDraft({ direction: "BOTH_WAY", isLocked: false }); }}>취소</button>
                 </div>
               </td>
             </tr>
@@ -727,16 +750,27 @@ function EdgeSection() {
           {displayed.map(e => {
             const isEdit = editId === e.edge_id;
             const d = editDraft;
+            const editMapId = d.map_id ?? e.map_id;
             return (
               <tr key={e.edge_id} className="border-b border-[#141414] hover:bg-[#0f0f0f] transition-colors">
                 <td className={TD}>{e.edge_id}</td>
-                <td className={TD}>{isEdit ? <input className={INP} value={d.map_id ?? e.map_id} onChange={ev => setEditDraft(p => ({ ...p, map_id: ev.target.value }))} /> : e.map_id}</td>
+                <td className={TD}>{e.map_id}</td>
                 <td className={TD}>
                   {isEdit ? (
                     <div className="flex items-center gap-1">
-                      <input className={`${INP} w-20`} value={d.startNode ?? e.startNode} onChange={ev => setEditDraft(p => ({ ...p, startNode: ev.target.value }))} />
+                      <select className={NSEL} value={d.startNode ?? e.startNode}
+                        onChange={ev => setEditDraft(p => ({ ...p, startNode: ev.target.value, endNode: p.endNode === ev.target.value ? "" : p.endNode }))}>
+                        {nodesForMap(editMapId).map(n => (
+                          <option key={n.node_id} value={n.node_id}>{n.node_id}</option>
+                        ))}
+                      </select>
                       <span className="text-[#444]">→</span>
-                      <input className={`${INP} w-20`} value={d.endNode ?? e.endNode} onChange={ev => setEditDraft(p => ({ ...p, endNode: ev.target.value }))} />
+                      <select className={NSEL} value={d.endNode ?? e.endNode}
+                        onChange={ev => setEditDraft(p => ({ ...p, endNode: ev.target.value }))}>
+                        {nodesForMap(editMapId).filter(n => n.node_id !== (d.startNode ?? e.startNode)).map(n => (
+                          <option key={n.node_id} value={n.node_id}>{n.node_id}</option>
+                        ))}
+                      </select>
                     </div>
                   ) : (
                     <span className="font-mono"><span className="text-[#aaa]">{e.startNode}</span><span className="text-[#444] mx-1">→</span><span className="text-[#aaa]">{e.endNode}</span></span>

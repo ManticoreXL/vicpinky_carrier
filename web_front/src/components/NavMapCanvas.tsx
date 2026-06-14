@@ -173,15 +173,19 @@ export default function NavMapCanvas({
     img.onerror = () => { setCanvasReady(true); }; // show dark bg + topology
     img.src     = `${base}/api/map/static/${selectedMap}/image`;
 
-    // 토폴로지 로드 (map_id = selectedMap 으로 조회)
+    // 토폴로지 로드: 노드는 map_id로 필터, 엣지는 전체 조회 후 node_id 매칭
+    // (AdminView에서 다른 map_id로 엣지를 저장했을 때도 표시되도록)
     Promise.all([
       fetch(`${base}/api/fleet/topology/nodes?map_id=${selectedMap}`)
         .then(r => r.json()).catch(() => []),
-      fetch(`${base}/api/fleet/topology/edges?map_id=${selectedMap}`)
+      fetch(`${base}/api/fleet/topology/edges`)
         .then(r => r.json()).catch(() => []),
     ]).then(([ns, es]) => {
       const nodes = Array.isArray(ns) ? ns as FNode[] : [];
-      const edges = Array.isArray(es) ? es as FEdge[] : [];
+      const nodeIds = new Set(nodes.map(n => n.node_id));
+      const allEdges = Array.isArray(es) ? es as FEdge[] : [];
+      // startNode와 endNode 둘 다 현재 로드된 노드에 존재하는 엣지만 표시
+      const edges = allEdges.filter(e => nodeIds.has(e.startNode) && nodeIds.has(e.endNode));
       topoNodesRef.current = nodes;
       topoEdgesRef.current = edges;
       setTopoStats({ n: nodes.length, e: edges.length });

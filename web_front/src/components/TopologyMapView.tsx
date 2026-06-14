@@ -172,11 +172,15 @@ export default function TopologyMapView({
     Promise.all([
       fetch(`${BACKEND_URL}/api/fleet/topology/nodes?map_id=${mapId}`)
         .then(r => r.json()).catch(() => []),
-      fetch(`${BACKEND_URL}/api/fleet/topology/edges?map_id=${mapId}`)
+      fetch(`${BACKEND_URL}/api/fleet/topology/edges`)
         .then(r => r.json()).catch(() => []),
     ]).then(([ns, es]) => {
-      setNodes(Array.isArray(ns) ? ns as FNode[] : []);
-      setEdges(Array.isArray(es) ? es as FEdge[] : []);
+      const loadedNodes = Array.isArray(ns) ? ns as FNode[] : [];
+      const nodeIds = new Set(loadedNodes.map(n => n.node_id));
+      const allEdges = Array.isArray(es) ? es as FEdge[] : [];
+      const filteredEdges = allEdges.filter(e => nodeIds.has(e.startNode) && nodeIds.has(e.endNode));
+      setNodes(loadedNodes);
+      setEdges(filteredEdges);
     });
   }, [mapId]);
 
