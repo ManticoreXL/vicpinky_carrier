@@ -100,8 +100,9 @@ export class TopologyService {
     // 잠긴 노드 목록 조회 (출발·목적지 제외: 이미 거기 있거나 가야 하는 경우)
     const lockedNodes = await this.findLockedNodeIds(map_id);
 
+    // isLocked: false 대신 $ne: true 사용 — 필드 없는 기존 엣지도 포함
     const edges = await this.edgeModel
-      .find({ map_id, isLocked: false, weight: { $gt: MIN_WEIGHT } })
+      .find({ map_id, isLocked: { $ne: true }, weight: { $gt: MIN_WEIGHT } })
       .lean()
       .exec();
 
