@@ -121,7 +121,6 @@ export default function App() {
  setRobotHome={setRobotHome}
  occupiedEdges={occupiedEdges}
  lockedNodes={lockedNodes}
- onNodeLock={emitNodeLock}
  />
  </div>
  ) : isExplore ? (

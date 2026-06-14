@@ -15,9 +15,8 @@ const ONLINE_MS        = 5_000;
 const OFFLINE_AFTER_MS = 30_000;
 const BATTERY_MIN_PCT  = 20;
 
-// 위치 감지 반경
-const COORD_PASS_M  = 0.8;  // 가상 coord 통과 감지 (빠른 반응)
-const NODE_PASS_M   = 1.5;  // 중간 노드 통과 감지 (navigate_through_poses 진행 중 위치 추적용)
+// 위치 감지 반경 (노드 위주 경로)
+const NODE_PASS_M   = 1.5;  // 중간 노드 통과 감지
 const NODE_ARRIVE_M = 0.5;  // 최종 목적지 도착 감지 (action result 백업)
 
 // ── 타입 ─────────────────────────────────────────────────────────────────────
@@ -216,9 +215,8 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
         continue;
       }
 
-      // 새 경로로 navigate_through_poses 재발행
-      const newQueue = await this.interpolatePath(newRaw);
-      if (newQueue.length > 0 && newQueue[0] === startId) newQueue.shift();
+      // 새 경로로 navigate_through_poses 재발행 (노드만)
+      const newQueue = newRaw.slice(1); // startId는 현재 위치이므로 제외
 
       // 기존 nav action 취소
       const oldGoalId = this.navGoalIds.get(robotId);
@@ -261,15 +259,11 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     return keys;
   }
 
-  /** path에서 연속된 실제 노드 쌍으로 엣지 목록 추출 */
+  /** path에서 연속된 노드 쌍으로 엣지 목록 추출 */
   private getNodeEdgesFromPath(pathQueue: string[]): { from: string; to: string }[] {
     const result: { from: string; to: string }[] = [];
-    let prevActual: string | null = null;
-    for (const id of pathQueue) {
-      if (!id.startsWith('coord:')) {
-        if (prevActual) result.push({ from: prevActual, to: id });
-        prevActual = id;
-      }
+    for (let i = 0; i < pathQueue.length - 1; i++) {
+      result.push({ from: pathQueue[i], to: pathQueue[i + 1] });
     }
     return result;
   }
@@ -316,37 +310,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   // ── 중간 웨이포인트 보간 ─────────────────────────────────────────────────
   // 노드 간 0.5m 간격의 좌표 웨이포인트를 삽입해 엣지를 정확히 따라가게 함
 
-  private async interpolatePath(path: string[]): Promise<string[]> {
-    const result: string[] = [];
-    for (let i = 0; i < path.length - 1; i++) {
-      const startId = path[i];
-      const endId   = path[i + 1];
-      const start   = await this.topologyService.findNodeById(startId);
-      const end     = await this.topologyService.findNodeById(endId);
-      if (!start || !end) { result.push(endId); continue; }
-
-      const dx   = end.x - start.x;
-      const dy   = end.y - start.y;
-      const dist = Math.hypot(dx, dy);
-      const yaw  = Math.atan2(dy, dx);
-      const numPts = Math.max(0, Math.floor(dist / 0.5) - 1);
-
-      for (let j = 1; j <= numPts; j++) {
-        const t  = j / (numPts + 1);
-        const rx = start.x + dx * t;
-        const ry = start.y + dy * t;
-        result.push(`coord:${rx.toFixed(3)}:${ry.toFixed(3)}:${yaw.toFixed(3)}`);
-      }
-      result.push(endId);
-    }
-    return result.length > 0 ? result : path.slice(1);
-  }
-
   // ── 경유 노드 통과 감지 (위치 추적 전용) ────────────────────────────────
-  //
-  // navigate_through_poses action이 실제 경로 실행을 담당하므로,
-  // 여기서는 next-goal 발행 없이 위치·점유·UI 진행만 업데이트한다.
-  // 최종 목적지 완료는 handleNavResult가 처리 (이 함수는 백업으로도 동작).
 
   private async checkWaypointArrival(robotId: string, x: number, y: number, yaw: number) {
     const taskId = this.activeTasks.get(robotId);
@@ -363,57 +327,41 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     if (remaining.length === 0) return;
 
     const nextId = remaining[0];
-    let targetX: number, targetY: number;
-    let isVirtual = false;
+    const node = await this.topologyService.findNodeById(nextId);
+    if (!node) return;
 
-    if (nextId.startsWith('coord:')) {
-      const parts = nextId.split(':');
-      targetX = parseFloat(parts[1]); targetY = parseFloat(parts[2]);
-      isVirtual = true;
+    const isFinal   = remaining.length === 1;
+    const threshold = isFinal ? NODE_ARRIVE_M : NODE_PASS_M;
+
+    if (Math.hypot(x - node.x, y - node.y) > threshold) return;
+
+    // 노드 통과/도착: 위치·점유 갱신
+    await this.robotService.updateLocation(robotId, nextId);
+
+    const nextNode = remaining[1];
+    if (nextNode) {
+      this.occupiedEdges.set(robotId, { from: nextId, to: nextNode, mapId: node.map_id ?? '' });
+      this.logger.debug(`[통과] ${robotId}: ${nextId}→${nextNode}`);
     } else {
-      const node = await this.topologyService.findNodeById(nextId);
-      if (!node) return;
-      targetX = node.x; targetY = node.y;
+      this.occupiedEdges.delete(robotId);
     }
+    this.broadcastOccupiedEdges();
 
-    // 통과 반경: 중간 coord=0.8m, 중간 노드=1.5m (navigate_through_poses 속도 유지),
-    //            최종 노드=0.5m (action result 백업 완료 감지)
-    const isFinal = !isVirtual && remaining.length === 1;
-    const threshold = isVirtual ? COORD_PASS_M : (isFinal ? NODE_ARRIVE_M : NODE_PASS_M);
-
-    if (Math.hypot(x - targetX, y - targetY) > threshold) return;
-
-    if (!isVirtual) {
-      // 실제 노드 통과/도착: 위치·점유 갱신
-      await this.robotService.updateLocation(robotId, nextId);
-
-      const nextActual = remaining.slice(1).find(id => !id.startsWith('coord:'));
-      if (nextActual) {
-        const node = await this.topologyService.findNodeById(nextId);
-        this.occupiedEdges.set(robotId, { from: nextId, to: nextActual, mapId: node?.map_id ?? '' });
-        this.logger.debug(`[통과] ${robotId}: ${nextId}→${nextActual}`);
-      } else {
-        this.occupiedEdges.delete(robotId);
-      }
+    if (isFinal) {
+      this.activeTasks.delete(robotId);
+      this.navGoalIds.delete(robotId);
+      this.occupiedEdges.delete(robotId);
       this.broadcastOccupiedEdges();
 
-      if (isFinal) {
-        // 최종 목적지: action result 백업 완료 처리
-        this.activeTasks.delete(robotId);
-        this.navGoalIds.delete(robotId);
-        this.occupiedEdges.delete(robotId);
-        this.broadcastOccupiedEdges();
-
-        await this.fmsService.setStatus(taskId, TaskStatus.COMPLETED, this.server, {
-          completedAt: new Date(),
-          assignedRobot: { robot_id: robotId, is_completed: true },
-        });
-        await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
-        this.emit({ type: 'completed', taskId, robotId, message: `${robotId} 태스크 완료 (${task.targetNode})`, requiresAction: false });
-        this.fmsService.publishInitialPose(robotId, x, y, yaw);
-        this.returnHome(robotId);
-        return;
-      }
+      await this.fmsService.setStatus(taskId, TaskStatus.COMPLETED, this.server, {
+        completedAt: new Date(),
+        assignedRobot: { robot_id: robotId, is_completed: true },
+      });
+      await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
+      this.emit({ type: 'completed', taskId, robotId, message: `${robotId} 태스크 완료 (${task.targetNode})`, requiresAction: false });
+      this.fmsService.publishInitialPose(robotId, x, y, yaw);
+      this.returnHome(robotId);
+      return;
     }
 
     remaining.shift();
@@ -593,20 +541,11 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
             // 로봇이 이미 스테이션이 아닌 경우 스테이션으로 이동 명령 (goal만, 태스크 미생성)
             if (station && station !== robot.location) {
               const stPath = await this.topologyService.findPath(robot.location, station, myMapId, blockedEdges);
-              if (stPath.length > 0) {
-                const interpolated = await this.interpolatePath(stPath);
-                const firstId = interpolated[0];
-                if (firstId) {
-                  let nx: number, ny: number, nyaw: number;
-                  if (firstId.startsWith('coord:')) {
-                    const p = firstId.split(':');
-                    nx = parseFloat(p[1]); ny = parseFloat(p[2]); nyaw = parseFloat(p[3]);
-                  } else {
-                    const fn = await this.topologyService.findNodeById(firstId);
-                    if (fn) { nx = fn.x; ny = fn.y; nyaw = fn.yaw; }
-                    else     { nx = 0;   ny = 0;   nyaw = 0; }
-                  }
-                  this.fmsService.publishGoal(robotId, nx, ny, nyaw);
+              if (stPath.length > 1) {
+                const nextId = stPath[1];
+                const fn = await this.topologyService.findNodeById(nextId);
+                if (fn) {
+                  this.fmsService.publishGoal(robotId, fn.x, fn.y, fn.yaw);
                   this.logger.log(`[대기 유도] ${robotId} → 스테이션 ${station}`);
                 }
               }
@@ -626,8 +565,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
           continue;
         }
 
-        pathQueue = await this.interpolatePath(rawPath);
-        if (pathQueue.length > 0 && pathQueue[0] === robot.location) pathQueue.shift();
+        pathQueue = rawPath.slice(1);
 
       } else if (!robot.location) {
         // robot.location 없음 — 캐시된 AMCL 위치로 가장 가까운 노드를 출발점으로 탐색
@@ -642,9 +580,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
               nearestId, task.targetNode, targetNode2.map_id, this.getOccupiedEdgeKeys(robotId),
             );
             if (rawPath2.length > 0) {
-              pathQueue = await this.interpolatePath(rawPath2);
-              // 이미 가장 가까운 노드 근처에 있으므로 출발 노드는 제거
-              if (pathQueue.length > 0 && pathQueue[0] === nearestId) pathQueue.shift();
+              pathQueue = rawPath2.slice(1);
             }
           }
         }
@@ -657,7 +593,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       // ── 태스크 할당 + 첫 엣지 점유 등록 ──────────────────────────────────
       this.activeTasks.set(robotId, taskId);
 
-      const firstActual = pathQueue.find(id => !id.startsWith('coord:'));
+      const firstActual = pathQueue[0];
       if (firstActual && robot.location) {
         const node = await this.topologyService.findNodeById(firstActual);
         this.occupiedEdges.set(robotId, {
@@ -755,22 +691,14 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     const poses: Record<string, unknown>[] = [];
 
     for (const id of pathQueue) {
-      let x: number, y: number, yaw: number;
-
-      if (id.startsWith('coord:')) {
-        const p = id.split(':');
-        x = parseFloat(p[1]); y = parseFloat(p[2]); yaw = parseFloat(p[3]);
-      } else {
-        const node = await this.topologyService.findNodeById(id);
-        if (!node) continue;
-        x = node.x; y = node.y; yaw = node.yaw;
-      }
+      const node = await this.topologyService.findNodeById(id);
+      if (!node) continue;
 
       poses.push({
         header: { stamp: { sec: Math.floor(now), nanosec: 0 }, frame_id: 'map' },
         pose: {
-          position:    { x, y, z: 0 },
-          orientation: { x: 0, y: 0, z: Math.sin(yaw / 2), w: Math.cos(yaw / 2) },
+          position:    { x: node.x, y: node.y, z: 0 },
+          orientation: { x: 0, y: 0, z: Math.sin(node.yaw / 2), w: Math.cos(node.yaw / 2) },
         },
       });
     }

@@ -72,7 +72,6 @@ interface Props {
  activePaths?: ActivePath[];
  robotPositions?: Record<string, RobotPos>;
  onNodeClick?: (nodeId: string) => void;
- onNodeLock?: (nodeId: string, isLocked: boolean) => void;
  lockedNodes?: Set<string>;
  // robot_id → 현재 점유 중인 엣지 {from, to}
  occupiedEdges?: Record<string, { from: string; to: string; mapId: string }>;
@@ -88,7 +87,7 @@ interface DragState {
 
 export default function NavMapCanvas({
  rosMessages, socket, onSendGoal, onSetInitialPose, onSetHome,
- activePaths = [], robotPositions = {}, onNodeClick, onNodeLock, lockedNodes = new Set(), occupiedEdges = {},
+ activePaths = [], robotPositions = {}, onNodeClick, lockedNodes = new Set(), occupiedEdges = {},
 }: Props) {
  const canvasRef = useRef<HTMLCanvasElement>(null);
  const wrapRef = useRef<HTMLDivElement>(null);
@@ -103,7 +102,6 @@ export default function NavMapCanvas({
  const activePathsRef = useRef<ActivePath[]>(activePaths);
  const robotPosRef = useRef<Record<string, RobotPos>>(robotPositions);
  const onNodeClickRef = useRef(onNodeClick);
- const onNodeLockRef = useRef(onNodeLock);
  const lockedNodesRef = useRef<Set<string>>(lockedNodes);
  const occupiedEdgesRef = useRef<Record<string, { from: string; to: string; mapId: string }>>({});
  const drawRef = useRef<() => void>(() => {});
@@ -129,7 +127,6 @@ export default function NavMapCanvas({
  useEffect(() => { activePathsRef.current = activePaths; drawRef.current(); }, [activePaths]);
  useEffect(() => { robotPosRef.current = robotPositions; }, [robotPositions]);
  useEffect(() => { onNodeClickRef.current = onNodeClick; }, [onNodeClick]);
- useEffect(() => { onNodeLockRef.current = onNodeLock; }, [onNodeLock]);
  useEffect(() => { lockedNodesRef.current = lockedNodes; drawRef.current(); }, [lockedNodes]);
  useEffect(() => { occupiedEdgesRef.current = occupiedEdges; drawRef.current(); }, [occupiedEdges]);
 
@@ -543,19 +540,6 @@ export default function NavMapCanvas({
  const { cx, cy } = worldToCanvas(n.x, n.y, info, scale);
  if (Math.hypot(x - cx, y - cy) <= 12) {
  onNodeClickRef.current(n.node_id);
- return;
- }
- }
- }
-
- // 우클릭 시 노드 잠금 토글 우선 처리
- if (e.button === 2 && showTopology && onNodeLockRef.current && info) {
- for (const n of topoNodesRef.current) {
- const { cx, cy } = worldToCanvas(n.x, n.y, info, scale);
- if (Math.hypot(x - cx, y - cy) <= 12) {
- const nowLocked = lockedNodesRef.current.has(n.node_id);
- onNodeLockRef.current(n.node_id, !nowLocked);
- e.preventDefault();
  return;
  }
  }

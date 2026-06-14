@@ -33,7 +33,6 @@ interface Props {
  setRobotHome: (robotId: string, x: number, y: number, yaw: number) => void;
  occupiedEdges?: Record<string, { from: string; to: string; mapId: string }>;
  lockedNodes?: Set<string>;
- onNodeLock?: (nodeId: string, isLocked: boolean) => void;
 }
 
 function isOnline(rosMessages: Record<string, RosMessage>, robotId: string): boolean {
@@ -47,7 +46,7 @@ export default function FmsView({
  emitFmsDispatch, emitFmsCancel,
  emitNavGoal, emitNavInitialPose,
  ackTmAlert, setRobotHome, occupiedEdges = {},
- lockedNodes = new Set(), onNodeLock,
+ lockedNodes = new Set(),
 }: Props) {
  const [filterTab, setFilterTab] = useState<string>("all");
  const [contentTab, setContentTab] = useState<"fleet" | "map">("map");
@@ -101,7 +100,7 @@ export default function FmsView({
  {contentTab === "map" ? (
  <NavMapCanvas
  rosMessages={rosMessages} socket={socket} onSendGoal={emitNavGoal} onSetInitialPose={emitNavInitialPose} onSetHome={setRobotHome}
- activePaths={activePaths} robotPositions={robotPositions} occupiedEdges={occupiedEdges} lockedNodes={lockedNodes} onNodeLock={onNodeLock}
+ activePaths={activePaths} robotPositions={robotPositions} occupiedEdges={occupiedEdges} lockedNodes={lockedNodes}
  onNodeClick={n => setForm(f => ({ ...f, targetNode: n }))}
  />
  ) : (
