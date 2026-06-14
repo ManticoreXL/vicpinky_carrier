@@ -3,6 +3,7 @@ import type { Socket } from "socket.io-client";
 import { RosMessage } from "../hooks/useNestSocket";
 import { BACKEND_URL } from "../config";
 import CameraFeed from "./CameraFeed";
+import type { FNode, FEdge, ActivePath, RobotPos } from "./TopologyMapView";
 
 // ── 타입 ─────────────────────────────────────────────────────────────────────
 
@@ -20,6 +21,14 @@ const TB3_ROBOTS = [
   { id: "tb3_03", label: "TB3-03", color: "#f59e0b" },
   { id: "tb3_04", label: "TB3-04", color: "#8b5cf6" },
 ] as const;
+
+const NODE_COLOR: Record<string, string> = {
+  WAYPOINT: "#60a5fa",
+  STATION:  "#fbbf24",
+  CHARGER:  "#4ade80",
+};
+
+const ROBOT_COLORS = ["#f472b6", "#a78bfa", "#fb923c", "#34d399", "#f87171", "#38bdf8"];
 
 // ── 좌표 변환 ─────────────────────────────────────────────────────────────────
 
@@ -50,6 +59,9 @@ interface Props {
   onSendGoal:       (robotId: string, x: number, y: number, yaw: number) => void;
   onSetInitialPose: (robotId: string, x: number, y: number, yaw: number) => void;
   onSetHome?:       (robotId: string, x: number, y: number, yaw: number) => void;
+  activePaths?:     ActivePath[];
+  robotPositions?:  Record<string, RobotPos>;
+  onNodeClick?:     (nodeId: string) => void;
 }
 
 interface DragState {
@@ -60,7 +72,10 @@ interface DragState {
 
 // ── 컴포넌트 ──────────────────────────────────────────────────────────────────
 
-export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetInitialPose, onSetHome }: Props) {
+export default function NavMapCanvas({
+  rosMessages, socket, onSendGoal, onSetInitialPose, onSetHome,
+  activePaths = [], robotPositions = {}, onNodeClick,
+}: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef   = useRef<HTMLDivElement>(null);
   const imgRef    = useRef<HTMLImageElement | null>(null);
@@ -68,18 +83,34 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
   const scaleRef  = useRef(1);
   const dragRef   = useRef<DragState | null>(null);
 
+  // topology refs — don't add to draw deps
+  const topoNodesRef    = useRef<FNode[]>([]);
+  const topoEdgesRef    = useRef<FEdge[]>([]);
+  const activePathsRef  = useRef<ActivePath[]>(activePaths);
+  const robotPosRef     = useRef<Record<string, RobotPos>>(robotPositions);
+  const onNodeClickRef  = useRef(onNodeClick);
+  const drawRef         = useRef<() => void>(() => {});
+
   const [availableMaps,   setAvailableMaps]   = useState<string[]>([]);
   const [selectedMap,     setSelectedMap]     = useState<string>("");
   const [assignments,     setAssignments]     = useState<Record<string, string>>({});
   const [assignLoading,   setAssignLoading]   = useState(false);
   const [mapInfo,         setMapInfo]         = useState<StaticMapInfo | null>(null);
-  const [imgLoaded,       setImgLoaded]       = useState(false);
+  const [canvasReady,     setCanvasReady]     = useState(false);
   const [interactive,     setInteractive]     = useState(true);
   const [homeMode,        setHomeMode]        = useState(false);
   const [selectedBots,    setSelectedBots]    = useState<Set<string>>(new Set(["tb3_01"]));
   const [showCamera,      setShowCamera]      = useState(true);
+  const [showTopology,    setShowTopology]    = useState(true);
+  const [hoveredNodeId,   setHoveredNodeId]   = useState<string | null>(null);
+  const [topoStats,       setTopoStats]       = useState({ n: 0, e: 0 });
 
   const base = BACKEND_URL.replace(/\/$/, "");
+
+  // keep refs in sync
+  useEffect(() => { activePathsRef.current = activePaths; drawRef.current(); }, [activePaths]);
+  useEffect(() => { robotPosRef.current = robotPositions; }, [robotPositions]);
+  useEffect(() => { onNodeClickRef.current = onNodeClick; }, [onNodeClick]);
 
   // ── 맵 목록 + 할당 로드 ──────────────────────────────────────────────────
 
@@ -91,9 +122,7 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
       .then(([list, asgn]) => {
         setAvailableMaps(list);
         setAssignments(asgn);
-        // 첫 선택 로봇의 할당 맵으로 초기화
-        const firstBot = "tb3_01";
-        const initial = asgn[firstBot] ?? list[0] ?? "";
+        const initial = asgn["tb3_01"] ?? list[0] ?? "";
         if (initial) setSelectedMap(initial);
       })
       .catch(console.error);
@@ -109,32 +138,63 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedBots, assignments]);
 
-  // ── 선택된 맵 로드 ────────────────────────────────────────────────────────
+  // ── 선택된 맵 로드 (정적 맵 + 토폴로지) ────────────────────────────────
 
   useEffect(() => {
-    if (!selectedMap) return;
-    setImgLoaded(false);
-    imgRef.current = null;
-    infoRef.current = null;
+    if (!selectedMap) {
+      infoRef.current = null;
+      imgRef.current  = null;
+      topoNodesRef.current = [];
+      topoEdgesRef.current = [];
+      setMapInfo(null);
+      setCanvasReady(false);
+      setTopoStats({ n: 0, e: 0 });
+      return;
+    }
 
+    setCanvasReady(false);
+    imgRef.current  = null;
+    infoRef.current = null;
+    topoNodesRef.current = [];
+    topoEdgesRef.current = [];
+
+    // 정적 맵 info + image
     fetch(`${base}/api/map/static/${selectedMap}/info`)
       .then((r) => r.json())
-      .then((info: StaticMapInfo) => { infoRef.current = info; setMapInfo(info); })
+      .then((info: StaticMapInfo) => {
+        infoRef.current = info;
+        setMapInfo(info);
+        drawRef.current();
+      })
       .catch(console.error);
 
     const img = new Image();
-    img.onload  = () => { imgRef.current = img; setImgLoaded(true); };
-    img.onerror = (e) => console.error("맵 이미지 로드 실패", e);
+    img.onload  = () => { imgRef.current = img; setCanvasReady(true); };
+    img.onerror = () => { setCanvasReady(true); }; // show dark bg + topology
     img.src     = `${base}/api/map/static/${selectedMap}/image`;
+
+    // 토폴로지 로드 (map_id = selectedMap 으로 조회)
+    Promise.all([
+      fetch(`${base}/api/fleet/topology/nodes?map_id=${selectedMap}`)
+        .then(r => r.json()).catch(() => []),
+      fetch(`${base}/api/fleet/topology/edges?map_id=${selectedMap}`)
+        .then(r => r.json()).catch(() => []),
+    ]).then(([ns, es]) => {
+      const nodes = Array.isArray(ns) ? ns as FNode[] : [];
+      const edges = Array.isArray(es) ? es as FEdge[] : [];
+      topoNodesRef.current = nodes;
+      topoEdgesRef.current = edges;
+      setTopoStats({ n: nodes.length, e: edges.length });
+      drawRef.current();
+    });
   }, [selectedMap, base]);
 
   // ── 캔버스 렌더 ───────────────────────────────────────────────────────────
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
-    const img    = imgRef.current;
     const info   = infoRef.current;
-    if (!canvas || !img || !info) return;
+    if (!canvas || !info) return;
 
     const wrap  = wrapRef.current;
     const ww    = wrap?.clientWidth  ?? 600;
@@ -147,17 +207,23 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
 
     const ctx = canvas.getContext("2d")!;
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-    // ── 경로 그리기 (로봇 마커보다 먼저) ──────────────────────────────────
+    // 배경
+    const img = imgRef.current;
+    if (img) {
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    } else {
+      ctx.fillStyle = "#080808";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    // ── 경로 그리기 ──────────────────────────────────────────────────────
     for (const robot of TB3_ROBOTS) {
       const planData = rosMessages[`/${robot.id}/plan`]?.data as {
         poses?: Array<{ pose?: { position?: { x?: number; y?: number } } }>
       } | undefined;
-
       const poses = planData?.poses;
       if (!poses?.length) continue;
-
       const isSelected = selectedBots.has(robot.id);
 
       ctx.beginPath();
@@ -175,7 +241,6 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // 도착 지점 원
       const last = poses[poses.length - 1]?.pose?.position;
       if (last?.x != null) {
         const { cx, cy } = worldToCanvas(last.x, last.y ?? 0, info, scale);
@@ -187,6 +252,130 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
         ctx.lineWidth   = isSelected ? 2 : 1;
         ctx.stroke();
       }
+    }
+
+    // ── 토폴로지 오버레이 ─────────────────────────────────────────────────
+
+    if (showTopology) {
+      const topoNodes  = topoNodesRef.current;
+      const topoEdges  = topoEdgesRef.current;
+      const apaths     = activePathsRef.current;
+      const robPos     = robotPosRef.current;
+
+      // active 경로 맵 구성
+      const robotColorMap: Record<string, string>  = {};
+      const activeNodeMap: Record<string, string>  = {};
+      const activeEdgeMap: Record<string, string>  = {};
+      apaths.forEach(({ robotId, pathQueue, fromNodeId }, i) => {
+        robotColorMap[robotId] = ROBOT_COLORS[i % ROBOT_COLORS.length];
+        if (fromNodeId) activeNodeMap[fromNodeId] = robotId;
+        pathQueue.forEach(id => { activeNodeMap[id] = robotId; });
+        const full = fromNodeId ? [fromNodeId, ...pathQueue] : pathQueue;
+        for (let j = 0; j < full.length - 1; j++) {
+          activeEdgeMap[`${full[j]}→${full[j + 1]}`] = robotId;
+        }
+      });
+
+      // 엣지 렌더
+      topoEdges.forEach(e => {
+        const sn = topoNodes.find(n => n.node_id === e.startNode);
+        const en = topoNodes.find(n => n.node_id === e.endNode);
+        if (!sn || !en) return;
+
+        const { cx: sx, cy: sy } = worldToCanvas(sn.x, sn.y, info, scale);
+        const { cx: ex, cy: ey } = worldToCanvas(en.x, en.y, info, scale);
+
+        const fwdKey = `${e.startNode}→${e.endNode}`;
+        const bwdKey = `${e.endNode}→${e.startNode}`;
+        const ar     = activeEdgeMap[fwdKey] ?? activeEdgeMap[bwdKey];
+        const edgeColor = ar ? robotColorMap[ar] : e.isLocked ? "#7f1d1d" : "#4b5563";
+
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(ex, ey);
+        ctx.strokeStyle = edgeColor;
+        ctx.lineWidth   = ar ? 3.5 : 1.5;
+        ctx.globalAlpha = ar ? 0.9 : 0.65;
+        ctx.stroke();
+
+        if (e.direction === "ONE_WAY") {
+          const angle = Math.atan2(ey - sy, ex - sx);
+          const mx = (sx + ex) / 2, my = (sy + ey) / 2;
+          const al = ar ? 10 : 7;
+          ctx.beginPath();
+          ctx.moveTo(mx, my);
+          ctx.lineTo(mx - al * Math.cos(angle - 0.4), my - al * Math.sin(angle - 0.4));
+          ctx.lineTo(mx - al * Math.cos(angle + 0.4), my - al * Math.sin(angle + 0.4));
+          ctx.closePath();
+          ctx.fillStyle = edgeColor;
+          ctx.fill();
+        }
+
+        // 활성 엣지 로봇 라벨
+        if (ar) {
+          const mx = (sx + ex) / 2, my = (sy + ey) / 2;
+          ctx.globalAlpha  = 1;
+          ctx.font         = "bold 8px monospace";
+          ctx.fillStyle    = robotColorMap[ar];
+          ctx.textAlign    = "center";
+          ctx.textBaseline = "bottom";
+          ctx.fillText(ar, mx, my - 3);
+        }
+        ctx.restore();
+      });
+
+      // 노드 렌더
+      topoNodes.forEach(n => {
+        const { cx, cy } = worldToCanvas(n.x, n.y, info, scale);
+        const ar  = activeNodeMap[n.node_id];
+        const rc  = ar ? robotColorMap[ar] : null;
+        const isHov = n.node_id === hoveredNodeId;
+        const r   = rc ? 9 : isHov ? 8 : 6;
+
+        if (rc) {
+          ctx.beginPath();
+          ctx.arc(cx, cy, r + 5, 0, Math.PI * 2);
+          ctx.fillStyle = rc + "33";
+          ctx.fill();
+        }
+
+        ctx.beginPath();
+        ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        ctx.fillStyle = NODE_COLOR[n.type] ?? "#888";
+        ctx.fill();
+
+        if (rc || isHov) {
+          ctx.strokeStyle = rc ?? "#fff";
+          ctx.lineWidth   = rc ? 2.5 : 1.5;
+          ctx.stroke();
+        }
+
+        // 라벨
+        ctx.fillStyle    = rc ?? (isHov ? "#fff" : "#ffffffcc");
+        ctx.font         = rc ? "bold 9px monospace" : "9px monospace";
+        ctx.textAlign    = "left";
+        ctx.textBaseline = "bottom";
+        ctx.fillText(n.node_id, cx + r + 2, cy);
+      });
+
+      // 로봇 실제 위치 점 (FMS task 기반)
+      Object.entries(robPos).forEach(([robotId, pos], i) => {
+        const color = robotColorMap[robotId] ?? ROBOT_COLORS[i % ROBOT_COLORS.length];
+        const { cx, cy } = worldToCanvas(pos.x, pos.y, info, scale);
+        ctx.beginPath();
+        ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+        ctx.fillStyle   = color;
+        ctx.fill();
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth   = 1.5;
+        ctx.stroke();
+        ctx.font         = "bold 9px monospace";
+        ctx.fillStyle    = color;
+        ctx.textAlign    = "center";
+        ctx.textBaseline = "bottom";
+        ctx.fillText(robotId, cx, cy - 8);
+      });
     }
 
     // ── 로봇 마커 (amcl_pose) ─────────────────────────────────────────────
@@ -211,9 +400,10 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
       const previewColor = type === "goal" ? "#ef4444" : type === "home" ? "#4ade80" : "#22d3ee";
       drawPreviewMarker(ctx, sx, sy, yaw, previewColor, type === "goal" ? "goal" : "pose");
     }
-  }, [rosMessages, selectedBots]);
+  }, [rosMessages, selectedBots, showTopology, hoveredNodeId]);
 
-  useEffect(() => { draw(); }, [draw, imgLoaded]);
+  useEffect(() => { drawRef.current = draw; }, [draw]);
+  useEffect(() => { draw(); }, [draw, canvasReady]);
 
   useEffect(() => {
     const obs = new ResizeObserver(() => draw());
@@ -229,16 +419,46 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
   };
 
   const onMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    const { x, y } = canvasXY(e);
+    const info  = infoRef.current;
+    const scale = scaleRef.current;
+
+    // 노드 클릭 우선 처리
+    if (showTopology && onNodeClickRef.current && info) {
+      for (const n of topoNodesRef.current) {
+        const { cx, cy } = worldToCanvas(n.x, n.y, info, scale);
+        if (Math.hypot(x - cx, y - cy) <= 12) {
+          onNodeClickRef.current(n.node_id);
+          return;
+        }
+      }
+    }
+
     if (!interactive) return;
     e.preventDefault();
-    const { x, y } = canvasXY(e);
     const type = e.button === 2 ? "pose" : homeMode ? "home" : "goal";
     dragRef.current = { sx: x, sy: y, cx: x, cy: y, type };
   };
 
   const onMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!dragRef.current) return;
     const { x, y } = canvasXY(e);
+    const info  = infoRef.current;
+    const scale = scaleRef.current;
+
+    // hover 노드 감지
+    if (showTopology && info) {
+      for (const n of topoNodesRef.current) {
+        const { cx, cy } = worldToCanvas(n.x, n.y, info, scale);
+        if (Math.hypot(x - cx, y - cy) <= 12) {
+          if (hoveredNodeId !== n.node_id) setHoveredNodeId(n.node_id);
+          if (dragRef.current) { dragRef.current = { ...dragRef.current, cx: x, cy: y }; draw(); }
+          return;
+        }
+      }
+    }
+    if (hoveredNodeId) setHoveredNodeId(null);
+
+    if (!dragRef.current) return;
     dragRef.current = { ...dragRef.current, cx: x, cy: y };
     draw();
   };
@@ -252,29 +472,32 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
     const scale = scaleRef.current;
     const { wx, wy } = canvasToWorld(sx, sy, info, scale);
     const dx = cx - sx, dy = cy - sy;
-    // canvas Y 반전 → ROS yaw
     const yaw = (Math.abs(dx) + Math.abs(dy)) > 5 ? Math.atan2(-dy, dx) : 0;
 
     for (const id of selectedBots) {
-      if (type === "goal")  onSendGoal(id, wx, wy, yaw);
+      if (type === "goal")      onSendGoal(id, wx, wy, yaw);
       else if (type === "home") onSetHome?.(id, wx, wy, yaw);
-      else                  onSetInitialPose(id, wx, wy, yaw);
+      else                      onSetInitialPose(id, wx, wy, yaw);
     }
     draw();
   };
 
-  const onMouseLeave = () => { dragRef.current = null; draw(); };
+  const onMouseLeave = () => {
+    dragRef.current = null;
+    if (hoveredNodeId) setHoveredNodeId(null);
+    draw();
+  };
   const onContextMenu = (e: React.MouseEvent) => e.preventDefault();
 
-  // ── 선택 로봇 메타 ────────────────────────────────────────────────────────
-  // 카메라: 선택된 로봇 중 첫 번째 (TB3_ROBOTS 순서 기준)
   const cameraBot      = TB3_ROBOTS.find((r) => selectedBots.has(r.id))?.id ?? "tb3_01";
   const cameraRobotMeta = TB3_ROBOTS.find((r) => r.id === cameraBot);
-  // 하단 경로 표시: 선택된 로봇이 1개일 때만 표시
   const soloBot         = selectedBots.size === 1 ? [...selectedBots][0] : null;
   const selectedPlanPoses = soloBot
     ? (rosMessages[`/${soloBot}/plan`]?.data as { poses?: unknown[] } | undefined)?.poses
     : undefined;
+
+  // hover 중인 노드 정보
+  const hNode = hoveredNodeId ? topoNodesRef.current.find(n => n.node_id === hoveredNodeId) : null;
 
   return (
     <div className="flex flex-col h-full bg-[#050505]">
@@ -327,7 +550,6 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
         <div className="flex items-center gap-1.5">
           <span className="text-[9px] font-mono text-[#444] uppercase tracking-widest">ROBOT</span>
           <div className="flex">
-            {/* ALL 토글 버튼 */}
             <button
               onClick={() => {
                 const allIds = TB3_ROBOTS.map((r) => r.id);
@@ -394,7 +616,7 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
           {interactive ? "● 조작 중" : "○ 보기"}
         </button>
 
-        {/* 홈 설정 모드 */}
+        {/* 홈 설정 */}
         {onSetHome && interactive && (
           <button
             onClick={() => setHomeMode((v) => !v)}
@@ -407,6 +629,19 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
             {homeMode ? "● 홈 설정" : "⌂ 홈"}
           </button>
         )}
+
+        {/* 토폴로지 토글 */}
+        <button
+          onClick={() => setShowTopology((v) => !v)}
+          className={`px-3 py-1 text-[9px] font-mono font-bold uppercase tracking-wider border transition-all ${
+            showTopology
+              ? "border-amber-900/50 text-amber-400 bg-amber-950/20"
+              : "border-[#1a1a1a] text-[#333] hover:text-[#666]"
+          }`}
+          title={`노드 ${topoStats.n}개 / 엣지 ${topoStats.e}개`}
+        >
+          ⬡ 노드{topoStats.n > 0 ? ` ${topoStats.n}` : ""}
+        </button>
 
         {/* 조작 힌트 */}
         {interactive && (
@@ -422,6 +657,12 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
               <span className="text-cyan-400/70">초기위치</span>
             </span>
           </div>
+        )}
+
+        {showTopology && onNodeClick && (
+          <span className="text-[9px] font-mono text-amber-400/60">
+            노드 클릭 → 태스크 목표 설정
+          </span>
         )}
 
         {/* 카메라 토글 */}
@@ -440,7 +681,7 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
       {/* ── 본문 ─────────────────────────────────────────────────────────── */}
       <div ref={wrapRef} className="flex-1 relative overflow-hidden flex items-center justify-center bg-[#020202]">
 
-        {!imgLoaded ? (
+        {!canvasReady ? (
           <span className="text-[10px] font-mono text-[#333] uppercase tracking-widest">
             {availableMaps.length === 0 ? "맵 파일 없음" : "맵 로딩 중…"}
           </span>
@@ -452,13 +693,31 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
             onMouseUp={onMouseUp}
             onMouseLeave={onMouseLeave}
             onContextMenu={onContextMenu}
-            className={interactive ? "cursor-crosshair" : "cursor-default"}
+            className={hoveredNodeId && onNodeClick ? "cursor-pointer" : interactive ? "cursor-crosshair" : "cursor-default"}
             style={{ imageRendering: "pixelated", display: "block" }}
           />
         )}
 
-        {/* 카메라 오버레이 (우하단) */}
-        {showCamera && socket && (
+        {/* hover 노드 정보 */}
+        {hNode && (
+          <div className="absolute top-2 right-2 bg-black/80 border border-[#222] px-2 py-1.5 pointer-events-none">
+            <div className="text-[10px] font-mono font-bold" style={{ color: NODE_COLOR[hNode.type] ?? "#888" }}>
+              {hNode.node_id}
+            </div>
+            <div className="text-[9px] font-mono text-[#666] mt-0.5">
+              x={hNode.x.toFixed(3)}  y={hNode.y.toFixed(3)}
+            </div>
+            <div className="text-[9px] font-mono text-[#666]">
+              yaw={hNode.yaw.toFixed(3)}  <span style={{ color: NODE_COLOR[hNode.type] }}>{hNode.type}</span>
+            </div>
+            {onNodeClick && (
+              <div className="text-[8px] font-mono text-amber-400/70 mt-0.5">클릭하여 목표 설정</div>
+            )}
+          </div>
+        )}
+
+        {/* 카메라 오버레이 */}
+        {showCamera && socket && canvasReady && (
           <div className="absolute bottom-3 right-3 w-56 z-10 shadow-2xl shadow-black/80 border border-[#222]">
             <div className="flex items-center justify-between px-2 py-1 bg-[#0a0a0a] border-b border-[#1a1a1a]">
               <span
@@ -474,7 +733,7 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
         )}
 
         {/* 범례 (좌상단) */}
-        {imgLoaded && (
+        {canvasReady && (
           <div className="absolute top-2 left-2 flex flex-col gap-1 bg-[#050505]/90 px-2 py-1.5 border border-[#111]">
             {TB3_ROBOTS.map((r) => {
               const isOn   = selectedBots.has(r.id);
@@ -490,15 +749,25 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
                   })}
                   className={`flex items-center gap-1.5 text-left transition-all ${isOn ? "opacity-100" : "opacity-40 hover:opacity-70"}`}
                 >
-                  <span
-                    className="w-2 h-2 rounded-full flex-none"
-                    style={{ background: r.color, opacity: hasPos ? 1 : 0.2 }}
-                  />
+                  <span className="w-2 h-2 rounded-full flex-none" style={{ background: r.color, opacity: hasPos ? 1 : 0.2 }} />
                   <span className={`text-[8px] font-mono ${hasPos ? "text-[#888]" : "text-[#2a2a2a]"}`}>{r.label}</span>
                   {hasPlan && <span className="text-[6px]" style={{ color: r.color }}>▶ 경로</span>}
                 </button>
               );
             })}
+            {/* 토폴로지 범례 */}
+            {showTopology && topoStats.n > 0 && (
+              <>
+                <div className="h-px bg-[#1a1a1a] my-0.5" />
+                {(["WAYPOINT","STATION","CHARGER"] as const).map(t => (
+                  <div key={t} className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full flex-none" style={{ background: NODE_COLOR[t] }} />
+                    <span className="text-[7px] font-mono text-[#444]">{t}</span>
+                  </div>
+                ))}
+                <div className="text-[7px] font-mono text-[#333]">E:{topoStats.e}</div>
+              </>
+            )}
           </div>
         )}
       </div>
@@ -510,10 +779,11 @@ export default function NavMapCanvas({ rosMessages, socket, onSendGoal, onSetIni
           <span>{mapInfo.width}×{mapInfo.height}px</span>
           <span>{mapInfo.resolution}m/px</span>
           <span>원점 ({mapInfo.originX.toFixed(2)}, {mapInfo.originY.toFixed(2)})</span>
+          {topoStats.n > 0 && (
+            <span className="text-amber-700">N:{topoStats.n} E:{topoStats.e}</span>
+          )}
           {(selectedPlanPoses?.length ?? 0) > 0 && (
-            <span style={{ color: cameraRobotMeta?.color }}>
-              ▶ 경로 {selectedPlanPoses!.length}pt
-            </span>
+            <span style={{ color: cameraRobotMeta?.color }}>▶ 경로 {selectedPlanPoses!.length}pt</span>
           )}
         </div>
       )}

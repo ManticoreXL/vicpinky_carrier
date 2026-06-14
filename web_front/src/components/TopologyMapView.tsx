@@ -170,12 +170,14 @@ export default function TopologyMapView({
       .catch(() => { /* 정적 맵 없음 — 노드 좌표계로 대체 */ });
 
     Promise.all([
-      fetch(`${BACKEND_URL}/api/fleet/topology/nodes?map_id=${mapId}`).then(r => r.json()),
-      fetch(`${BACKEND_URL}/api/fleet/topology/edges?map_id=${mapId}`).then(r => r.json()),
+      fetch(`${BACKEND_URL}/api/fleet/topology/nodes?map_id=${mapId}`)
+        .then(r => r.json()).catch(() => []),
+      fetch(`${BACKEND_URL}/api/fleet/topology/edges?map_id=${mapId}`)
+        .then(r => r.json()).catch(() => []),
     ]).then(([ns, es]) => {
-      setNodes(ns as FNode[]);
-      setEdges(es as FEdge[]);
-    }).catch(() => {});
+      setNodes(Array.isArray(ns) ? ns as FNode[] : []);
+      setEdges(Array.isArray(es) ? es as FEdge[] : []);
+    });
   }, [mapId]);
 
   // ── 캔버스 렌더 ────────────────────────────────────────────────────────────
