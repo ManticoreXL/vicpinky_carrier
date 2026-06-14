@@ -17,6 +17,7 @@ import { LogsService } from '../logs/logs.service';
 import { FmsService } from '../fms/fms.service';
 import type { CreateTaskDto } from '../fms/fms.service';
 import { TaskManagerService } from '../fms/task-manager.service';
+import { AiService } from '../ai/ai.service';
 import type {
   ServiceCallPayload,
   TopicPublishPayload,
@@ -50,6 +51,7 @@ export class RosGateway
     private readonly logsService: LogsService,
     private readonly fmsService: FmsService,
     private readonly taskManager: TaskManagerService,
+    private readonly aiService: AiService,
   ) {}
 
   // ── 모듈 초기화 시 ROS 메시지 → 프론트 브로드캐스트 등록 ───────────────
@@ -450,5 +452,28 @@ export class RosGateway
   @SubscribeMessage('nl_command_stop')
   handleNlCommandStop(@MessageBody() payload: { botId: string }) {
     this.commandService.stop(payload.botId);
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // EXAONE AI 어시스턴트 (WebSocket)
+  // ══════════════════════════════════════════════════════════════════════════
+
+  /** 프론트 → 서버: EXAONE에 질문 전송 */
+  @SubscribeMessage('ai_ask')
+  async handleAiAsk(
+    @MessageBody() payload: { text: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    if (!payload.text?.trim()) {
+      client.emit('ai_response', { error: '질문이 비어 있습니다' });
+      return;
+    }
+    try {
+      const response = await this.aiService.ask(payload.text.trim());
+      client.emit('ai_response', { response });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      client.emit('ai_response', { error: message });
+    }
   }
 }

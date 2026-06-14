@@ -1,88 +1,91 @@
 import type { BatteryNotification } from "../hooks/useBatteryAlerts";
 
 interface Props {
-  notifications: BatteryNotification[];
-  onConfirm: (id: string) => void;
+ notifications: BatteryNotification[];
+ onConfirm: (id: string) => void;
 }
 
 export default function BatteryAlertModal({ notifications, onConfirm }: Props) {
-  if (notifications.length === 0) return null;
+ if (notifications.length === 0) return null;
 
-  const current = notifications[0];
-  const pending = notifications.length - 1;
-  const isLow   = current.type === "low";
+ const current = notifications[0];
+ const pending = notifications.length - 1;
+ const isLow = current.type === "low";
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      {/* 오버레이 */}
-      <div className="absolute inset-0 bg-black/80" />
+ return (
+ <div className="fixed inset-0 z-50 flex items-center justify-center">
+ {/* 오버레이 */}
+ <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
 
-      {/* 모달 */}
-      <div className={`relative z-10 w-80 border shadow-2xl shadow-black ${
-        isLow
-          ? "bg-[#0d0000] border-red-800/70"
-          : "bg-[#000d00] border-green-900/70"
-      }`}>
+ {/* 모달 */}
+ <div className={`relative z-10 w-80 glass-panel shadow-2xl ${
+ isLow
+ ? "border-white/[0.05] "
+ : "border-white/[0.05] "
+ }`}>
 
-        {/* 상단 경보 바 */}
-        <div className={`px-4 py-2 flex items-center gap-2 border-b ${
-          isLow ? "border-red-900/50 bg-red-950/40" : "border-green-900/50 bg-green-950/40"
-        }`}>
-          <span className={`text-[10px] font-black uppercase tracking-[0.3em] font-mono ${
-            isLow ? "text-red-500 danger-pulse" : "text-green-600"
-          }`}>
-            {isLow ? "⚠ BATTERY CRITICAL" : "◉ CHARGE COMPLETE"}
-          </span>
-        </div>
+ {/* 상단 경보 바 */}
+ <div className={`px-5 py-3 flex items-center gap-3 border-b ${
+ isLow ? "border-white/[0.05] bg-rose-500/10" : "border-white/[0.05] bg-emerald-500/10"
+ }`}>
+ <div className={`w-2 h-2 rounded-full animate-pulse ${isLow ? "bg-rose-500 " : "bg-emerald-500 "}`} />
+ <span className={`text-xs font-semibold tracking-wide ${
+ isLow ? "text-white/90" : "text-white/90"
+ }`}>
+ {isLow ? "BATTERY CRITICAL" : "CHARGE COMPLETE"}
+ </span>
+ </div>
 
-        <div className="p-5 flex flex-col gap-4">
-          {/* 로봇 ID */}
-          <div>
-            <p className="text-[9px] text-[#444444] font-mono uppercase tracking-[0.3em] mb-1">NAMESPACE</p>
-            <p className="text-sm font-black font-mono text-[#c0c0c0] tracking-widest">{current.robotId}</p>
-            <p className="text-[10px] text-[#444444] font-mono">{current.robotLabel}</p>
-          </div>
+ <div className="p-6 flex flex-col gap-6">
+ {/* 로봇 ID */}
+ <div>
+ <span className="sub-label">NAMESPACE</span>
+ <p className="text-lg font-semibold text-white/90 tracking-wide">{current.robotId}</p>
+ <p className="text-xs text-white/40 mt-1">{current.robotLabel}</p>
+ </div>
 
-          {/* 배터리 수치 */}
-          <div>
-            <div className="flex items-end justify-between mb-2">
-              <span className="text-[9px] text-[#444444] font-mono uppercase tracking-widest">BATTERY LEVEL</span>
-              <span className={`text-3xl font-black font-mono tabular-nums ${
-                isLow ? "text-red-500" : "text-green-600"
-              }`}>{current.percentage}%</span>
-            </div>
-            <div className="h-2 bg-[#0a0a0a] border border-[#1e1e1e] overflow-hidden">
-              <div
-                className={`h-full transition-all ${isLow ? "bg-red-700" : "bg-green-700"}`}
-                style={{ width: `${current.percentage}%` }}
-              />
-            </div>
-            <p className={`text-[10px] font-mono mt-2 ${isLow ? "text-red-600/70" : "text-green-700/70"}`}>
-              {isLow
-                ? "즉시 충전 필요 — 확인 후 10분 재알림"
-                : "충전 완료 — 충전기 분리 권장"}
-            </p>
-          </div>
+ {/* 배터리 수치 */}
+ <div>
+ <div className="flex items-end justify-between mb-3">
+ <span className="sub-label !mb-0">BATTERY LEVEL</span>
+ <span className={`text-4xl font-semibold tabular-nums ${
+ isLow ? "text-white/90" : "text-white/90"
+ }`}>{current.percentage}%</span>
+ </div>
+ <div className="h-2 bg-white/5 border border-white/[0.05] rounded-full overflow-hidden">
+ <div
+ className={`h-full transition-all duration-1000 ${isLow ? "bg-rose-500" : "bg-emerald-500"}`}
+ style={{ width: `${current.percentage}%` }}
+ />
+ </div>
+ <p className={`text-xs mt-3 text-white/40 leading-relaxed`}>
+ {isLow
+ ? "Immediate charge required. Alert will re-arm in 10 mins."
+ : "Charging complete. Recommend disconnecting power source."}
+ </p>
+ </div>
 
-          {pending > 0 && (
-            <p className="text-[9px] text-[#333333] font-mono text-center uppercase tracking-widest">
-              + {pending}개 알림 대기 중
-            </p>
-          )}
+ {pending > 0 && (
+ <div className="py-2 bg-white/5 border border-white/[0.05] rounded-lg">
+ <p className="text-xs text-white/30 text-center tracking-wide">
+ + {pending} Pending Alerts
+ </p>
+ </div>
+ )}
 
-          {/* 확인 버튼 */}
-          <button
-            onClick={() => onConfirm(current.id)}
-            className={`w-full py-3 text-xs font-black uppercase tracking-[0.2em] transition-all border ${
-              isLow
-                ? "border-red-700/70 bg-red-950/40 text-red-400 hover:bg-red-900/60 hover:text-red-300"
-                : "border-green-800/60 bg-green-950/30 text-green-500 hover:bg-green-900/40 hover:text-green-400"
-            }`}
-          >
-            {isLow ? "◉ 확인 (10분 후 재알림)" : "◉ 확인"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
+ {/* 확인 버튼 */}
+ <button
+ onClick={() => onConfirm(current.id)}
+ className={`w-full py-4 text-xs font-semibold tracking-wide transition-all duration-300 rounded-xl border ${
+ isLow
+ ? "border-white/[0.05] bg-rose-500/20 text-white/70 hover:bg-rose-500/40 hover:text-white"
+ : "border-white/[0.05] bg-emerald-500/20 text-white/70 hover:bg-emerald-500/40 hover:text-white"
+ }`}
+ >
+ {isLow ? "Acknowledge (10m Snooze)" : "Acknowledge"}
+ </button>
+ </div>
+ </div>
+ </div>
+ );
 }

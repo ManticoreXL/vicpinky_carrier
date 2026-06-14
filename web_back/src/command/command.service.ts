@@ -41,7 +41,7 @@ export class CommandService {
 
   private readonly ollamaUrl =
     process.env.OLLAMA_URL ?? 'http://127.0.0.1:11434';
-  private readonly model = process.env.OLLAMA_NL_MODEL ?? 'gemma2';
+  private readonly model = process.env.OLLAMA_NL_MODEL ?? 'exaone3';
 
   // 로봇별 실행 중단 플래그
   private readonly aborting = new Set<string>();

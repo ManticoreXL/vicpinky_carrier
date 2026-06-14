@@ -6,6 +6,7 @@ import { VisionModule } from './vision/vision.module';
 import { LogsModule } from './logs/logs.module';
 import { FmsModule } from './fms/fms.module';
 import { FleetModule } from './fleet/fleet.module';
+import { AiModule } from './ai/ai.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { FleetModule } from './fleet/fleet.module';
     LogsModule,
     FleetModule,
     FmsModule,
+    AiModule,
   ],
 })
 export class AppModule {}
