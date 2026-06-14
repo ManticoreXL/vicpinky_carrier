@@ -9,6 +9,7 @@ export interface MapInfo {
   height: number;
   originX: number;
   originY: number;
+  snapThreshold?: number;
 }
 
 export interface FNode {
@@ -179,26 +180,25 @@ export default function TopologyMapView({
       return;
     }
 
-    // 정적 맵 이미지/메타데이터 시도 (없어도 노드는 보임)
-    fetch(`${BACKEND_URL}/api/map/static/${mapId}/info`)
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then((info: MapInfo) => {
+    Promise.all([
+      fetch(`${BACKEND_URL}/api/map/static/${mapId}/info`)
+        .then(r => r.ok ? r.json() : null).catch(() => null),
+      fetch(`${BACKEND_URL}/api/fleet/topology/nodes?map_id=${mapId}`)
+        .then(r => r.json()).catch(() => []),
+      fetch(`${BACKEND_URL}/api/fleet/topology/edges`)
+        .then(r => r.json()).catch(() => []),
+    ]).then(([info, ns, es]) => {
+      if (info) {
         setMapInfo(info);
         const img = new Image();
         img.src = `${BACKEND_URL}/api/map/static/${mapId}/image`;
         img.onload  = () => { imgRef.current = img;   renderRef.current(); };
         img.onerror = () => { imgRef.current = null; };
-      })
-      .catch(() => { /* 정적 맵 없음 — 노드 좌표계로 대체 */ });
+      }
 
-    Promise.all([
-      fetch(`${BACKEND_URL}/api/fleet/topology/nodes?map_id=${mapId}`)
-        .then(r => r.json()).catch(() => []),
-      fetch(`${BACKEND_URL}/api/fleet/topology/edges`)
-        .then(r => r.json()).catch(() => []),
-    ]).then(([ns, es]) => {
       const loadedNodes = Array.isArray(ns) ? ns as FNode[] : [];
-      const snappedNodes = snapNodes(loadedNodes, 0.5);
+      const threshold = info?.snapThreshold ?? 0.25;
+      const snappedNodes = snapNodes(loadedNodes, threshold);
       const nodeIds = new Set(snappedNodes.map(n => n.node_id));
       const allEdges = Array.isArray(es) ? es as FEdge[] : [];
       const filteredEdges = allEdges.filter(e => nodeIds.has(e.startNode) && nodeIds.has(e.endNode));

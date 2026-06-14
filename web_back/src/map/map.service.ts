@@ -12,14 +12,16 @@ export interface StaticMapInfo {
   height: number;
   originX: number;
   originY: number;
+  snapThreshold?: number;
 }
 
 export interface MapInfo {
   resolution: number;
   width: number;
   height: number;
-  origin: {
-    position: { x: number; y: number; z: number };
+  origin: { position: { x: number; y: number; z: number } };
+  snapThreshold?: number;
+}
     orientation: { x: number; y: number; z: number; w: number };
   };
 }
@@ -326,6 +328,7 @@ export class MapService implements OnModuleInit {
     const originMatch = yamlText.match(/origin:\s*\[([-\d.\s,e+\-]+)\]/);
     const originParts = originMatch ? originMatch[1].split(',').map(Number) : [0, 0];
     const [originX, originY] = originParts;
+    const snapThreshold = parseFloat(yamlText.match(/snap_threshold:\s*([\d.e+\-]+)/)?.[1] ?? '0.25');
 
     // PGM P5 파싱
     const pgmBuf = fs.readFileSync(pgmPath);
@@ -334,7 +337,7 @@ export class MapService implements OnModuleInit {
 
     const { width, height, pixels } = parsed;
     const png = this.buildPngFromPgm(width, height, pixels);
-    const info: StaticMapInfo = { resolution, width, height, originX, originY };
+    const info: StaticMapInfo = { resolution, width, height, originX, originY, snapThreshold };
 
     this.staticCache.set(name, { png, info });
     return { png, info };

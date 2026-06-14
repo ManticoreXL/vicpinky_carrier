@@ -21,6 +21,7 @@ const TASK_LABELS: Record<TaskType, string> = {
   PROCESS:    "처리",
   DISTRIBUTE: "배포",
   CHARGE:     "충전",
+  SIMPLE_MOVE: "단순 이동",
 };
 
 const STATUS_STYLE: Record<TaskStatus, string> = {
@@ -190,7 +191,8 @@ function TaskRow({ task, onCancel }: { task: FmsTask; onCancel: () => void }) {
         <span className={`text-[9px] font-bold uppercase tracking-wider ${
           task.type === "SUPPLY" ? "text-blue-400" :
           task.type === "PROCESS" ? "text-amber-400" :
-          task.type === "DISTRIBUTE" ? "text-purple-400" : "text-green-400"
+          task.type === "DISTRIBUTE" ? "text-purple-400" :
+          task.type === "SIMPLE_MOVE" ? "text-cyan-400" : "text-green-400"
         }`}>{TASK_LABELS[task.type]}</span>
         <span className="flex-1 text-[#555] truncate">→ {task.targetNode}</span>
         <span className={`px-1.5 py-px border text-[9px] font-bold uppercase ${STATUS_STYLE[task.status]}`}>
@@ -449,14 +451,15 @@ export default function FmsView({
             <p className="text-[9px] font-bold text-[#333] uppercase tracking-[0.25em] font-mono">NEW TASK</p>
 
             {/* 타입 */}
-            <div className="grid grid-cols-4 gap-px">
-              {(["SUPPLY","PROCESS","DISTRIBUTE","CHARGE"] as TaskType[]).map((t) => (
+            <div className="grid grid-cols-5 gap-px">
+              {(["SUPPLY","PROCESS","DISTRIBUTE","CHARGE","SIMPLE_MOVE"] as TaskType[]).map((t) => (
                 <button key={t} onClick={() => setForm((f) => ({ ...f, type: t }))}
                   className={`py-1 text-[8px] font-mono font-bold uppercase transition-all ${
                     form.type === t
                       ? t === "SUPPLY"     ? "bg-blue-900/40 text-blue-400"   :
                         t === "PROCESS"    ? "bg-amber-900/40 text-amber-400" :
                         t === "DISTRIBUTE" ? "bg-purple-900/40 text-purple-400" :
+                        t === "SIMPLE_MOVE" ? "bg-cyan-900/40 text-cyan-400" :
                                              "bg-green-900/40 text-green-400"
                       : "text-[#333] hover:text-[#666]"
                   }`}>

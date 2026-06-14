@@ -62,7 +62,7 @@ export type MapInfos = Record<string, MapInfo>;
 
 // ── FMS 타입 ─────────────────────────────────────────────────────────────────
 export type TaskStatus = 'PENDING' | 'ASSIGNED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
-export type TaskType   = 'SUPPLY' | 'PROCESS' | 'DISTRIBUTE' | 'CHARGE';
+export type TaskType   = 'SUPPLY' | 'PROCESS' | 'DISTRIBUTE' | 'CHARGE' | 'SIMPLE_MOVE';
 
 export interface FmsTask {
   _id: string;

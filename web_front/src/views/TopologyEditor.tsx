@@ -11,6 +11,7 @@ interface MapInfo {
   height: number;
   originX: number;
   originY: number;
+  snapThreshold?: number;
 }
 
 interface FNode {
@@ -120,13 +121,13 @@ export default function TopologyEditor() {
     api<string[]>("/api/map/static/list").then(setMapList).catch(() => {});
   }, []);
 
-  const loadTopology = useCallback(async (mapId: string) => {
+  const loadTopology = useCallback(async (mapId: string, threshold = 0.25) => {
     if (!mapId) { setNodes([]); setEdges([]); return; }
     const [ns, es] = await Promise.all([
       api<FNode[]>(`/api/fleet/topology/nodes?map_id=${mapId}`),
       api<FEdge[]>(`/api/fleet/topology/edges?map_id=${mapId}`),
     ]);
-    const snappedNs = snapNodes(ns || [], 0.5);
+    const snappedNs = snapNodes(ns || [], threshold);
     setNodes(snappedNs);
     setEdges(es || []);
   }, []);
@@ -141,10 +142,12 @@ export default function TopologyEditor() {
         const img = new Image();
         img.src = `${BACKEND_URL}/api/map/static/${selMap}/image`;
         img.onload = () => { imgRef.current = img; renderCallbackRef.current(); };
+        void loadTopology(selMap, info.snapThreshold ?? 0.25);
       })
-      .catch(() => setErr("맵 정보 로드 실패"));
-
-    void loadTopology(selMap);
+      .catch(() => {
+        setErr("맵 정보 로드 실패");
+        void loadTopology(selMap, 0.25);
+      });
   }, [selMap, loadTopology]);
 
   // ── 캔버스 렌더 ────────────────────────────────────────────────────────────
