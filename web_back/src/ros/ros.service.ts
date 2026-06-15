@@ -177,7 +177,7 @@ export class RosService implements OnModuleInit, OnModuleDestroy {
       id,
       action: actionName,
       action_type: actionType,
-      args: goal,   // rosbridge는 goal을 'args' 필드에서 읽음 (call_service와 동일)
+      goal,
       feedback: true,
     });
     this.logger.debug(`action goal → ${actionName} [${id}]`);

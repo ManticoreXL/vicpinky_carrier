@@ -470,8 +470,10 @@ export default function NavMapCanvas({
  ctx.fillText(n.node_id, cx + r + 2, cy);
  });
 
- // 로봇 실제 위치 점 (FMS task 기반)
+ // 로봇 실제 위치 점 — amcl_pose 마커가 없는 로봇만 표시 (tb3는 amcl 마커로 렌더)
+ const tb3IdSet = new Set<string>(TB3_ROBOTS.map(r => r.id));
  Object.entries(robPos).forEach(([robotId, pos], i) => {
+ if (tb3IdSet.has(robotId)) return;
  const color = robotColorMap[robotId] ?? ROBOT_COLORS[i % ROBOT_COLORS.length];
  const { cx, cy } = worldToCanvas(pos.x, pos.y, info, scale);
  ctx.beginPath();

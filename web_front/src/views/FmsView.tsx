@@ -133,20 +133,34 @@ export default function FmsView({
  </div>
 
  {/* Create Task Form */}
- <div className="flex-none p-6 bg-white/[0.02] border-t border-white/[0.05]">
- <div className="space-y-4">
+ <div className="flex-none p-4 bg-white/[0.02] border-t border-white/[0.05]">
+ <div className="space-y-3">
+ <div>
+ <span className="sub-label">Task Type</span>
+ <div className="grid grid-cols-3 gap-1 mt-1">
+ {(Object.keys(TASK_LABELS) as TaskType[]).map(t => (
+ <button
+ key={t}
+ onClick={() => setForm(f => ({ ...f, type: t }))}
+ className={`py-1 text-[10px] font-bold tracking-wide rounded border transition-all ${form.type === t ? 'bg-sky-600/40 text-sky-200 border-sky-500/60' : 'bg-black/30 text-white/30 border-white/[0.05] hover:text-white/60'}`}
+ >
+ {TASK_LABELS[t]}
+ </button>
+ ))}
+ </div>
+ </div>
  <div>
  <span className="sub-label">Destination Node</span>
- <input value={form.targetNode} onChange={e => setForm(f => ({ ...f, targetNode: e.target.value }))} className="w-full bg-black/40 border border-white/[0.05] rounded-xl px-4 py-2 text-sm text-white placeholder:text-white/10 focus:outline-none focus:border-white/[0.05]" placeholder="e.g. waypoint_7" />
+ <input value={form.targetNode} onChange={e => setForm(f => ({ ...f, targetNode: e.target.value }))} className="w-full bg-black/40 border border-white/[0.05] rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/10 focus:outline-none focus:border-white/[0.05]" placeholder="e.g. 401_7" />
  </div>
  <div>
  <span className="sub-label">Preferred Asset</span>
- <select value={form.robotId} onChange={e => setForm(f => ({ ...f, robotId: e.target.value }))} className="w-full bg-black/40 border border-white/[0.05] rounded-xl px-4 py-2 text-sm text-white appearance-none focus:outline-none focus:border-white/[0.05]">
+ <select value={form.robotId} onChange={e => setForm(f => ({ ...f, robotId: e.target.value }))} className="w-full bg-black/40 border border-white/[0.05] rounded-xl px-3 py-2 text-sm text-white appearance-none focus:outline-none focus:border-white/[0.05]">
  <option value="">AUTO ASSIGNMENT</option>
  {ROBOTS.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
  </select>
  </div>
- <button onClick={() => { if(form.targetNode) emitFmsDispatch(form); setForm(f => ({ ...f, targetNode: "" })) }} className="w-full glass-button !bg-sky-600 hover:!bg-sky-500 !text-xs !font-semibold !tracking-wide !py-3 !rounded-xl shadow-xl ">AUTHORIZE DISPATCH</button>
+ <button onClick={() => { if(form.targetNode) emitFmsDispatch(form); setForm(f => ({ ...f, targetNode: "" })) }} className="w-full glass-button !bg-sky-600 hover:!bg-sky-500 !text-xs !font-semibold !tracking-wide !py-2.5 !rounded-xl shadow-xl">AUTHORIZE DISPATCH</button>
  </div>
  </div>
  </aside>
