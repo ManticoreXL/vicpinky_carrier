@@ -234,7 +234,7 @@ class WebRTCManager:
         self.bot_id = bot_id
         self.camera = camera
         self.audio_reader = audio_reader
-        self.audio_writer = audio_writer  # 스피커 제어 객체 추가
+        self.audio_writer = audio_writer
         self.pcs: dict[str, RTCPeerConnection] = {}
         self._lock = asyncio.Lock()
 
