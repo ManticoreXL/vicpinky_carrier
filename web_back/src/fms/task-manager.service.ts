@@ -58,6 +58,8 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   private readonly lastBatteryAlert = new Map<string, number>();
   // robotId → 온라인 여부 (undefined = 미확인)
   private readonly robotOnlineState = new Map<string, boolean>();
+  // robotId → 코너 회전 대기 상태 (targetYaw에 수렴하면 nextNodeId로 진행)
+  private readonly turningState     = new Map<string, { targetYaw: number; nextNodeId: string }>();
 
   constructor(
     private readonly fmsService:      FmsService,
@@ -142,6 +144,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       }
 
       this.activeTasks.delete(robotId);
+      this.turningState.delete(robotId);
 
       // 3. 로봇 상태 IDLE 복귀
       await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
@@ -184,6 +187,8 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     if (cache) {
       this.robotCache.set(robotId, { ...cache, posX: null, posY: null, yaw: null });
     }
+
+    this.turningState.delete(robotId);
 
     // 진행 중인 nav2 주행 중단 (맵 변경으로 이전 goal_pose 무효)
     this.fmsService.publishStop(robotId);
@@ -319,6 +324,18 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   // ── 경유 노드 통과 감지 (위치 추적 전용) ────────────────────────────────
 
   private async checkWaypointArrival(robotId: string, x: number, y: number, yaw: number) {
+    // 코너 회전 대기 중: targetYaw에 수렴했는지 확인
+    const turning = this.turningState.get(robotId);
+    if (turning) {
+      const diff = Math.abs(this.normalizeAngle(yaw - turning.targetYaw));
+      if (diff < 0.15) { // ~8.6° 이내 수렴
+        this.turningState.delete(robotId);
+        this.logger.log(`[회전완료] ${robotId} → ${turning.nextNodeId} 진행`);
+        await this.sendNodeActionGoal(robotId, turning.nextNodeId);
+      }
+      return;
+    }
+
     const taskId = this.activeTasks.get(robotId);
     if (!taskId || !this.server) return;
 
@@ -360,10 +377,30 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     remaining.shift();
     await this.fmsService.updatePathQueue(taskId, remaining, this.server);
 
-    // 다음 노드로 goal_pose 전송 (멀티노드 연속 주행)
     if (remaining.length > 0) {
-      await this.sendNodeActionGoal(robotId, remaining[0]);
+      const nextNodeId = remaining[0];
+      // 코너 감지: 다음 세그먼트 방향과 현재 yaw 차이가 45° 이상이면 제자리 회전 우선
+      const nextNode = await this.topologyService.findNodeById(nextNodeId);
+      if (nextNode) {
+        const outYaw   = Math.atan2(nextNode.y - node.y, nextNode.x - node.x);
+        const turnDiff = Math.abs(this.normalizeAngle(outYaw - yaw));
+        if (turnDiff > Math.PI / 4) {
+          this.logger.log(
+            `[코너] ${robotId} @ ${nextId}: ${(turnDiff * 180 / Math.PI).toFixed(0)}° 회전 후 → ${nextNodeId}`,
+          );
+          this.fmsService.publishGoal(robotId, node.x, node.y, outYaw);
+          this.turningState.set(robotId, { targetYaw: outYaw, nextNodeId });
+          return;
+        }
+      }
+      await this.sendNodeActionGoal(robotId, nextNodeId);
     }
+  }
+
+  private normalizeAngle(a: number): number {
+    while (a >  Math.PI) a -= 2 * Math.PI;
+    while (a < -Math.PI) a += 2 * Math.PI;
+    return a;
   }
 
   // ── 메인 처리 루프 ───────────────────────────────────────────────────────
