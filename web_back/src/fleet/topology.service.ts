@@ -84,7 +84,6 @@ export class TopologyService {
   //   - isLocked=true 엣지 → 완전 제외
   //   - weight <= MIN_WEIGHT(0.1) → 진입 불가 (비메인 도로 차단)
   //   - 비용 = 1/weight: 가중치 높을수록(메인 도로) 우선 선택
-  //   - occupiedEdges: "A→B" 형식으로 다른 로봇이 점유한 엣지
 
   async setNodeLocked(node_id: string, isLocked: boolean): Promise<void> {
     await this.nodeModel.updateOne({ node_id }, { isLocked });
@@ -105,7 +104,6 @@ export class TopologyService {
     startNodeId: string,
     endNodeId: string,
     map_id: string,
-    occupiedEdges: Set<string> = new Set(),
   ): Promise<string[]> {
     if (startNodeId === endNodeId) return [startNodeId];
 
@@ -157,18 +155,12 @@ export class TopologyService {
       const w    = Math.max(edge.weight ?? 1, 0.01);
       const cost = 1 / w;
 
-      const fwdKey = `${edge.startNode}→${edge.endNode}`;
-      if (!occupiedEdges.has(fwdKey)) {
-        if (!adj.has(edge.startNode)) adj.set(edge.startNode, []);
-        adj.get(edge.startNode)!.push({ to: edge.endNode, cost });
-      }
+      if (!adj.has(edge.startNode)) adj.set(edge.startNode, []);
+      adj.get(edge.startNode)!.push({ to: edge.endNode, cost });
 
       if (edge.direction === EdgeDirection.BOTH_WAY) {
-        const bwdKey = `${edge.endNode}→${edge.startNode}`;
-        if (!occupiedEdges.has(bwdKey)) {
-          if (!adj.has(edge.endNode)) adj.set(edge.endNode, []);
-          adj.get(edge.endNode)!.push({ to: edge.startNode, cost });
-        }
+        if (!adj.has(edge.endNode)) adj.set(edge.endNode, []);
+        adj.get(edge.endNode)!.push({ to: edge.startNode, cost });
       }
     }
 

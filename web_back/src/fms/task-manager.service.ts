@@ -58,8 +58,11 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   private readonly lastBatteryAlert = new Map<string, number>();
   // robotId → 온라인 여부 (undefined = 미확인)
   private readonly robotOnlineState = new Map<string, boolean>();
-  // robotId → 코너 회전 대기 상태 (targetYaw에 수렴하면 nextNodeId로 진행)
-  private readonly turningState     = new Map<string, { targetYaw: number; nextNodeId: string }>();
+  // robotId → 코너 회전 후 대기 타이머
+  private readonly cornerTimeouts   = new Map<string, NodeJS.Timeout>();
+
+  private static readonly CORNER_WAIT_MS  = 2_000; // 90° 회전 대기 시간
+  private static readonly CORNER_THRESH   = Math.PI / 4; // 45° 이상이면 코너 판정
 
   constructor(
     private readonly fmsService:      FmsService,
@@ -144,7 +147,8 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       }
 
       this.activeTasks.delete(robotId);
-      this.turningState.delete(robotId);
+      clearTimeout(this.cornerTimeouts.get(robotId));
+      this.cornerTimeouts.delete(robotId);
 
       // 3. 로봇 상태 IDLE 복귀
       await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
@@ -188,7 +192,8 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       this.robotCache.set(robotId, { ...cache, posX: null, posY: null, yaw: null });
     }
 
-    this.turningState.delete(robotId);
+    clearTimeout(this.cornerTimeouts.get(robotId));
+    this.cornerTimeouts.delete(robotId);
 
     // 진행 중인 nav2 주행 중단 (맵 변경으로 이전 goal_pose 무효)
     this.fmsService.publishStop(robotId);
@@ -324,18 +329,6 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   // ── 경유 노드 통과 감지 (위치 추적 전용) ────────────────────────────────
 
   private async checkWaypointArrival(robotId: string, x: number, y: number, yaw: number) {
-    // 코너 회전 대기 중: targetYaw에 수렴했는지 확인
-    const turning = this.turningState.get(robotId);
-    if (turning) {
-      const diff = Math.abs(this.normalizeAngle(yaw - turning.targetYaw));
-      if (diff < 0.15) { // ~8.6° 이내 수렴
-        this.turningState.delete(robotId);
-        this.logger.log(`[회전완료] ${robotId} → ${turning.nextNodeId} 진행`);
-        await this.sendNodeActionGoal(robotId, turning.nextNodeId);
-      }
-      return;
-    }
-
     const taskId = this.activeTasks.get(robotId);
     if (!taskId || !this.server) return;
 
@@ -357,7 +350,6 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
     if (Math.hypot(x - node.x, y - node.y) > threshold) return;
 
-    // 노드 통과/도착: 위치·점유 갱신
     await this.robotService.updateLocation(robotId, nextId);
 
     if (isFinal) {
@@ -379,28 +371,25 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
     if (remaining.length > 0) {
       const nextNodeId = remaining[0];
-      // 코너 감지: 다음 세그먼트 방향과 현재 yaw 차이가 45° 이상이면 제자리 회전 우선
-      const nextNode = await this.topologyService.findNodeById(nextNodeId);
+      const nextNode   = await this.topologyService.findNodeById(nextNodeId);
       if (nextNode) {
         const outYaw   = Math.atan2(nextNode.y - node.y, nextNode.x - node.x);
-        const turnDiff = Math.abs(this.normalizeAngle(outYaw - yaw));
-        if (turnDiff > Math.PI / 4) {
-          this.logger.log(
-            `[코너] ${robotId} @ ${nextId}: ${(turnDiff * 180 / Math.PI).toFixed(0)}° 회전 후 → ${nextNodeId}`,
-          );
+        let   diff     = outYaw - yaw;
+        while (diff >  Math.PI) diff -= 2 * Math.PI;
+        while (diff < -Math.PI) diff += 2 * Math.PI;
+        if (Math.abs(diff) > TaskManagerService.CORNER_THRESH) {
+          this.logger.log(`[코너] ${robotId} @ ${nextId}: ${(Math.abs(diff) * 180 / Math.PI).toFixed(0)}° 회전 후 ${TaskManagerService.CORNER_WAIT_MS}ms 대기 → ${nextNodeId}`);
           this.fmsService.publishGoal(robotId, node.x, node.y, outYaw);
-          this.turningState.set(robotId, { targetYaw: outYaw, nextNodeId });
+          const timer = setTimeout(() => {
+            this.cornerTimeouts.delete(robotId);
+            void this.sendNodeActionGoal(robotId, nextNodeId);
+          }, TaskManagerService.CORNER_WAIT_MS);
+          this.cornerTimeouts.set(robotId, timer);
           return;
         }
       }
       await this.sendNodeActionGoal(robotId, nextNodeId);
     }
-  }
-
-  private normalizeAngle(a: number): number {
-    while (a >  Math.PI) a -= 2 * Math.PI;
-    while (a < -Math.PI) a += 2 * Math.PI;
-    return a;
   }
 
   // ── 메인 처리 루프 ───────────────────────────────────────────────────────
