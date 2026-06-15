@@ -360,32 +360,7 @@ export class RosGateway
   handleNavInitialPose(
     @MessageBody() { robotId, x, y, yaw }: { robotId: string; x: number; y: number; yaw: number },
   ) {
-    const now = Date.now() / 1000;
-    this.rosService.publish({
-      topicName: `/${robotId}/initialpose`,
-      messageType: 'geometry_msgs/PoseWithCovarianceStamped',
-      message: {
-        header: { stamp: { sec: Math.floor(now), nanosec: 0 }, frame_id: 'map' },
-        pose: {
-          pose: {
-            position: { x, y, z: 0 },
-            orientation: {
-              x: 0, y: 0,
-              z: Math.sin(yaw / 2),
-              w: Math.cos(yaw / 2),
-            },
-          },
-          covariance: [
-            0.25, 0, 0, 0, 0, 0,
-            0, 0.25, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0.06853891945200942,
-          ],
-        },
-      },
-    });
+    void this.taskManager.setInitialPoseAndLocation(robotId, x, y, yaw);
   }
 
   // ── 프론트 → Action Goal 취소 ────────────────────────────────────────────

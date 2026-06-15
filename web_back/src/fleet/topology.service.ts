@@ -118,15 +118,16 @@ export class TopologyService {
     const lockedNodes = await this.findLockedNodeIds(map_id);
     this.logger.log(`[findPath] 잠긴 노드: [${[...lockedNodes].join(', ')}]`);
 
-    // 전체 엣지 수 확인 (필터 전)
+    // 전체 엣지 수 확인
     const allEdgeCount = await this.edgeModel.countDocuments({ map_id }).exec();
     this.logger.log(`[findPath] map_id="${map_id}" 전체 엣지 수: ${allEdgeCount}`);
 
+    // weight 필터 제거 — 미설정(null/0) 엣지도 모두 포함
     const edges = await this.edgeModel
-      .find({ map_id, isLocked: { $ne: true }, weight: { $gt: MIN_WEIGHT } })
+      .find({ map_id, isLocked: { $ne: true } })
       .lean()
       .exec();
-    this.logger.log(`[findPath] 사용 가능 엣지: ${edges.length}개 (잠금해제+weight>${MIN_WEIGHT})`);
+    this.logger.log(`[findPath] 사용 가능 엣지: ${edges.length}개 (잠금해제, weight 무관)`);
 
     if (edges.length === 0) {
       this.logger.warn(`[findPath] 엣지 없음 — map_id 불일치 가능성. DB 엣지 샘플:`);
@@ -142,7 +143,7 @@ export class TopologyService {
       const endLocked   = lockedNodes.has(edge.endNode)   && edge.endNode   !== endNodeId;
       if (startLocked || endLocked) { skippedLock++; continue; }
 
-      const w    = edge.weight ?? 1;
+      const w    = Math.max(edge.weight ?? 1, 0.01); // weight 미설정 엣지는 기본 비용 1로 처리
       const cost = 1 / w;
 
       const fwdKey = `${edge.startNode}→${edge.endNode}`;
@@ -236,12 +237,13 @@ export class TopologyService {
   async findNearestNodeToPosition(
     x: number,
     y: number,
-    map_id: string,
+    map_id?: string,
   ): Promise<string | null> {
-    // 잠긴 노드 제외 — 없으면 전체로 폴백
-    let nodes = await this.nodeModel.find({ map_id, isLocked: { $ne: true } }).lean().exec();
+    // map_id가 없으면 전체 노드 대상 검색
+    const baseFilter = map_id ? { map_id } : {};
+    let nodes = await this.nodeModel.find({ ...baseFilter, isLocked: { $ne: true } }).lean().exec();
     if (nodes.length === 0) {
-      nodes = await this.nodeModel.find({ map_id }).lean().exec();
+      nodes = await this.nodeModel.find(baseFilter).lean().exec();
     }
     if (nodes.length === 0) return null;
 
