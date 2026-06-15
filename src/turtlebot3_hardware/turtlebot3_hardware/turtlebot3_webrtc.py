@@ -448,7 +448,6 @@ async def async_main(args):
     camera.start()
 
     audio = AudioReader(device_index=1)
-    audio.start()
 
     webrtc = WebRTCManager(bot_id=args.bot_id, camera=camera, audio=audio)
 
