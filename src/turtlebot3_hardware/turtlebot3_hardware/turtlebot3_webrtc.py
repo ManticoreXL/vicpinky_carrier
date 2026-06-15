@@ -124,6 +124,33 @@ class AudioReader:
             self.stream.close()
             self.stream = None
 
+class AudioWriter:
+    def __init__(self, device_index=1, rate=48000, channels=1):
+        self.p = pyaudio.PyAudio()
+        self.rate = rate
+        self.channels = channels
+        self.device_index = device_index
+        self.stream = None
+
+    def start(self):
+        if self.stream is None or not self.stream.is_active():
+            self.stream = self.p.open(
+                format=pyaudio.paInt16,
+                channels=self.channels,
+                rate=self.rate,
+                output=True,
+                output_device_index=self.device_index
+            )
+
+    def write(self, data):
+        if self.stream is not None and self.stream.is_active():
+            self.stream.write(data)
+
+    def stop(self):
+        if self.stream is not None and self.stream.is_active():
+            self.stream.stop_stream()
+            self.stream.close()
+            self.stream = None
 
 # ── 클라이언트별 라이브 트랙 ──────────────────────────────────────────────────
 
@@ -243,6 +270,26 @@ class WebRTCManager:
                     except Exception:
                         pass
                     logger.info(f"현재 송출 수: {len(self.pcs)}")
+
+            # create_offer 내부 pc = RTCPeerConnection() 선언부 아래 추가
+            @pc.on("track")
+            def on_track(track):
+                if track.kind == "audio":
+                    logger.info("PC로부터 오디오 수신 시작")
+                    self.audio_writer.start()
+                    
+                    async def consume_audio():
+                        while True:
+                            try:
+                                frame = await track.recv()
+                                # 16bit PCM 데이터를 추출하여 스피커로 출력
+                                data = frame.to_ndarray().tobytes()
+                                self.audio_writer.write(data)
+                            except Exception as e:
+                                logger.info("통화 종료")
+                                self.audio_writer.stop()
+                                break
+                    asyncio.ensure_future(consume_audio())
 
             offer = await pc.createOffer()
             await pc.setLocalDescription(offer)

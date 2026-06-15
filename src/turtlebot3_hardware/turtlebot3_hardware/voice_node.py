@@ -104,7 +104,8 @@ class VoiceNode(Node):
                     duration=ambient_noise_duration
                 )
             
-            self.stop_listening = self.recognizer.listen_in_background(
+            # 백그라운드 리스너 할당 변수명 통일 (self.stop_listening_fn)
+            self.stop_listening_fn = self.recognizer.listen_in_background(
                 self.mic, 
                 self.stt_callback, 
                 phrase_time_limit=phrase_time_limit
@@ -153,7 +154,8 @@ class VoiceNode(Node):
             self.get_logger().info("[Mode]: Switching to Calling mode...")
             
             if self.stop_listening_fn is not None:
-                self.stop_listening_fn(wait_for_node=False)
+                # 오타 수정: wait_for_node -> wait_for_stop
+                self.stop_listening_fn(wait_for_stop=False)
                 self.stop_listening_fn = None
             self.current_mode = 'CALL'
 
@@ -161,7 +163,6 @@ class VoiceNode(Node):
             self.get_logger().info("[Mode]: Switching to STT mode...")
             self.stop_listening_fn = self.recognizer.listen_in_background(self.mic, self.stt_callback)
             self.current_mode = 'STT'
-
 
     def find_i2s_microphone(self):
         mic_names = sr.Microphone.list_microphone_names()
@@ -203,6 +204,11 @@ class VoiceNode(Node):
             self.stt_pub.publish(msg)
 
     def speak_callback(self, msg):
+        # 통화 모드 중일 때 TTS 스피커 점유 원천 차단
+        if self.current_mode == 'CALL':
+            self.get_logger().warn(f"통화 모드 중입니다. TTS 명령을 무시합니다: {msg.data}")
+            return
+
         if self.is_speaking:
             self.get_logger().warn("Already speaking. Ignored new command.")
             return
@@ -247,8 +253,9 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        if hasattr(node, 'stop_listening'):
-            node.stop_listening(wait_for_stop=False)
+        # 안전한 자원 해제를 위해 변수명 일치 확인 후 호출
+        if node.stop_listening_fn is not None:
+            node.stop_listening_fn(wait_for_stop=False)
         node.destroy_node()
         rclpy.shutdown()
 
