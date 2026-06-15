@@ -344,11 +344,23 @@ export class RosGateway
   }
 
   // ── Nav2: 초기 위치 설정 (AMCL) ─────────────────────────────────────────
+  // 1) 해당 맵을 nav2에 먼저 로드하여 좌표계 일치
+  // 2) 이후 initialpose 전송 (맵 로드는 비동기이므로 약간 지연 후 전송)
   @SubscribeMessage('nav_set_initialpose')
   handleNavInitialPose(
     @MessageBody() { robotId, x, y, yaw, mapId }: { robotId: string; x: number; y: number; yaw: number; mapId?: string },
   ) {
-    void this.taskManager.setInitialPoseAndLocation(robotId, x, y, yaw, mapId);
+    const assignments = this.mapService.getAssignments();
+    const targetMap = mapId ?? assignments[robotId];
+    if (targetMap) {
+      this.mapService.loadMapOnly(robotId, targetMap);
+      // nav2가 맵을 로드하는 시간을 확보한 뒤 initialpose 전송
+      setTimeout(() => {
+        void this.taskManager.setInitialPoseAndLocation(robotId, x, y, yaw, mapId);
+      }, 800);
+    } else {
+      void this.taskManager.setInitialPoseAndLocation(robotId, x, y, yaw, mapId);
+    }
   }
 
   // ── 프론트 → Action Goal 취소 ────────────────────────────────────────────

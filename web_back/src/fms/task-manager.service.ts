@@ -185,10 +185,8 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       this.robotCache.set(robotId, { ...cache, posX: null, posY: null, yaw: null });
     }
 
-    // 맵 변경 시 AMCL 파티클 클라우드 재초기화 (이전 맵 좌표계 무효화)
-    // 원점(0,0)으로 초기위치 전송 → 사용자가 우클릭으로 실제 위치 보정 가능
-    this.fmsService.publishInitialPose(robotId, 0, 0, 0);
-    this.logger.log(`[맵변경] ${robotId} → AMCL 재초기화`);
+    // 진행 중인 nav2 주행 중단 (맵 변경으로 이전 goal_pose 무효)
+    this.fmsService.publishStop(robotId);
 
     this.server?.emit('robot_status_changed', { robot_id: robotId, status: 'IDLE' });
   }

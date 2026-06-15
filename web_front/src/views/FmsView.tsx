@@ -65,7 +65,7 @@ export default function FmsView({
  return fmsTasks.filter(t => t.status === filterTab);
  }, [fmsTasks, filterTab]);
 
- const activePaths = useMemo(() => fmsTasks.filter(t => t.status === "RUNNING" && t.assignedRobot?.robot_id && t.pathQueue?.length).map(t => ({ robotId: t.assignedRobot.robot_id!, pathQueue: t.pathQueue ?? [] })), [fmsTasks]);
+ const activePaths = useMemo(() => fmsTasks.filter(t => (t.status === "RUNNING" || t.status === "ASSIGNED") && t.assignedRobot?.robot_id && t.pathQueue?.length).map(t => ({ robotId: t.assignedRobot.robot_id!, pathQueue: t.pathQueue ?? [] })), [fmsTasks]);
 
  const robotPositions = useMemo(() => {
  const result: Record<string, RobotPos> = {};

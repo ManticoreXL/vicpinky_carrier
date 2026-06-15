@@ -273,6 +273,22 @@ export class MapService implements OnModuleInit {
     return Object.fromEntries(this.robotAssignments);
   }
 
+  // 맵 파일만 nav2에 로드 (할당 저장·태스크 취소 없이 순수 load_map 서비스 호출)
+  async loadMapOnly(robotId: string, mapName: string): Promise<void> {
+    const mapUrl = path.join(MAPS_DIR, `${mapName}.yaml`);
+    this.rosService.callService(
+      {
+        serviceName: `/${robotId}/map_server/load_map`,
+        serviceType: 'nav2_msgs/srv/LoadMap',
+        request: { map_url: mapUrl },
+      },
+      (res) => {
+        const r = res as { result?: number };
+        this.logger.log(`[${robotId}] load_map (initialpose용) → ${mapName} (result=${r?.result})`);
+      },
+    );
+  }
+
   async assignMap(robotId: string, mapName: string): Promise<{ ok: boolean; message: string }> {
     this.robotAssignments.set(robotId, mapName);
     this.saveAssignments();
