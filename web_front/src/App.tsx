@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useRos } from "./hooks/useRos";
 import { useNestSocket } from "./hooks/useNestSocket";
 import type { RosMessage } from "./hooks/useNestSocket";
@@ -23,7 +23,7 @@ type AppMode = "control" | "explore" | "fms" | "admin";
 export default function App() {
  const { connected, error, subscribe, publish } = useRos();
  const {
- emitCmdVel, emitAction, cancelAction, callService,
+ emitCmdVel, emitPublish, emitAction, cancelAction, callService,
  emitFmsDispatch, emitFmsCancel, emitNodeLock,
  emitNavGoal, emitNavInitialPose,
  nestConnected, rosMessages, socket,
@@ -32,6 +32,14 @@ export default function App() {
  fmsTasks, tmAlerts, ackTmAlert, setRobotHome,
  robotStatuses, lockedNodes,
  } = useNestSocket();
+
+ // publish를 socket.io 경유로 라우팅 (원격 클라이언트에서도 동작)
+ const socketPublish = useCallback(
+ (topicName: string, messageType: string, message: Record<string, unknown>) => {
+ emitPublish({ topicName, messageType, message });
+ },
+ [emitPublish],
+ );
  const [selectedRobot, setSelectedRobot] = useState<string>("vicpinky");
  const [appMode, setAppMode] = useState<AppMode>("control");
  const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -156,7 +164,7 @@ export default function App() {
  {selectedRobot === "vicpinky" ? (
  <VicPinkyPanel
  subscribe={subscribe}
- publish={publish}
+ publish={socketPublish}
  rosMessages={displayMessages}
  emitCmdVel={emitCmdVel}
  emitAction={emitAction}
@@ -175,7 +183,7 @@ export default function App() {
  ) : selectedRobot === "omx" ? (
  <OmxPanel
  subscribe={subscribe}
- publish={publish}
+ publish={socketPublish}
  emitAction={emitAction}
  cancelAction={cancelAction}
  activeGoals={activeGoals}
@@ -186,7 +194,7 @@ export default function App() {
  ) : selectedRobot.startsWith("tb3") ? (
  <TurtlebotPanel
  subscribe={subscribe}
- publish={publish}
+ publish={socketPublish}
  botId={selectedRobot as "tb3_01"|"tb3_02"|"tb3_03"|"tb3_04"}
  emitCmdVel={emitCmdVel}
  rosMessages={displayMessages}

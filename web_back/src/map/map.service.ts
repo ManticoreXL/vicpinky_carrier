@@ -52,6 +52,15 @@ export class MapService implements OnModuleInit {
 
   onModuleInit() {
     this.loadAssignments();
+    // 정적 맵 사전 캐시 — 첫 클라이언트 접속 시 지연 없애기
+    setImmediate(() => {
+      const maps = this.listStaticMaps();
+      this.logger.log(`[맵 캐시] 정적 맵 ${maps.length}개 사전 로드 시작`);
+      for (const name of maps) {
+        try { this.loadStaticMap(name); } catch { /* ignore */ }
+      }
+      this.logger.log(`[맵 캐시] 사전 로드 완료`);
+    });
     this.rosService.onMessage((msg) => {
       // 글로벌 /map (project_slam / slam_toolbox) → 'project_slam' 키
       // 네임스페이스 맵 /{botId}/map → 해당 botId 키

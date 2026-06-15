@@ -28,7 +28,7 @@ interface Props {
  emitFmsDispatch: (p: FmsDispatchPayload) => void;
  emitFmsCancel: (taskId: string) => void;
  emitNavGoal: (robotId: string, x: number, y: number, yaw: number) => void;
- emitNavInitialPose: (robotId: string, x: number, y: number, yaw: number) => void;
+ emitNavInitialPose: (robotId: string, x: number, y: number, yaw: number, mapId?: string) => void;
  ackTmAlert: (alertId: string) => void;
  setRobotHome: (robotId: string, x: number, y: number, yaw: number) => void;
  lockedNodes?: Set<string>;

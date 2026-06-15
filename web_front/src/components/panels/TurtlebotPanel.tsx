@@ -56,7 +56,7 @@ interface Props extends PanelProps {
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
 
 export default function TurtlebotPanel({
- subscribe, publish, botId, emitCmdVel, rosMessages,
+ publish, botId, emitCmdVel, rosMessages,
  emitAction, cancelAction, activeGoals, actionFeedbacks, actionResults,
  callService,
 }: Props) {
@@ -66,16 +66,16 @@ export default function TurtlebotPanel({
  const [diagStatus, setDiagStatus] = useState<DiagStatus>("idle");
  const [diagResult, setDiagResult] = useState<DiagResult | null>(null);
 
- // ── 직접 roslibjs 구독 (mode, yolo) ─────────────────────────────────────
+ // ── rosMessages에서 mode/yolo 읽기 (NestJS 중계 경로 — 원격 클라이언트 호환) ─
  useEffect(() => {
- const subs = [
- subscribe<{ data: string }>(`/${botId}/mode`, "std_msgs/String",
- (m) => setMode(m.data)),
- subscribe<{ data: boolean }>(`/${botId}/yolo/person_detected`, "std_msgs/Bool",
- (m) => setDetected(m.data)),
- ];
- return () => subs.forEach((s) => s?.unsubscribe());
- }, [subscribe, botId]);
+ const modeMsg = rosMessages[`/${botId}/mode`];
+ if (modeMsg) setMode((modeMsg.data as { data: string }).data ?? "unknown");
+ }, [rosMessages[`/${botId}/mode`]]);
+
+ useEffect(() => {
+ const yoloMsg = rosMessages[`/${botId}/yolo/person_detected`];
+ if (yoloMsg) setDetected((yoloMsg.data as { data: boolean }).data ?? false);
+ }, [rosMessages[`/${botId}/yolo/person_detected`]]);
 
  // ── NestJS rosMessages에서 센서 데이터 추출 ──────────────────────────────
  const p = (topic: string) => rosMessages[`/${botId}/${topic}`]?.data;

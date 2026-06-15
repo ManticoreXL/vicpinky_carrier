@@ -280,8 +280,8 @@ export function useNestSocket() {
  socketRef.current?.emit("nav_send_goal", { robotId, x, y, yaw });
  }, []);
 
- const emitNavInitialPose = useCallback((robotId: string, x: number, y: number, yaw: number) => {
- socketRef.current?.emit("nav_set_initialpose", { robotId, x, y, yaw });
+ const emitNavInitialPose = useCallback((robotId: string, x: number, y: number, yaw: number, mapId?: string) => {
+ socketRef.current?.emit("nav_set_initialpose", { robotId, x, y, yaw, mapId });
  }, []);
 
  const ackTmAlert = useCallback((alertId: string) => {

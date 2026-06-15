@@ -152,15 +152,17 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   // AMCL에 pose를 전송하고, 가장 가까운 노드를 찾아 robot.location을 업데이트한다.
 
   async setInitialPoseAndLocation(
-    robotId: string, x: number, y: number, yaw: number,
+    robotId: string, x: number, y: number, yaw: number, mapId?: string,
   ): Promise<void> {
     this.fmsService.publishInitialPose(robotId, x, y, yaw);
 
-    // map_id 없이 전체 노드 대상으로 가장 가까운 노드 검색
-    const nearestId = await this.topologyService.findNearestNodeToPosition(x, y);
+    // mapId가 있으면 해당 맵의 노드만 검색, 없으면 전체 대상
+    const nearestId = await this.topologyService.findNearestNodeToPosition(x, y, mapId);
     if (nearestId) {
       await this.robotService.updateLocation(robotId, nearestId);
-      this.logger.log(`[초기위치] ${robotId} location → ${nearestId} (${x.toFixed(2)}, ${y.toFixed(2)})`);
+      this.logger.log(`[초기위치] ${robotId} location → ${nearestId} (${x.toFixed(2)}, ${y.toFixed(2)}) [map=${mapId ?? 'any'}]`);
+    } else {
+      this.logger.warn(`[초기위치] ${robotId} — 가까운 노드 없음 (map=${mapId ?? 'any'}, x=${x.toFixed(2)}, y=${y.toFixed(2)})`);
     }
   }
 
@@ -468,60 +470,62 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       // ── 경로 탐색 ─────────────────────────────────────────────────────────
       let pathQueue: string[] = [];
 
-      this.logger.log(`[dispatch] 경로 탐색 시작: robot.location=${robot.location}, targetNode=${task.targetNode}`);
+      // 목적지 노드 확인 (map_id 결정에 필요)
+      const targetNode = await this.topologyService.findNodeById(task.targetNode);
+      if (!targetNode) {
+        this.logger.warn(`[dispatch] 목적지 노드 "${task.targetNode}"가 DB에 없음`);
+        await this.fmsService.setWaitReason(taskId, `목적지 노드 없음: ${task.targetNode}`);
+        await this.fmsService.setStatus(taskId, TaskStatus.FAILED, this.server!);
+        continue;
+      }
+      const myMapId = targetNode.map_id;
+
+      this.logger.log(`[dispatch] 경로 탐색 시작: robot.location=${robot.location}, target=${task.targetNode} (map=${myMapId})`);
+
+      // 출발 노드 결정: robot.location이 현재 맵의 실제 노드인지 검증
+      let startNodeId: string | null = null;
 
       if (robot.location && robot.location !== task.targetNode) {
-        const targetNode = await this.topologyService.findNodeById(task.targetNode);
-        if (!targetNode) {
-          this.logger.warn(`[dispatch] 목적지 노드 "${task.targetNode}"가 DB에 없음`);
-          await this.fmsService.setWaitReason(taskId, `목적지 노드 없음: ${task.targetNode}`);
-          await this.fmsService.setStatus(taskId, TaskStatus.FAILED, this.server!);
-          continue;
+        const locNode = await this.topologyService.findNodeById(robot.location);
+        if (locNode && locNode.map_id === myMapId) {
+          // robot.location이 같은 맵의 유효한 노드
+          startNodeId = robot.location;
+          this.logger.log(`[dispatch] 출발 노드 (DB location): ${startNodeId}`);
+        } else {
+          // robot.location이 존재하지 않거나 다른 맵 소속 → AMCL fallback
+          this.logger.warn(`[dispatch] robot.location="${robot.location}"이 map="${myMapId}"에 없음 → AMCL 위치로 최근접 노드 탐색`);
         }
-        this.logger.log(`[dispatch] 목적지 노드 확인: ${task.targetNode} (map_id=${targetNode.map_id})`);
-        this.logger.log(`[dispatch] 출발 노드: ${robot.location}`);
+      }
 
-        const myMapId = targetNode.map_id;
-        let rawPath = await this.topologyService.findPath(
-          robot.location, task.targetNode, myMapId,
-        );
+      // AMCL 캐시로 최근접 노드 탐색 (robot.location 무효 또는 null인 경우)
+      if (!startNodeId) {
+        const cache2 = this.robotCache.get(robotId);
+        this.logger.log(`[dispatch] AMCL 캐시: posX=${cache2?.posX} posY=${cache2?.posY}`);
+        if (cache2?.posX != null && cache2.posY != null) {
+          startNodeId = await this.topologyService.findNearestNodeToPosition(
+            cache2.posX, cache2.posY, myMapId,
+          );
+          if (startNodeId) {
+            await this.robotService.updateLocation(robotId, startNodeId);
+            this.logger.log(`[dispatch] 최근접 노드 (AMCL): ${startNodeId} — robot.location 갱신`);
+          }
+        }
+      }
 
+      if (!startNodeId || startNodeId === task.targetNode) {
+        // 출발 노드가 없거나 이미 목적지
+        pathQueue = [task.targetNode];
+        this.logger.log(`[dispatch] 출발=목적지 또는 노드 미결정 → pathQueue=[${pathQueue}]`);
+      } else {
+        const rawPath = await this.topologyService.findPath(startNodeId, task.targetNode, myMapId);
         if (rawPath.length === 0) {
-          await this.fmsService.setWaitReason(taskId, `경로 없음: ${robot.location} → ${task.targetNode}`);
-          this.emit({ type: 'task_failed', taskId, robotId, message: `경로를 찾을 수 없음: ${robot.location} → ${task.targetNode}`, requiresAction: false });
+          await this.fmsService.setWaitReason(taskId, `경로 없음: ${startNodeId} → ${task.targetNode}`);
+          this.emit({ type: 'task_failed', taskId, robotId, message: `경로를 찾을 수 없음: ${startNodeId} → ${task.targetNode}`, requiresAction: false });
           await this.fmsService.setStatus(taskId, TaskStatus.FAILED, this.server!);
           continue;
         }
-
         pathQueue = rawPath.slice(1);
         this.logger.log(`[dispatch] rawPath=[${rawPath.join(',')}] → pathQueue=[${pathQueue.join(',')}]`);
-
-      } else if (!robot.location) {
-        // robot.location 없음 — 캐시된 AMCL 위치로 가장 가까운 노드를 출발점으로 탐색
-        const cache2 = this.robotCache.get(robotId);
-        this.logger.warn(`[dispatch] ${robotId} location 없음 — AMCL 캐시: posX=${cache2?.posX} posY=${cache2?.posY}`);
-        const targetNode2 = await this.topologyService.findNodeById(task.targetNode);
-        if (cache2?.posX != null && cache2.posY != null && targetNode2) {
-          const nearestId = await this.topologyService.findNearestNodeToPosition(
-            cache2.posX, cache2.posY, targetNode2.map_id,
-          );
-          this.logger.log(`[dispatch] 최근접 노드: ${nearestId}`);
-          if (nearestId && nearestId !== task.targetNode) {
-            const rawPath2 = await this.topologyService.findPath(
-              nearestId, task.targetNode, targetNode2.map_id,
-            );
-            if (rawPath2.length > 0) {
-              pathQueue = rawPath2.slice(1);
-              this.logger.log(`[dispatch] rawPath2=[${rawPath2.join(',')}] → pathQueue=[${pathQueue.join(',')}]`);
-            }
-          }
-        } else {
-          this.logger.warn(`[dispatch] AMCL 캐시 없음 또는 목적지 노드 미발견 — pathQueue=[targetNode]`);
-        }
-        if (pathQueue.length === 0) pathQueue = [task.targetNode];
-      } else {
-        // robot.location === task.targetNode (이미 목적지)
-        pathQueue = [task.targetNode];
       }
 
       this.activeTasks.set(robotId, taskId);

@@ -67,7 +67,7 @@ interface Props {
  rosMessages: Record<string, RosMessage>;
  socket: Socket | null;
  onSendGoal: (robotId: string, x: number, y: number, yaw: number) => void;
- onSetInitialPose: (robotId: string, x: number, y: number, yaw: number) => void;
+ onSetInitialPose: (robotId: string, x: number, y: number, yaw: number, mapId?: string) => void;
  onSetHome?: (robotId: string, x: number, y: number, yaw: number) => void;
  activePaths?: ActivePath[];
  robotPositions?: Record<string, RobotPos>;
@@ -608,7 +608,7 @@ export default function NavMapCanvas({
  for (const id of selectedBots) {
  if (type === "goal") onSendGoal(id, wx, wy, yaw);
  else if (type === "home") onSetHome?.(id, wx, wy, yaw);
- else onSetInitialPose(id, wx, wy, yaw);
+ else onSetInitialPose(id, wx, wy, yaw, selectedMap || undefined);
  }
  draw();
  };

@@ -358,9 +358,9 @@ export class RosGateway
   // ── Nav2: 초기 위치 설정 (AMCL) ─────────────────────────────────────────
   @SubscribeMessage('nav_set_initialpose')
   handleNavInitialPose(
-    @MessageBody() { robotId, x, y, yaw }: { robotId: string; x: number; y: number; yaw: number },
+    @MessageBody() { robotId, x, y, yaw, mapId }: { robotId: string; x: number; y: number; yaw: number; mapId?: string },
   ) {
-    void this.taskManager.setInitialPoseAndLocation(robotId, x, y, yaw);
+    void this.taskManager.setInitialPoseAndLocation(robotId, x, y, yaw, mapId);
   }
 
   // ── 프론트 → Action Goal 취소 ────────────────────────────────────────────
