@@ -58,8 +58,6 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   private readonly lastBatteryAlert = new Map<string, number>();
   // robotId → 온라인 여부 (undefined = 미확인)
   private readonly robotOnlineState = new Map<string, boolean>();
-  // robotId → 현재 navigate_to_pose action goalId (취소용)
-  private readonly currentNavGoals  = new Map<string, string>();
 
   constructor(
     private readonly fmsService:      FmsService,
@@ -140,13 +138,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     const robotId = task.assignedRobot?.robot_id;
 
     if (robotId) {
-      // 진행 중인 navigate_to_pose action 취소
-      const goalId = this.currentNavGoals.get(robotId);
-      if (goalId) {
-        this.rosService.cancelActionGoal(`/${robotId}/navigate_to_pose`, goalId);
-        this.currentNavGoals.delete(robotId);
-      }
-      // cmd_vel=0 백업 정지
+      // cmd_vel=0 정지 (goal_pose 토픽 방식이므로 action cancel 불필요)
       for (let i = 0; i < 3; i++) {
         this.fmsService.publishStop(robotId);
       }
@@ -246,12 +238,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       const newQueue = newRaw.slice(1); // startId는 현재 위치이므로 제외
       await this.fmsService.updatePathQueue(taskId, newQueue, this.server);
 
-      // 기존 action 취소 후 새 첫 노드로 action 재전송
-      const oldGoal = this.currentNavGoals.get(robotId);
-      if (oldGoal) {
-        this.rosService.cancelActionGoal(`/${robotId}/navigate_to_pose`, oldGoal);
-        this.currentNavGoals.delete(robotId);
-      }
+      // 새 첫 노드로 goal_pose 재전송 (이전 goal은 새 goal이 덮어씀)
       await this.sendNodeActionGoal(robotId, newQueue[0], taskId);
       this.logger.log(`[재경로] ${robotId}: ${newQueue.join(',')} (우회)`);
       this.emit({ type: 'info', taskId, robotId, message: `${robotId} 노드 ${nodeId} 우회 재경로`, requiresAction: false });
@@ -385,11 +372,6 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
         // 진행 중이던 태스크/nav action 정리
         const activeTaskId = this.activeTasks.get(robotId);
         if (activeTaskId) {
-          const gid = this.currentNavGoals.get(robotId);
-          if (gid) {
-            this.rosService.cancelActionGoal(`/${robotId}/navigate_to_pose`, gid);
-            this.currentNavGoals.delete(robotId);
-          }
           this.activeTasks.delete(robotId);
 
           // 태스크 FAILED 처리 (서버가 살아있는 경우)
@@ -582,83 +564,18 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  // ── 노드 단위 navigate_to_pose action 전송 ──────────────────────────────
+  // ── 노드 단위 goal_pose 토픽 전송 ──────────────────────────────────────
+  // domain_bridge: /{robotId}/goal_pose (domain40) → /goal_pose (robot domain)
+  // 도착 감지: checkWaypointArrival (amcl_pose 위치 기반)
 
   private async sendNodeActionGoal(robotId: string, nodeId: string, taskId: string): Promise<void> {
     const node = await this.topologyService.findNodeById(nodeId);
     if (!node) {
-      this.logger.warn(`[sendNodeActionGoal] 노드 "${nodeId}" DB에 없음`);
+      this.logger.warn(`[sendNodeGoal] 노드 "${nodeId}" DB에 없음`);
       return;
     }
-    const now = Date.now() / 1000;
-    const goalId = this.rosService.sendActionGoal(
-      {
-        actionName: `/${robotId}/navigate_to_pose`,
-        actionType: 'nav2_msgs/action/NavigateToPose',
-        goal: {
-          pose: {
-            header: { stamp: { sec: Math.floor(now), nanosec: 0 }, frame_id: 'map' },
-            pose: {
-              position:    { x: node.x, y: node.y, z: 0 },
-              orientation: { x: 0, y: 0, z: Math.sin(node.yaw / 2), w: Math.cos(node.yaw / 2) },
-            },
-          },
-          behavior_tree: '',
-        },
-      },
-      undefined,
-      (result) => { void this.handleNodeResult(robotId, taskId, nodeId, result.status); },
-    );
-    this.currentNavGoals.set(robotId, goalId);
-    this.logger.log(`[navigate_to_pose] ${robotId} → ${nodeId} (${node.x.toFixed(2)}, ${node.y.toFixed(2)}) id=${goalId}`);
-  }
-
-  // ── navigate_to_pose 결과 처리 ───────────────────────────────────────────
-
-  private async handleNodeResult(robotId: string, taskId: string, nodeId: string, status: number): Promise<void> {
-    this.logger.log(`[handleNodeResult] ${robotId} node=${nodeId} status=${status}`);
-    this.currentNavGoals.delete(robotId);
-
-    if (!this.server) return;
-    const task = await this.fmsService.getTask(taskId);
-    if (!task || task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED) return;
-
-    if (status === 4) {
-      // SUCCEEDED — 도착, 다음 노드로
-      await this.robotService.updateLocation(robotId, nodeId);
-
-      const remaining = [...(task.pathQueue ?? [])];
-      if (remaining[0] === nodeId) remaining.shift();
-
-      if (remaining.length === 0) {
-        // 태스크 완료
-        this.activeTasks.delete(robotId);
-        const cache = this.robotCache.get(robotId);
-        await this.fmsService.setStatus(taskId, TaskStatus.COMPLETED, this.server, {
-          completedAt: new Date(),
-          assignedRobot: { robot_id: robotId, is_completed: true },
-        });
-        await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
-        this.emit({ type: 'completed', taskId, robotId, message: `${robotId} 태스크 완료 (${task.targetNode})`, requiresAction: false });
-        this.fmsService.publishInitialPose(robotId, cache?.posX ?? 0, cache?.posY ?? 0, cache?.yaw ?? 0);
-        this.returnHome(robotId);
-
-      } else {
-        // 다음 노드로 action 전송
-        const nextId = remaining[0];
-        await this.fmsService.updatePathQueue(taskId, remaining, this.server);
-        this.logger.log(`[노드 이동] ${robotId}: ${nodeId} → ${nextId} (남은 ${remaining.length}개)`);
-        await this.sendNodeActionGoal(robotId, nextId, taskId);
-      }
-
-    } else if (status === 6) {
-      // ABORTED
-      this.activeTasks.delete(robotId);
-      await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
-      await this.fmsService.setStatus(taskId, TaskStatus.FAILED, this.server, { completedAt: new Date() });
-      this.emit({ type: 'task_failed', taskId, robotId, message: `${robotId} 내비게이션 실패 — ABORTED (${nodeId})`, requiresAction: false });
-    }
-    // status 5 CANCELED → cancelTask에서 이미 FAILED 처리
+    this.fmsService.publishGoal(robotId, node.x, node.y, node.yaw);
+    this.logger.log(`[goal_pose] ${robotId} → ${nodeId} (${node.x.toFixed(2)}, ${node.y.toFixed(2)})`);
   }
 
   // ── 헬퍼 ─────────────────────────────────────────────────────────────────

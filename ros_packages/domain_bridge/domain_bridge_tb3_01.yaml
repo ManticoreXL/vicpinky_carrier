@@ -144,3 +144,12 @@ services:
     from_domain: 40
     to_domain: 41
     remap: /run_diagnosis
+
+actions:
+
+  # ── DOWNLINK ACTIONS: 관제탑(40)에서 로봇(41)의 nav2 action 호출 ──
+  /tb3_01/navigate_to_pose:
+    type: nav2_msgs/action/NavigateToPose
+    from_domain: 40
+    to_domain: 41
+    remap: /navigate_to_pose
