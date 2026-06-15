@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import type { Server } from 'socket.io';
@@ -10,6 +10,7 @@ const MIN_WEIGHT = 0.1;
 
 @Injectable()
 export class TopologyService {
+  private readonly logger = new Logger(TopologyService.name);
   private server: Server | null = null;
 
   constructor(
@@ -106,44 +107,70 @@ export class TopologyService {
     map_id: string,
     occupiedEdges: Set<string> = new Set(),
   ): Promise<string[]> {
-    if (startNodeId === endNodeId) return [startNodeId];
+    this.logger.log(`[findPath] ${startNodeId} → ${endNodeId} (map: ${map_id}, 점유엣지: ${occupiedEdges.size}개)`);
 
-    // 잠긴 노드 목록 조회 (출발·목적지 제외: 이미 거기 있거나 가야 하는 경우)
+    if (startNodeId === endNodeId) {
+      this.logger.log(`[findPath] 출발=목적지 → 즉시 반환`);
+      return [startNodeId];
+    }
+
+    // 잠긴 노드 목록 조회
     const lockedNodes = await this.findLockedNodeIds(map_id);
+    this.logger.log(`[findPath] 잠긴 노드: [${[...lockedNodes].join(', ')}]`);
 
-    // isLocked: false 대신 $ne: true 사용 — 필드 없는 기존 엣지도 포함
+    // 전체 엣지 수 확인 (필터 전)
+    const allEdgeCount = await this.edgeModel.countDocuments({ map_id }).exec();
+    this.logger.log(`[findPath] map_id="${map_id}" 전체 엣지 수: ${allEdgeCount}`);
+
     const edges = await this.edgeModel
       .find({ map_id, isLocked: { $ne: true }, weight: { $gt: MIN_WEIGHT } })
       .lean()
       .exec();
+    this.logger.log(`[findPath] 사용 가능 엣지: ${edges.length}개 (잠금해제+weight>${MIN_WEIGHT})`);
+
+    if (edges.length === 0) {
+      this.logger.warn(`[findPath] 엣지 없음 — map_id 불일치 가능성. DB 엣지 샘플:`);
+      const sample = await this.edgeModel.find().limit(3).lean().exec();
+      sample.forEach(e => this.logger.warn(`  edge: ${e.startNode}→${e.endNode} map_id="${e.map_id}" weight=${e.weight} isLocked=${e.isLocked}`));
+    }
 
     const adj = new Map<string, { to: string; cost: number }[]>();
+    let skippedLock = 0, skippedOccupied = 0;
 
     for (const edge of edges) {
-      // 잠긴 노드를 경유하는 엣지 건너뜀 (출발·도착은 허용)
       const startLocked = lockedNodes.has(edge.startNode) && edge.startNode !== startNodeId;
       const endLocked   = lockedNodes.has(edge.endNode)   && edge.endNode   !== endNodeId;
-      if (startLocked || endLocked) continue;
+      if (startLocked || endLocked) { skippedLock++; continue; }
 
       const w    = edge.weight ?? 1;
-      const cost = 1 / w;            // 높은 가중치 = 낮은 비용 = 다익스트라 우선
+      const cost = 1 / w;
 
       const fwdKey = `${edge.startNode}→${edge.endNode}`;
       if (!occupiedEdges.has(fwdKey)) {
         if (!adj.has(edge.startNode)) adj.set(edge.startNode, []);
         adj.get(edge.startNode)!.push({ to: edge.endNode, cost });
-      }
+      } else { skippedOccupied++; }
 
       if (edge.direction === EdgeDirection.BOTH_WAY) {
         const bwdKey = `${edge.endNode}→${edge.startNode}`;
         if (!occupiedEdges.has(bwdKey)) {
           if (!adj.has(edge.endNode)) adj.set(edge.endNode, []);
           adj.get(edge.endNode)!.push({ to: edge.startNode, cost });
-        }
+        } else { skippedOccupied++; }
       }
     }
 
-    // 다익스트라 (소규모 그래프용 단순 배열 정렬)
+    this.logger.log(`[findPath] 그래프 노드: ${adj.size}개, 잠금제외: ${skippedLock}, 점유제외: ${skippedOccupied}`);
+    this.logger.log(`[findPath] 출발노드 인접: ${JSON.stringify(adj.get(startNodeId) ?? [])}`);
+
+    if (!adj.has(startNodeId)) {
+      this.logger.warn(`[findPath] 출발노드 "${startNodeId}"가 그래프에 없음 — 해당 노드의 엣지가 DB에 있는지 확인 필요`);
+    }
+    if (![...adj.values()].some(vs => vs.some(v => v.to === endNodeId))) {
+      this.logger.warn(`[findPath] 목적노드 "${endNodeId}"로 향하는 엣지가 그래프에 없음`);
+    }
+
+    // 다익스트라
     const dist   = new Map<string, number>();
     const parent = new Map<string, string>();
     const pq: { id: string; d: number }[] = [{ id: startNodeId, d: 0 }];
@@ -152,7 +179,11 @@ export class TopologyService {
     while (pq.length > 0) {
       pq.sort((a, b) => a.d - b.d);
       const { id: u, d: distU } = pq.shift()!;
-      if (u === endNodeId) return this.reconstructPath(parent, startNodeId, endNodeId);
+      if (u === endNodeId) {
+        const path = this.reconstructPath(parent, startNodeId, endNodeId);
+        this.logger.log(`[findPath] 경로 발견: [${path.join(' → ')}]`);
+        return path;
+      }
       if (distU > (dist.get(u) ?? Infinity)) continue;
 
       for (const { to: v, cost } of adj.get(u) ?? []) {
@@ -165,6 +196,7 @@ export class TopologyService {
       }
     }
 
+    this.logger.warn(`[findPath] 경로 없음: ${startNodeId} → ${endNodeId}`);
     return [];
   }
 

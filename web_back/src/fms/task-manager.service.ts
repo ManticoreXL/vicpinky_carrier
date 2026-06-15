@@ -452,15 +452,27 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     const pending = await this.fmsService.getPendingTasks(20);
     if (!pending.length) return;
 
+    this.logger.log(`[process] PENDING 태스크 ${pending.length}개`);
+
     // 3. 가용 IDLE 로봇
     const now2 = Date.now();
     const freeRobots: RobotDocument[] = [];
+    this.logger.log(`[process] robotCache 항목: ${this.robotCache.size}개`);
     for (const [robotId, cache] of this.robotCache.entries()) {
-      if (now2 - cache.lastSeen >= ONLINE_MS) continue;
-      if (this.activeTasks.has(robotId)) continue;
+      const age = now2 - cache.lastSeen;
+      if (age >= ONLINE_MS) {
+        this.logger.log(`[process] ${robotId} — 마지막 수신 ${age}ms 전 (ONLINE_MS=${ONLINE_MS}) → 오프라인 간주`);
+        continue;
+      }
+      if (this.activeTasks.has(robotId)) {
+        this.logger.log(`[process] ${robotId} — 이미 태스크 수행 중 (${this.activeTasks.get(robotId)})`);
+        continue;
+      }
       const robot = await this.robotService.autoRegister(robotId);
+      this.logger.log(`[process] ${robotId} — status=${robot.status} location=${robot.location}`);
       if (robot.status === RobotStatus.IDLE) freeRobots.push(robot);
     }
+    this.logger.log(`[process] 가용 IDLE 로봇: [${freeRobots.map(r => r.robot_id).join(', ')}]`);
     if (!freeRobots.length) return;
 
     for (const task of pending) {
@@ -482,11 +494,13 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       }
 
       const robotId = robot.robot_id;
+      this.logger.log(`[dispatch] 태스크 ${taskId} [${task.type}→${task.targetNode}] → 로봇 ${robotId} (location=${robot.location})`);
 
       // 온라인 확인
       const cache  = this.robotCache.get(robotId);
       const online = cache && (Date.now() - cache.lastSeen) < ONLINE_MS;
       if (!online) {
+        this.logger.warn(`[dispatch] ${robotId} 오프라인 — 건너뜀`);
         await this.fmsService.setWaitReason(taskId, '로봇 오프라인 — 재연결 대기');
         freeRobots.unshift(robot);
         continue;
@@ -508,13 +522,18 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       // ── 경로 탐색 ─────────────────────────────────────────────────────────
       let pathQueue: string[] = [];
 
+      this.logger.log(`[dispatch] 경로 탐색 시작: robot.location=${robot.location}, targetNode=${task.targetNode}`);
+
       if (robot.location && robot.location !== task.targetNode) {
         const targetNode = await this.topologyService.findNodeById(task.targetNode);
         if (!targetNode) {
+          this.logger.warn(`[dispatch] 목적지 노드 "${task.targetNode}"가 DB에 없음`);
           await this.fmsService.setWaitReason(taskId, `목적지 노드 없음: ${task.targetNode}`);
           await this.fmsService.setStatus(taskId, TaskStatus.FAILED, this.server!);
           continue;
         }
+        this.logger.log(`[dispatch] 목적지 노드 확인: ${task.targetNode} (map_id=${targetNode.map_id})`);
+        this.logger.log(`[dispatch] 출발 노드: ${robot.location}`);
 
         const myMapId = targetNode.map_id;
 
@@ -569,23 +588,29 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
         }
 
         pathQueue = rawPath.slice(1);
+        this.logger.log(`[dispatch] rawPath=[${rawPath.join(',')}] → pathQueue=[${pathQueue.join(',')}]`);
 
       } else if (!robot.location) {
         // robot.location 없음 — 캐시된 AMCL 위치로 가장 가까운 노드를 출발점으로 탐색
         const cache2 = this.robotCache.get(robotId);
+        this.logger.warn(`[dispatch] ${robotId} location 없음 — AMCL 캐시: posX=${cache2?.posX} posY=${cache2?.posY}`);
         const targetNode2 = await this.topologyService.findNodeById(task.targetNode);
         if (cache2?.posX != null && cache2.posY != null && targetNode2) {
           const nearestId = await this.topologyService.findNearestNodeToPosition(
             cache2.posX, cache2.posY, targetNode2.map_id,
           );
+          this.logger.log(`[dispatch] 최근접 노드: ${nearestId}`);
           if (nearestId && nearestId !== task.targetNode) {
             const rawPath2 = await this.topologyService.findPath(
               nearestId, task.targetNode, targetNode2.map_id, this.getOccupiedEdgeKeys(robotId),
             );
             if (rawPath2.length > 0) {
               pathQueue = rawPath2.slice(1);
+              this.logger.log(`[dispatch] rawPath2=[${rawPath2.join(',')}] → pathQueue=[${pathQueue.join(',')}]`);
             }
           }
+        } else {
+          this.logger.warn(`[dispatch] AMCL 캐시 없음 또는 목적지 노드 미발견 — pathQueue=[targetNode]`);
         }
         if (pathQueue.length === 0) pathQueue = [task.targetNode];
       } else {
@@ -610,7 +635,9 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
       // ── navigate_through_poses action 으로 전체 경로를 한 번에 전송 ──────
       // 중간 노드에서 속도를 줄이지 않고 최종 목적지에서만 정지
+      this.logger.log(`[dispatch] 최종 pathQueue: [${pathQueue.join(',')}]`);
       const poses = await this.buildPoseList(pathQueue);
+      this.logger.log(`[dispatch] buildPoseList → ${poses.length}개 포즈`);
       if (poses.length > 0) {
         const goalId = this.rosService.sendActionGoal(
           {
@@ -645,11 +672,13 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   //   4 = SUCCEEDED, 5 = CANCELED (cancelTask에서 처리), 6 = ABORTED
 
   private async handleNavResult(robotId: string, taskId: string, status: number) {
+    this.logger.log(`[handleNavResult] ${robotId} taskId=${taskId} status=${status}`);
     if (!this.server) return;
 
     const task = await this.fmsService.getTask(taskId);
     // 이미 취소/완료된 경우 무시
     if (!task || task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED) {
+      this.logger.warn(`[handleNavResult] ${robotId} — 이미 ${task?.status ?? '없음'} 상태, 무시`);
       this.navGoalIds.delete(robotId);
       return;
     }
