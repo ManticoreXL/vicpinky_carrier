@@ -456,10 +456,15 @@ async def async_main(args):
     camera = CameraReader(args.device, args.width, args.height, args.fps)
     camera.start()
 
-    audio_reader = AudioReader(device_index=1)
-    audio_writer = AudioWriter(device_index=1)
+    # audio_reader = AudioReader(device_index=1)
+    # audio_writer = AudioWriter(device_index=1)
 
-    webrtc = WebRTCManager(bot_id=args.bot_id, camera=camera, audio_reader=audio_reader, audio_writer=audio_writer)
+    webrtc = WebRTCManager(
+        bot_id=args.bot_id, 
+        camera=camera, 
+        # audio_reader=audio_reader, 
+        # audio_writer=audio_writer
+    )
 
     signaling = SignalingClient(
         server_url=args.server,
@@ -482,8 +487,8 @@ async def async_main(args):
         signaling.stop()
         await webrtc.close_all()
         camera.stop()
-        audio_reader.stop()
-        audio_writer.stop()
+        # audio_reader.stop()
+        # audio_writer.stop()
 
 
 def main(args=None):
