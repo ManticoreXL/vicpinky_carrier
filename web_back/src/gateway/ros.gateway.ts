@@ -73,7 +73,6 @@ export class RosGateway
   }
 
   afterInit() {
-    this.logger.log('WebSocket Gateway 시작 — namespace: /ros');
     this.taskManager.setServer(this.server);
   }
 
@@ -88,7 +87,6 @@ export class RosGateway
       if (socketId === client.id) {
         this.robotSockets.delete(botId);
         this.server?.emit('robot_camera_offline', { botId });
-        this.logger.log(`📷 카메라 오프라인: ${botId}`);
         void this.logsService.write({
           level: 'warn', category: 'camera', botId,
           message: '카메라 오프라인',
@@ -180,7 +178,6 @@ export class RosGateway
     @ConnectedSocket() client: Socket,
   ) {
     this.robotSockets.set(payload.botId, client.id);
-    this.logger.log(`📷 카메라 온라인: ${payload.botId}`);
     void this.logsService.write({
       level: 'info', category: 'camera', botId: payload.botId,
       message: '카메라 온라인',
@@ -197,7 +194,6 @@ export class RosGateway
   ) {
     const robotSocketId = this.robotSockets.get(payload.botId);
     if (!robotSocketId) {
-      this.logger.warn(`스트림 요청 실패: ${payload.botId} 미등록 (등록된 봇: ${[...this.robotSockets.keys()].join(', ') || '없음'})`);
       client.emit('webrtc_error', { botId: payload.botId, message: '로봇 카메라 미연결' });
       return;
     }
@@ -218,12 +214,6 @@ export class RosGateway
   ) {
     // 검증(경고만): 보낸 로봇 소켓이 해당 botId로 등록됐는지 — 불일치해도 중계는 함
     // (browserId로 정확히 라우팅되고, 브라우저가 botId로 다시 필터링하므로 안전)
-    const expectedSocketId = this.robotSockets.get(payload.botId);
-    if (expectedSocketId !== client.id) {
-      this.logger.warn(
-        `Offer botId 확인: ${payload.botId} 등록소켓=${expectedSocketId} ≠ 보낸소켓=${client.id} (재연결 직후일 수 있음)`,
-      );
-    }
     // 브라우저는 RTCSessionDescriptionInit 형태로 받아야 함 → 중첩 sdp 객체로 변환
     this.server.to(payload.browserId).emit('webrtc_offer', {
       botId: payload.botId,
@@ -247,8 +237,6 @@ export class RosGateway
       type: payload.sdp.type,    // 플랫 문자열
       browserId: client.id,
     });
-    // 핸드셰이크 완료 = 스트림 연결 성립
-    this.logger.log(`✅ WebRTC 연결: ${payload.botId} ↔ browser ${client.id}`);
     void this.logsService.write({
       level: 'info', category: 'webrtc', botId: payload.botId,
       message: 'WebRTC 스트림 연결', meta: { browserId: client.id },

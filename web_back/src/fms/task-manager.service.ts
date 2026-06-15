@@ -74,7 +74,6 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     void this.tick();
     // 서버 재시작 시 기존 진행 중인 태스크 복구 (activeTasks 메모리는 초기화됨)
     void this.recoverActiveTasks();
-    this.logger.log('TaskManager 시작');
   }
 
   private async recoverActiveTasks() {
@@ -119,7 +118,6 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
   setHomePosition(robotId: string, x: number, y: number, yaw: number) {
     this.homePositions.set(robotId, { x, y, yaw });
-    this.logger.log(`홈 설정: ${robotId} (${x.toFixed(2)}, ${y.toFixed(2)})`);
   }
 
   ackAlert(_alertId: string) { /* 클라이언트 UI용 */ }
@@ -356,10 +354,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
         const actualRobot = await this.robotService.findById(robotId);
         const actualStatus = actualRobot?.status ?? 'IDLE';
         if (wasOnline === false) {
-          this.logger.log(`[온라인] ${robotId} 복귀 (상태: ${actualStatus})`);
           this.emit({ type: 'info', robotId, message: `${robotId} 온라인 복귀`, requiresAction: false });
-        } else {
-          this.logger.log(`[온라인] ${robotId} 최초 감지 (상태: ${actualStatus})`);
         }
         this.server?.emit('robot_status_changed', { robot_id: robotId, status: actualStatus });
 
@@ -382,7 +377,6 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
           }
         }
 
-        this.logger.warn(`[오프라인] ${robotId}`);
         this.emit({ type: 'robot_offline', robotId, message: `${robotId} 오프라인 (태스크 중단)`, requiresAction: true });
         this.server?.emit('robot_status_changed', { robot_id: robotId, status: 'OFFLINE' });
       }
@@ -418,27 +412,16 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     const pending = await this.fmsService.getPendingTasks(20);
     if (!pending.length) return;
 
-    this.logger.log(`[process] PENDING 태스크 ${pending.length}개`);
-
     // 3. 가용 IDLE 로봇
     const now2 = Date.now();
     const freeRobots: RobotDocument[] = [];
-    this.logger.log(`[process] robotCache 항목: ${this.robotCache.size}개`);
     for (const [robotId, cache] of this.robotCache.entries()) {
       const age = now2 - cache.lastSeen;
-      if (age >= ONLINE_MS) {
-        this.logger.log(`[process] ${robotId} — 마지막 수신 ${age}ms 전 (ONLINE_MS=${ONLINE_MS}) → 오프라인 간주`);
-        continue;
-      }
-      if (this.activeTasks.has(robotId)) {
-        this.logger.log(`[process] ${robotId} — 이미 태스크 수행 중 (${this.activeTasks.get(robotId)})`);
-        continue;
-      }
+      if (age >= ONLINE_MS) continue;
+      if (this.activeTasks.has(robotId)) continue;
       const robot = await this.robotService.autoRegister(robotId);
-      this.logger.log(`[process] ${robotId} — status=${robot.status} location=${robot.location}`);
       if (robot.status === RobotStatus.IDLE) freeRobots.push(robot);
     }
-    this.logger.log(`[process] 가용 IDLE 로봇: [${freeRobots.map(r => r.robot_id).join(', ')}]`);
     if (!freeRobots.length) return;
 
     for (const task of pending) {
@@ -460,7 +443,6 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       }
 
       const robotId = robot.robot_id;
-      this.logger.log(`[dispatch] 태스크 ${taskId} [${task.type}→${task.targetNode}] → 로봇 ${robotId} (location=${robot.location})`);
 
       // 온라인 확인
       const cache  = this.robotCache.get(robotId);
@@ -498,8 +480,6 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       }
       const myMapId = targetNode.map_id;
 
-      this.logger.log(`[dispatch] 경로 탐색 시작: robot.location=${robot.location}, target=${task.targetNode} (map=${myMapId})`);
-
       // 출발 노드 결정: robot.location이 현재 맵의 실제 노드인지 검증
       let startNodeId: string | null = null;
 
@@ -508,24 +488,18 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
         if (locNode && locNode.map_id === myMapId) {
           // robot.location이 같은 맵의 유효한 노드
           startNodeId = robot.location;
-          this.logger.log(`[dispatch] 출발 노드 (DB location): ${startNodeId}`);
-        } else {
-          // robot.location이 존재하지 않거나 다른 맵 소속 → AMCL fallback
-          this.logger.warn(`[dispatch] robot.location="${robot.location}"이 map="${myMapId}"에 없음 → AMCL 위치로 최근접 노드 탐색`);
         }
       }
 
       // AMCL 캐시로 최근접 노드 탐색 (robot.location 무효 또는 null인 경우)
       if (!startNodeId) {
         const cache2 = this.robotCache.get(robotId);
-        this.logger.log(`[dispatch] AMCL 캐시: posX=${cache2?.posX} posY=${cache2?.posY}`);
         if (cache2?.posX != null && cache2.posY != null) {
           startNodeId = await this.topologyService.findNearestNodeToPosition(
             cache2.posX, cache2.posY, myMapId,
           );
           if (startNodeId) {
             await this.robotService.updateLocation(robotId, startNodeId);
-            this.logger.log(`[dispatch] 최근접 노드 (AMCL): ${startNodeId} — robot.location 갱신`);
           }
         }
       }
@@ -533,7 +507,6 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       if (!startNodeId || startNodeId === task.targetNode) {
         // 출발 노드가 없거나 이미 목적지
         pathQueue = [task.targetNode];
-        this.logger.log(`[dispatch] 출발=목적지 또는 노드 미결정 → pathQueue=[${pathQueue}]`);
       } else {
         const rawPath = await this.topologyService.findPath(startNodeId, task.targetNode, myMapId);
         if (rawPath.length === 0) {
@@ -543,7 +516,6 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
           continue;
         }
         pathQueue = rawPath.slice(1);
-        this.logger.log(`[dispatch] rawPath=[${rawPath.join(',')}] → pathQueue=[${pathQueue.join(',')}]`);
       }
 
       this.activeTasks.set(robotId, taskId);
@@ -551,8 +523,6 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       await this.fmsService.assignToRobot(taskId, robotId, pathQueue, this.server!);
       await this.robotService.updateStatus(robotId, RobotStatus.MOVING);
 
-      // ── 첫 노드로 navigate_to_pose action 전송 ──
-      this.logger.log(`[dispatch] 최종 pathQueue: [${pathQueue.join(',')}]`);
       const firstGoalId = pathQueue[0] ?? task.targetNode;
       await this.sendNodeActionGoal(robotId, firstGoalId, taskId);
 

@@ -35,12 +35,10 @@ export class RosService implements OnModuleInit, OnModuleDestroy {
 
   // ── rosbridge WebSocket 연결 ─────────────────────────────────────────────
   private connect() {
-    this.logger.log(`rosbridge 연결 시도: ${this.ROSBRIDGE_URL}`);
     this.ws = new WebSocket(this.ROSBRIDGE_URL);
 
     this.ws.on('open', () => {
       this.connected = true;
-      this.logger.log('rosbridge 연결됨');
       this.subscribeAll();
     });
 
@@ -133,7 +131,6 @@ export class RosService implements OnModuleInit, OnModuleDestroy {
         type: messageType,
       });
     });
-    this.logger.log(`rosbridge 구독 완료: ${SUBSCRIBED_TOPICS.length}개 토픽`);
   }
 
   // ── 토픽 발행 ───────────────────────────────────────────────────────────
