@@ -27,8 +27,7 @@
 - 공통 VCC  : 3.3V
 - 공통 GND  : GND
 - 센서1 OUT : RPI Pin 15 (GPIO 22)
-- 센서2 OUT : RPI Pin 16 (GPIO 23)
-- 센서3 OUT : RPI Pin 18 (GPIO 24)
+- 센서2 OUT : RPI Pin 18 (GPIO 24)
 
 # 사전 설정
 ## 펌웨어 컨픽 수정
