@@ -29,7 +29,7 @@ setup(
         'console_scripts': [
             'headlight_node = turtlebot3_hardware.headlight_node:main',
             'voice_node = turtlebot3_hardware.voice_node:main',
-            'turtlebot3_webrtc = turtlebot3_hardware.robot_webrtc:main',
+            'turtlebot3_webrtc = turtlebot3_hardware.turtlebot3_webrtc:main',
         ],
     },
 )
