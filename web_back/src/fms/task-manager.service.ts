@@ -60,6 +60,8 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   private readonly robotOnlineState = new Map<string, boolean>();
   // robotId → 코너 회전 후 대기 타이머
   private readonly cornerTimeouts   = new Map<string, NodeJS.Timeout>();
+  // robotId → 점유 로봇 때문에 정지 중인 2-ahead 노드 ID
+  private readonly stoppedForNode   = new Map<string, string>();
 
   private static readonly CORNER_WAIT_MS  = 2_000; // 90° 회전 대기 시간
   private static readonly CORNER_THRESH   = Math.PI / 4; // 45° 이상이면 코너 판정
@@ -141,7 +143,12 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     const robotId = task.assignedRobot?.robot_id;
 
     if (robotId) {
-      // cmd_vel=0 정지 (goal_pose 토픽 방식이므로 action cancel 불필요)
+      // 현재 위치를 새 goal로 덮어써서 nav2의 이전 goal을 즉시 무효화
+      const cache = this.robotCache.get(robotId);
+      if (cache?.posX != null && cache.posY != null) {
+        this.fmsService.publishGoal(robotId, cache.posX, cache.posY, cache.yaw ?? 0);
+      }
+      // cmd_vel=0 정지 (혹시 nav2가 반응 전에 움직이는 경우 대비)
       for (let i = 0; i < 3; i++) {
         this.fmsService.publishStop(robotId);
       }
@@ -149,6 +156,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       this.activeTasks.delete(robotId);
       clearTimeout(this.cornerTimeouts.get(robotId));
       this.cornerTimeouts.delete(robotId);
+      this.stoppedForNode.delete(robotId);
 
       // 3. 로봇 상태 IDLE 복귀
       await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
@@ -194,6 +202,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
     clearTimeout(this.cornerTimeouts.get(robotId));
     this.cornerTimeouts.delete(robotId);
+    this.stoppedForNode.delete(robotId);
 
     // 진행 중인 nav2 주행 중단 (맵 변경으로 이전 goal_pose 무효)
     this.fmsService.publishStop(robotId);
@@ -328,7 +337,56 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
   // ── 경유 노드 통과 감지 (위치 추적 전용) ────────────────────────────────
 
+  // ── 2-ahead 노드 충돌 감지 ──────────────────────────────────────────────
+  //
+  // 매 tick마다 실행. 활성 로봇의 pathQueue[1](2노드 앞)에 다른 로봇이 있으면
+  // 해당 로봇을 정지시키고, 비워지면 재출발.
+
+  private async checkNodeConflicts() {
+    if (!this.server) return;
+
+    for (const [robotId, taskId] of this.activeTasks) {
+      const task = await this.fmsService.getTask(taskId);
+      if (!task || task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED) continue;
+
+      const pathQueue = task.pathQueue ?? [];
+      if (pathQueue.length < 2) {
+        // 2-ahead 없으면 대기 해제
+        if (this.stoppedForNode.has(robotId)) {
+          this.stoppedForNode.delete(robotId);
+          if (pathQueue.length > 0) await this.sendNodeActionGoal(robotId, pathQueue[0]);
+        }
+        continue;
+      }
+
+      const twoAheadId = pathQueue[1];
+
+      // 다른 활성 로봇 중 twoAheadId에 위치한 로봇 탐색
+      let blockerId: string | null = null;
+      for (const [otherId] of this.activeTasks) {
+        if (otherId === robotId) continue;
+        const other = await this.robotService.findById(otherId);
+        if (other?.location === twoAheadId) { blockerId = otherId; break; }
+      }
+
+      if (blockerId) {
+        if (!this.stoppedForNode.has(robotId)) {
+          this.logger.log(`[대기] ${robotId} 정지 — ${twoAheadId} 점유 중 (${blockerId})`);
+          this.fmsService.publishStop(robotId);
+          this.stoppedForNode.set(robotId, twoAheadId);
+        }
+      } else if (this.stoppedForNode.get(robotId) === twoAheadId) {
+        this.logger.log(`[재출발] ${robotId} — ${twoAheadId} 비워짐, 경로 재개`);
+        this.stoppedForNode.delete(robotId);
+        await this.sendNodeActionGoal(robotId, pathQueue[0]);
+      }
+    }
+  }
+
   private async checkWaypointArrival(robotId: string, x: number, y: number, yaw: number) {
+    // 충돌 대기 중이면 웨이포인트 처리 스킵
+    if (this.stoppedForNode.has(robotId)) return;
+
     const taskId = this.activeTasks.get(robotId);
     if (!taskId || !this.server) return;
 
@@ -399,6 +457,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     try {
       await this.syncOnlineStatus();
       await this.process();
+      await this.checkNodeConflicts();
     } catch (e) { this.logger.error('루프 오류', e); }
     this.loopTimer = setTimeout(() => void this.tick(), LOOP_MS);
   }

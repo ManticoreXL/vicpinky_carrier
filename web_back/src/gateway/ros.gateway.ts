@@ -320,29 +320,6 @@ export class RosGateway
     client.emit('node_lock_init', lockedNodeIds);
   }
 
-  // ── Nav2: 목표 지점 전송 ─────────────────────────────────────────────────
-  @SubscribeMessage('nav_send_goal')
-  handleNavGoal(
-    @MessageBody() { robotId, x, y, yaw }: { robotId: string; x: number; y: number; yaw: number },
-  ) {
-    const now = Date.now() / 1000;
-    this.rosService.publish({
-      topicName: `/${robotId}/goal_pose`,
-      messageType: 'geometry_msgs/PoseStamped',
-      message: {
-        header: { stamp: { sec: Math.floor(now), nanosec: 0 }, frame_id: 'map' },
-        pose: {
-          position: { x, y, z: 0 },
-          orientation: {
-            x: 0, y: 0,
-            z: Math.sin(yaw / 2),
-            w: Math.cos(yaw / 2),
-          },
-        },
-      },
-    });
-  }
-
   // ── Nav2: 초기 위치 설정 (AMCL) ─────────────────────────────────────────
   // 1) 해당 맵을 nav2에 먼저 로드하여 좌표계 일치
   // 2) 이후 initialpose 전송 (맵 로드는 비동기이므로 약간 지연 후 전송)

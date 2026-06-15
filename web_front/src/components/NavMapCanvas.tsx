@@ -66,7 +66,6 @@ function quatToYaw(q: { x: number; y: number; z: number; w: number }) {
 interface Props {
  rosMessages: Record<string, RosMessage>;
  socket: Socket | null;
- onSendGoal: (robotId: string, x: number, y: number, yaw: number) => void;
  onSetInitialPose: (robotId: string, x: number, y: number, yaw: number, mapId?: string) => void;
  onSetHome?: (robotId: string, x: number, y: number, yaw: number) => void;
  activePaths?: ActivePath[];
@@ -84,7 +83,7 @@ interface DragState {
 // ── 컴포넌트 ──────────────────────────────────────────────────────────────────
 
 export default function NavMapCanvas({
- rosMessages, socket, onSendGoal, onSetInitialPose, onSetHome,
+ rosMessages, socket, onSetInitialPose, onSetHome,
  activePaths = [], robotPositions = {}, onNodeClick, lockedNodes = new Set(),
 }: Props) {
  const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -610,8 +609,8 @@ export default function NavMapCanvas({
  const { sx, sy, cx, cy, type } = dragRef.current;
  const dx = cx - sx, dy = cy - sy;
  const yaw = (Math.abs(dx) + Math.abs(dy)) > 5 ? Math.atan2(dy, dx) : 0;
- const previewColor = type === "goal" ? "#ef4444" : type === "home" ? "#4ade80" : "#22d3ee";
- drawPreviewMarker(ctx, sx, sy, yaw, previewColor, type === "goal" ? "goal" : "pose");
+ const previewColor = type === "home" ? "#4ade80" : "#22d3ee";
+ drawPreviewMarker(ctx, sx, sy, yaw, previewColor, "pose");
  }
  }, [rosMessages, selectedBots, showTopology, hoveredNodeId]);
 
@@ -649,7 +648,8 @@ export default function NavMapCanvas({
 
  if (!interactive) return;
  e.preventDefault();
- const type = e.button === 2 ? "pose" : homeMode ? "home" : "goal";
+ const type = e.button === 2 ? "pose" : homeMode ? "home" : null;
+ if (!type) return;
  dragRef.current = { sx: x, sy: y, cx: x, cy: y, type };
  };
 
@@ -727,8 +727,7 @@ export default function NavMapCanvas({
  }
 
  for (const id of selectedBots) {
- if (type === "goal") onSendGoal(id, wx, wy, yaw);
- else if (type === "home") onSetHome?.(id, wx, wy, yaw);
+ if (type === "home") onSetHome?.(id, wx, wy, yaw);
  else onSetInitialPose(id, wx, wy, yaw, selectedMap || undefined);
  }
  draw();
@@ -964,7 +963,7 @@ export default function NavMapCanvas({
  yaw={hNode.yaw.toFixed(3)} <span style={{ color: NODE_COLOR[hNode.type] }}>{hNode.type}</span>
  </div>
  {onNodeClick && (
- <div className="text-xs text-white/90/70 mt-0.5">클릭하여 목표 설정</div>
+ <div className="text-xs text-white/90/70 mt-0.5">클릭하여 태스크 목표 선택</div>
  )}
  </div>
  )}

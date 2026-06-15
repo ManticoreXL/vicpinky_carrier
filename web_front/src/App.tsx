@@ -25,7 +25,7 @@ export default function App() {
  const {
  emitCmdVel, emitPublish, emitAction, cancelAction, callService,
  emitFmsDispatch, emitFmsCancel, emitNodeLock,
- emitNavGoal, emitNavInitialPose,
+ emitNavInitialPose,
  nestConnected, rosMessages, socket,
  activeGoals, actionFeedbacks, actionResults,
  mapTimestamps, mapInfos,
@@ -122,7 +122,6 @@ export default function App() {
  socket={socket}
  emitFmsDispatch={emitFmsDispatch}
  emitFmsCancel={emitFmsCancel}
- emitNavGoal={emitNavGoal}
  emitNavInitialPose={emitNavInitialPose}
  tmAlerts={tmAlerts}
  ackTmAlert={ackTmAlert}

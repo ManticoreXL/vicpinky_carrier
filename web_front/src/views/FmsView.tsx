@@ -27,7 +27,6 @@ interface Props {
  socket: Socket | null;
  emitFmsDispatch: (p: FmsDispatchPayload) => void;
  emitFmsCancel: (taskId: string) => void;
- emitNavGoal: (robotId: string, x: number, y: number, yaw: number) => void;
  emitNavInitialPose: (robotId: string, x: number, y: number, yaw: number, mapId?: string) => void;
  ackTmAlert: (alertId: string) => void;
  setRobotHome: (robotId: string, x: number, y: number, yaw: number) => void;
@@ -43,7 +42,7 @@ function isOnline(rosMessages: Record<string, RosMessage>, robotId: string): boo
 export default function FmsView({
  rosMessages, fmsTasks, tmAlerts, socket,
  emitFmsDispatch, emitFmsCancel,
- emitNavGoal, emitNavInitialPose,
+ emitNavInitialPose,
  ackTmAlert, setRobotHome,
  lockedNodes = new Set(),
 }: Props) {
@@ -98,7 +97,7 @@ export default function FmsView({
  <div className="flex-1 flex flex-col overflow-hidden bg-black/10">
  {contentTab === "map" ? (
  <NavMapCanvas
- rosMessages={rosMessages} socket={socket} onSendGoal={emitNavGoal} onSetInitialPose={emitNavInitialPose} onSetHome={setRobotHome}
+ rosMessages={rosMessages} socket={socket} onSetInitialPose={emitNavInitialPose} onSetHome={setRobotHome}
  activePaths={activePaths} robotPositions={robotPositions} lockedNodes={lockedNodes}
  onNodeClick={n => setForm(f => ({ ...f, targetNode: n }))}
  />
