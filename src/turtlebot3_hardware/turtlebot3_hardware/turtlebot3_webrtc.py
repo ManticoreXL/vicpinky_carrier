@@ -230,11 +230,9 @@ class LiveAudioTrack(AudioStreamTrack):
 # ── WebRTC 연결 관리 ──────────────────────────────────────────────────────────
 
 class WebRTCManager:
-    def __init__(self, bot_id: str, camera: CameraReader, audio_reader: AudioReader, audio_writer: AudioWriter):
+    def __init__(self, bot_id: str, camera: CameraReader):
         self.bot_id = bot_id
         self.camera = camera
-        self.audio_reader = audio_reader
-        self.audio_writer = audio_writer
         self.pcs: dict[str, RTCPeerConnection] = {}
         self._lock = asyncio.Lock()
 
@@ -456,14 +454,9 @@ async def async_main(args):
     camera = CameraReader(args.device, args.width, args.height, args.fps)
     camera.start()
 
-    # audio_reader = AudioReader(device_index=1)
-    # audio_writer = AudioWriter(device_index=1)
-
     webrtc = WebRTCManager(
         bot_id=args.bot_id, 
-        camera=camera, 
-        # audio_reader=audio_reader, 
-        # audio_writer=audio_writer
+        camera=camera,
     )
 
     signaling = SignalingClient(
@@ -487,9 +480,6 @@ async def async_main(args):
         signaling.stop()
         await webrtc.close_all()
         camera.stop()
-        # audio_reader.stop()
-        # audio_writer.stop()
-
 
 def main(args=None):
     parser = argparse.ArgumentParser(description="터틀봇 WebRTC 카메라 스트리머")
