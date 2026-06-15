@@ -51,6 +51,18 @@ export class FmsService {
       .exec();
   }
 
+  // ── TaskManager용: 진행 중 태스크 (서버 재시작 복구용) ───────────────────
+  async getInProgressTasks(): Promise<TaskDocument[]> {
+    return this.taskModel
+      .find({ status: { $in: [TaskStatus.ASSIGNED, TaskStatus.RUNNING] } })
+      .exec();
+  }
+
+  // ── TaskManager용: 소켓 없이 상태만 변경 (초기화 단계 복구용) ────────────
+  async setStatusDirect(taskId: string, status: TaskStatus): Promise<void> {
+    await this.taskModel.updateOne({ _id: taskId }, { status });
+  }
+
   // ── TaskManager용: 단건 조회 ──────────────────────────────────────────────
   async getTask(taskId: string): Promise<TaskDocument | null> {
     return this.taskModel.findById(taskId).exec();

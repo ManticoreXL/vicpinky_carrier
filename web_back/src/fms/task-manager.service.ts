@@ -74,7 +74,31 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     this.rosService.onMessage((msg) => this.handleRosMessage(msg));
     this.running = true;
     void this.tick();
+    // 서버 재시작 시 기존 진행 중인 태스크 복구 (activeTasks 메모리는 초기화됨)
+    void this.recoverActiveTasks();
     this.logger.log('TaskManager 시작');
+  }
+
+  private async recoverActiveTasks() {
+    try {
+      const inProgress = await this.fmsService.getInProgressTasks();
+      for (const task of inProgress) {
+        const robotId = task.assignedRobot?.robot_id;
+        const taskId  = (task._id as { toString(): string }).toString();
+        if (robotId && !this.activeTasks.has(robotId)) {
+          // 태스크는 있는데 서버가 재시작되어 activeTasks 잃음 → FAILED 처리
+          this.logger.warn(`[복구] 서버 재시작으로 인한 태스크 중단: ${taskId} (${robotId}) → FAILED`);
+          await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
+          if (this.server) {
+            await this.fmsService.setStatus(taskId, TaskStatus.FAILED, this.server, { completedAt: new Date() });
+          } else {
+            await this.fmsService.setStatusDirect(taskId, TaskStatus.FAILED);
+          }
+        }
+      }
+    } catch (e) {
+      this.logger.warn(`[복구] 태스크 복구 중 오류: ${String(e)}`);
+    }
   }
 
   onModuleDestroy() {
@@ -393,6 +417,18 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED) {
         this.activeTasks.delete(robotId);
         await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
+      }
+    }
+
+    // 1b. MOVING 상태이지만 activeTasks에 없는 로봇 → 자동 IDLE 복구
+    for (const [robotId, cache] of this.robotCache.entries()) {
+      if (this.activeTasks.has(robotId)) continue;
+      if ((Date.now() - cache.lastSeen) >= ONLINE_MS) continue;
+      const robot = await this.robotService.findById(robotId);
+      if (robot?.status === RobotStatus.MOVING) {
+        this.logger.warn(`[복구] ${robotId} — MOVING이지만 활성 태스크 없음 → IDLE 강제 복귀`);
+        await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
+        this.server?.emit('robot_status_changed', { robot_id: robotId, status: 'IDLE' });
       }
     }
 
