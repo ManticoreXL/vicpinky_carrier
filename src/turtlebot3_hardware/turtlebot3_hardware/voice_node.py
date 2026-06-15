@@ -48,12 +48,14 @@ class VoiceNode(Node):
         self.tts_cb_group = MutuallyExclusiveCallbackGroup()
         self.timer_cb_group = MutuallyExclusiveCallbackGroup()
 
+        # STT 퍼블리셔
         self.stt_pub = self.create_publisher(
             String,
             'recognized_text',
             10
         )
 
+        # TTS 서브스크라이버
         self.tts_sub = self.create_subscription(
             String,
             'speak_cmd',
@@ -65,6 +67,18 @@ class VoiceNode(Node):
         self.is_speaking = False
         self.stt_queue = queue.Queue()
 
+        # 모드 변경 서브스크라이버
+        self.mode_sub = self.create_subscription(
+            String,
+            'voice_mode',
+            self.mode_callback,
+            10
+        )
+
+        self.current_mode = 'STT'
+        self.stop_listening_fn = None
+
+        # 하울링 방지용 타이머
         self.stt_timer = self.create_timer(
             stt_timer_period,
             self.process_stt_queue,
@@ -131,6 +145,23 @@ class VoiceNode(Node):
                 break
 
         return SetParametersResult(successful=successful, reason=reason)
+    
+    def mode_callback(self, msg):
+        new_mode = msg.data.upper()
+
+        if new_mode == 'CALL' and self.current_mode == 'STT':
+            self.get_logger().info("[Mode]: Switching to Calling mode...")
+            
+            if self.stop_listening_fn is not None:
+                self.stop_listening_fn(wait_for_node=False)
+                self.stop_listening_fn = None
+            self.current_mode = 'CALL'
+
+        elif new_mode == 'STT' and self.current_mode == 'CALL':
+            self.get_logger().info("[Mode]: Switching to STT mode...")
+            self.stop_listening_fn = self.recognizer.listen_in_background(self.mic, self.stt_callback)
+            self.current_mode = 'STT'
+
 
     def find_i2s_microphone(self):
         mic_names = sr.Microphone.list_microphone_names()
