@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { RosService } from '../ros/ros.service';
+import { TaskManagerService } from '../fms/task-manager.service';
 import * as zlib from 'zlib';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -48,7 +49,10 @@ export class MapService implements OnModuleInit {
   // robotId → mapName
   private readonly robotAssignments = new Map<string, string>();
 
-  constructor(private readonly rosService: RosService) {}
+  constructor(
+    private readonly rosService: RosService,
+    private readonly taskManager: TaskManagerService,
+  ) {}
 
   onModuleInit() {
     this.loadAssignments();
@@ -272,7 +276,10 @@ export class MapService implements OnModuleInit {
   async assignMap(robotId: string, mapName: string): Promise<{ ok: boolean; message: string }> {
     this.robotAssignments.set(robotId, mapName);
     this.saveAssignments();
-    this.staticCache.delete(mapName); // 캐시 무효화
+    this.staticCache.delete(mapName);
+
+    // 맵 전환: 기존 태스크 취소 + 위치·캐시 초기화
+    await this.taskManager.handleMapChange(robotId);
 
     const mapUrl = path.join(MAPS_DIR, `${mapName}.yaml`);
     return new Promise((resolve) => {

@@ -107,97 +107,96 @@ export class TopologyService {
     map_id: string,
     occupiedEdges: Set<string> = new Set(),
   ): Promise<string[]> {
-    this.logger.log(`[findPath] ${startNodeId} → ${endNodeId} (map: ${map_id}, 점유엣지: ${occupiedEdges.size}개)`);
+    if (startNodeId === endNodeId) return [startNodeId];
 
-    if (startNodeId === endNodeId) {
-      this.logger.log(`[findPath] 출발=목적지 → 즉시 반환`);
-      return [startNodeId];
-    }
-
-    // 잠긴 노드 목록 조회
-    const lockedNodes = await this.findLockedNodeIds(map_id);
-    this.logger.log(`[findPath] 잠긴 노드: [${[...lockedNodes].join(', ')}]`);
-
-    // 전체 엣지 수 확인
-    const allEdgeCount = await this.edgeModel.countDocuments({ map_id }).exec();
-    this.logger.log(`[findPath] map_id="${map_id}" 전체 엣지 수: ${allEdgeCount}`);
-
-    // weight 필터 제거 — 미설정(null/0) 엣지도 모두 포함
-    const edges = await this.edgeModel
-      .find({ map_id, isLocked: { $ne: true } })
-      .lean()
-      .exec();
-    this.logger.log(`[findPath] 사용 가능 엣지: ${edges.length}개 (잠금해제, weight 무관)`);
+    const [lockedNodes, edges, allNodes] = await Promise.all([
+      this.findLockedNodeIds(map_id),
+      this.edgeModel.find({ map_id, isLocked: { $ne: true } }).lean().exec(),
+      this.nodeModel.find({ map_id }).lean().exec(),
+    ]);
 
     if (edges.length === 0) {
-      this.logger.warn(`[findPath] 엣지 없음 — map_id 불일치 가능성. DB 엣지 샘플:`);
-      const sample = await this.edgeModel.find().limit(3).lean().exec();
-      sample.forEach(e => this.logger.warn(`  edge: ${e.startNode}→${e.endNode} map_id="${e.map_id}" weight=${e.weight} isLocked=${e.isLocked}`));
+      this.logger.warn(`[A*] map_id="${map_id}" 사용 가능한 엣지 없음`);
+      return [];
     }
 
+    // 노드 위치·타입 맵 (휴리스틱 + CHARGER 경유 제외용)
+    const nodePos  = new Map<string, { x: number; y: number }>();
+    const nodeType = new Map<string, string>();
+    for (const n of allNodes) {
+      nodePos.set(n.node_id, { x: n.x, y: n.y });
+      nodeType.set(n.node_id, n.type);
+    }
+
+    const goalPos = nodePos.get(endNodeId);
+    const h = (nodeId: string): number => {
+      if (!goalPos) return 0;
+      const pos = nodePos.get(nodeId);
+      if (!pos) return 0;
+      return Math.hypot(pos.x - goalPos.x, pos.y - goalPos.y);
+    };
+
+    // 인접 리스트 구성
     const adj = new Map<string, { to: string; cost: number }[]>();
-    let skippedLock = 0, skippedOccupied = 0;
 
     for (const edge of edges) {
       const startLocked = lockedNodes.has(edge.startNode) && edge.startNode !== startNodeId;
       const endLocked   = lockedNodes.has(edge.endNode)   && edge.endNode   !== endNodeId;
-      if (startLocked || endLocked) { skippedLock++; continue; }
+      if (startLocked || endLocked) continue;
 
-      const w    = Math.max(edge.weight ?? 1, 0.01); // weight 미설정 엣지는 기본 비용 1로 처리
+      // CHARGER 노드는 출발·목적지가 아닌 이상 경유 불가 (충전 전용 노드)
+      if (nodeType.get(edge.startNode) === NodeType.CHARGER && edge.startNode !== startNodeId && edge.startNode !== endNodeId) continue;
+      if (nodeType.get(edge.endNode)   === NodeType.CHARGER && edge.endNode   !== startNodeId && edge.endNode   !== endNodeId) continue;
+
+      const w    = Math.max(edge.weight ?? 1, 0.01);
       const cost = 1 / w;
 
       const fwdKey = `${edge.startNode}→${edge.endNode}`;
       if (!occupiedEdges.has(fwdKey)) {
         if (!adj.has(edge.startNode)) adj.set(edge.startNode, []);
         adj.get(edge.startNode)!.push({ to: edge.endNode, cost });
-      } else { skippedOccupied++; }
+      }
 
       if (edge.direction === EdgeDirection.BOTH_WAY) {
         const bwdKey = `${edge.endNode}→${edge.startNode}`;
         if (!occupiedEdges.has(bwdKey)) {
           if (!adj.has(edge.endNode)) adj.set(edge.endNode, []);
           adj.get(edge.endNode)!.push({ to: edge.startNode, cost });
-        } else { skippedOccupied++; }
-      }
-    }
-
-    this.logger.log(`[findPath] 그래프 노드: ${adj.size}개, 잠금제외: ${skippedLock}, 점유제외: ${skippedOccupied}`);
-    this.logger.log(`[findPath] 출발노드 인접: ${JSON.stringify(adj.get(startNodeId) ?? [])}`);
-
-    if (!adj.has(startNodeId)) {
-      this.logger.warn(`[findPath] 출발노드 "${startNodeId}"가 그래프에 없음 — 해당 노드의 엣지가 DB에 있는지 확인 필요`);
-    }
-    if (![...adj.values()].some(vs => vs.some(v => v.to === endNodeId))) {
-      this.logger.warn(`[findPath] 목적노드 "${endNodeId}"로 향하는 엣지가 그래프에 없음`);
-    }
-
-    // 다익스트라
-    const dist   = new Map<string, number>();
-    const parent = new Map<string, string>();
-    const pq: { id: string; d: number }[] = [{ id: startNodeId, d: 0 }];
-    dist.set(startNodeId, 0);
-
-    while (pq.length > 0) {
-      pq.sort((a, b) => a.d - b.d);
-      const { id: u, d: distU } = pq.shift()!;
-      if (u === endNodeId) {
-        const path = this.reconstructPath(parent, startNodeId, endNodeId);
-        this.logger.log(`[findPath] 경로 발견: [${path.join(' → ')}]`);
-        return path;
-      }
-      if (distU > (dist.get(u) ?? Infinity)) continue;
-
-      for (const { to: v, cost } of adj.get(u) ?? []) {
-        const alt = distU + cost;
-        if (alt < (dist.get(v) ?? Infinity)) {
-          dist.set(v, alt);
-          parent.set(v, u);
-          pq.push({ id: v, d: alt });
         }
       }
     }
 
-    this.logger.warn(`[findPath] 경로 없음: ${startNodeId} → ${endNodeId}`);
+    if (!adj.has(startNodeId)) {
+      this.logger.warn(`[A*] 출발노드 "${startNodeId}" 엣지 없음`);
+    }
+
+    // A* 탐색
+    const gCost  = new Map<string, number>();
+    const parent = new Map<string, string>();
+    const pq: { id: string; f: number }[] = [];
+    gCost.set(startNodeId, 0);
+    pq.push({ id: startNodeId, f: h(startNodeId) });
+
+    while (pq.length > 0) {
+      pq.sort((a, b) => a.f - b.f);
+      const { id: u } = pq.shift()!;
+
+      if (u === endNodeId) {
+        return this.reconstructPath(parent, startNodeId, endNodeId);
+      }
+
+      const gU = gCost.get(u) ?? Infinity;
+      for (const { to: v, cost } of adj.get(u) ?? []) {
+        const tentativeG = gU + cost;
+        if (tentativeG < (gCost.get(v) ?? Infinity)) {
+          gCost.set(v, tentativeG);
+          parent.set(v, u);
+          pq.push({ id: v, f: tentativeG + h(v) });
+        }
+      }
+    }
+
+    this.logger.warn(`[A*] 경로 없음: ${startNodeId} → ${endNodeId}`);
     return [];
   }
 

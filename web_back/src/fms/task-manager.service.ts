@@ -160,6 +160,34 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     });
   }
 
+  // ── 맵 전환 시 태스크·위치·캐시 초기화 ──────────────────────────────────
+  //
+  // 맵이 바뀌면 기존 pathQueue는 구 맵 노드 ID이므로 무효.
+  // 활성 태스크 취소 + robot.location 초기화 + AMCL 위치 캐시 클리어.
+
+  async handleMapChange(robotId: string): Promise<void> {
+    const taskId = this.activeTasks.get(robotId);
+    if (taskId) {
+      this.activeTasks.delete(robotId);
+      if (this.server) {
+        await this.fmsService.setStatus(taskId, TaskStatus.FAILED, this.server, { completedAt: new Date() });
+      } else {
+        await this.fmsService.setStatusDirect(taskId, TaskStatus.FAILED);
+      }
+      this.logger.log(`[맵변경] ${robotId} → 진행 태스크 취소 (${taskId})`);
+    }
+
+    await this.robotService.updateLocation(robotId, null);
+    await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
+
+    const cache = this.robotCache.get(robotId);
+    if (cache) {
+      this.robotCache.set(robotId, { ...cache, posX: null, posY: null, yaw: null });
+    }
+
+    this.server?.emit('robot_status_changed', { robot_id: robotId, status: 'IDLE' });
+  }
+
   // ── 초기위치 설정 + robot.location 즉시 갱신 ─────────────────────────────
   //
   // 프론트에서 우클릭 드래그로 초기위치를 잡으면 호출.
@@ -237,7 +265,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       await this.fmsService.updatePathQueue(taskId, newQueue, this.server);
 
       // 새 첫 노드로 goal_pose 재전송 (이전 goal은 새 goal이 덮어씀)
-      await this.sendNodeActionGoal(robotId, newQueue[0], taskId);
+      await this.sendNodeActionGoal(robotId, newQueue[0], newQueue[1]);
       this.logger.log(`[재경로] ${robotId}: ${newQueue.join(',')} (우회)`);
       this.emit({ type: 'info', taskId, robotId, message: `${robotId} 노드 ${nodeId} 우회 재경로`, requiresAction: false });
     }
@@ -328,6 +356,11 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
     remaining.shift();
     await this.fmsService.updatePathQueue(taskId, remaining, this.server);
+
+    // 다음 노드로 goal_pose 전송 (멀티노드 연속 주행)
+    if (remaining.length > 0) {
+      await this.sendNodeActionGoal(robotId, remaining[0], remaining[1]);
+    }
   }
 
   // ── 메인 처리 루프 ───────────────────────────────────────────────────────
@@ -524,7 +557,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       await this.robotService.updateStatus(robotId, RobotStatus.MOVING);
 
       const firstGoalId = pathQueue[0] ?? task.targetNode;
-      await this.sendNodeActionGoal(robotId, firstGoalId, taskId);
+      await this.sendNodeActionGoal(robotId, firstGoalId, pathQueue[1]);
 
       this.emit({
         type: 'assigned', taskId, robotId,
@@ -537,15 +570,38 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   // ── 노드 단위 goal_pose 토픽 전송 ──────────────────────────────────────
   // domain_bridge: /{robotId}/goal_pose (domain40) → /goal_pose (robot domain)
   // 도착 감지: checkWaypointArrival (amcl_pose 위치 기반)
+  //
+  // nextNodeId 가 있으면 yaw = nodeId → nextNodeId 방향을 90° 단위로 스냅.
+  // 없으면(최종 목적지) node.yaw 사용.
 
-  private async sendNodeActionGoal(robotId: string, nodeId: string, taskId: string): Promise<void> {
+  private async sendNodeActionGoal(
+    robotId: string,
+    nodeId: string,
+    nextNodeId?: string,
+  ): Promise<void> {
     const node = await this.topologyService.findNodeById(nodeId);
     if (!node) {
       this.logger.warn(`[sendNodeGoal] 노드 "${nodeId}" DB에 없음`);
       return;
     }
-    this.fmsService.publishGoal(robotId, node.x, node.y, node.yaw);
-    this.logger.log(`[goal_pose] ${robotId} → ${nodeId} (${node.x.toFixed(2)}, ${node.y.toFixed(2)})`);
+
+    let yaw = node.yaw ?? 0;
+    if (nextNodeId) {
+      const nextNode = await this.topologyService.findNodeById(nextNodeId);
+      if (nextNode) {
+        const rawYaw = Math.atan2(nextNode.y - node.y, nextNode.x - node.x);
+        yaw = this.snapYaw(rawYaw);
+      }
+    }
+
+    this.fmsService.publishGoal(robotId, node.x, node.y, yaw);
+    this.logger.log(`[goal_pose] ${robotId} → ${nodeId} (${node.x.toFixed(2)}, ${node.y.toFixed(2)}) yaw=${(yaw * 180 / Math.PI).toFixed(0)}°`);
+  }
+
+  // yaw를 90° 단위로 스냅 (코너에서 정확한 방향 전환)
+  private snapYaw(yaw: number): number {
+    const q = Math.PI / 2;
+    return Math.round(yaw / q) * q;
   }
 
   // ── 헬퍼 ─────────────────────────────────────────────────────────────────
