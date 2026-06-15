@@ -139,14 +139,20 @@ export class TopologyService {
     // 인접 리스트 구성
     const adj = new Map<string, { to: string; cost: number }[]>();
 
+    // 출발이 CHARGER이면 (충전소에서 출발) 주변 CHARGER 경유 허용
+    const startIsCharger = nodeType.get(startNodeId) === NodeType.CHARGER;
+
     for (const edge of edges) {
       const startLocked = lockedNodes.has(edge.startNode) && edge.startNode !== startNodeId;
       const endLocked   = lockedNodes.has(edge.endNode)   && edge.endNode   !== endNodeId;
       if (startLocked || endLocked) continue;
 
       // CHARGER 노드는 출발·목적지가 아닌 이상 경유 불가 (충전 전용 노드)
-      if (nodeType.get(edge.startNode) === NodeType.CHARGER && edge.startNode !== startNodeId && edge.startNode !== endNodeId) continue;
-      if (nodeType.get(edge.endNode)   === NodeType.CHARGER && edge.endNode   !== startNodeId && edge.endNode   !== endNodeId) continue;
+      // 단, 출발 자체가 CHARGER인 경우엔 탈출 경로 확보를 위해 CHARGER 경유 허용
+      if (!startIsCharger) {
+        if (nodeType.get(edge.startNode) === NodeType.CHARGER && edge.startNode !== startNodeId && edge.startNode !== endNodeId) continue;
+        if (nodeType.get(edge.endNode)   === NodeType.CHARGER && edge.endNode   !== startNodeId && edge.endNode   !== endNodeId) continue;
+      }
 
       const w    = Math.max(edge.weight ?? 1, 0.01);
       const cost = 1 / w;

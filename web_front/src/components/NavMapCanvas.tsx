@@ -277,24 +277,94 @@ export default function NavMapCanvas({
  }
  }
 
+ // ── 활성 경로 맵 (맵 배정 로봇 필터링) ──────────────────────────────
+ const robotColorMap: Record<string, string> = {};
+ const filteredApaths = activePathsRef.current.filter(({ robotId }) => {
+ const assigned = assignmentsRef.current[robotId];
+ return !assigned || assigned === selectedMapRef.current;
+ });
+ filteredApaths.forEach(({ robotId }, i) => {
+ robotColorMap[robotId] = ROBOT_COLORS[i % ROBOT_COLORS.length];
+ });
+
+ // ── 예상 주행 경로 오버레이 (RUNNING 태스크의 pathQueue 연결선) ────────
+ for (const { robotId, pathQueue } of filteredApaths) {
+ const color = robotColorMap[robotId];
+ if (!color || pathQueue.length === 0) continue;
+
+ const amclPos = (rosMessages[`/${robotId}/amcl_pose`]?.data as {
+  pose?: { pose?: { position?: { x?: number; y?: number } } };
+ } | undefined)?.pose?.pose?.position;
+
+ const pts: { cx: number; cy: number }[] = [];
+ if (amclPos?.x != null) pts.push(worldToCanvas(amclPos.x, amclPos.y ?? 0, info, scale));
+ for (const nodeId of pathQueue) {
+  const node = topoNodesRef.current.find(n => n.node_id === nodeId);
+  if (node) pts.push(worldToCanvas(node.x, node.y, info, scale));
+ }
+ if (pts.length < 2) continue;
+
+ ctx.save();
+
+ // 경로 점선 (현재위치 → 남은 웨이포인트 순서대로)
+ ctx.beginPath();
+ ctx.moveTo(pts[0].cx, pts[0].cy);
+ for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].cx, pts[i].cy);
+ ctx.strokeStyle = color;
+ ctx.lineWidth = 3;
+ ctx.setLineDash([10, 5]);
+ ctx.globalAlpha = 0.85;
+ ctx.shadowColor = "rgba(0,0,0,0.6)";
+ ctx.shadowBlur = 4;
+ ctx.stroke();
+ ctx.setLineDash([]);
+ ctx.shadowBlur = 0;
+
+ // 웨이포인트 마커 (첫번째 pts[0]은 로봇 위치라 스킵)
+ for (let i = 1; i < pts.length; i++) {
+  const isFinal = i === pts.length - 1;
+  const pt = pts[i];
+  ctx.beginPath();
+  ctx.arc(pt.cx, pt.cy, isFinal ? 10 : 5, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(0,0,0,0.5)";
+  ctx.globalAlpha = 0.85;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(pt.cx, pt.cy, isFinal ? 8 : 4, 0, Math.PI * 2);
+  ctx.fillStyle = color;
+  ctx.globalAlpha = isFinal ? 1 : 0.65;
+  ctx.fill();
+  if (isFinal) {
+   ctx.strokeStyle = "#fff";
+   ctx.lineWidth = 2;
+   ctx.globalAlpha = 1;
+   ctx.stroke();
+   ctx.font = "bold 10px monospace";
+   ctx.textAlign = "center";
+   ctx.textBaseline = "bottom";
+   ctx.strokeStyle = "rgba(0,0,0,0.85)";
+   ctx.lineWidth = 3;
+   ctx.strokeText(pathQueue[pathQueue.length - 1], pt.cx, pt.cy - 12);
+   ctx.fillStyle = "#fff";
+   ctx.fillText(pathQueue[pathQueue.length - 1], pt.cx, pt.cy - 12);
+  }
+ }
+
+ ctx.globalAlpha = 1;
+ ctx.restore();
+ }
+
  // ── 토폴로지 오버레이 ─────────────────────────────────────────────────
 
  if (showTopology) {
  const topoNodes = topoNodesRef.current;
  const topoEdges = topoEdgesRef.current;
- const apaths = activePathsRef.current;
  const robPos = robotPosRef.current;
 
- // active 경로 맵 구성 (현재 맵 배정 로봇만)
- const robotColorMap: Record<string, string> = {};
+ // active 경로 맵 구성
  const activeNodeMap: Record<string, string> = {};
  const activeEdgeMap: Record<string, string> = {};
- const filteredApaths = apaths.filter(({ robotId }) => {
- const assigned = assignmentsRef.current[robotId];
- return !assigned || assigned === selectedMapRef.current;
- });
- filteredApaths.forEach(({ robotId, pathQueue, fromNodeId }, i) => {
- robotColorMap[robotId] = ROBOT_COLORS[i % ROBOT_COLORS.length];
+ filteredApaths.forEach(({ robotId, pathQueue, fromNodeId }) => {
  if (fromNodeId) activeNodeMap[fromNodeId] = robotId;
  pathQueue.forEach(id => { activeNodeMap[id] = robotId; });
  const full = fromNodeId ? [fromNodeId, ...pathQueue] : pathQueue;

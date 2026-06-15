@@ -265,7 +265,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       await this.fmsService.updatePathQueue(taskId, newQueue, this.server);
 
       // 새 첫 노드로 goal_pose 재전송 (이전 goal은 새 goal이 덮어씀)
-      await this.sendNodeActionGoal(robotId, newQueue[0], newQueue[1]);
+      await this.sendNodeActionGoal(robotId, newQueue[0]);
       this.logger.log(`[재경로] ${robotId}: ${newQueue.join(',')} (우회)`);
       this.emit({ type: 'info', taskId, robotId, message: `${robotId} 노드 ${nodeId} 우회 재경로`, requiresAction: false });
     }
@@ -359,7 +359,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
     // 다음 노드로 goal_pose 전송 (멀티노드 연속 주행)
     if (remaining.length > 0) {
-      await this.sendNodeActionGoal(robotId, remaining[0], remaining[1]);
+      await this.sendNodeActionGoal(robotId, remaining[0]);
     }
   }
 
@@ -543,6 +543,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       } else {
         const rawPath = await this.topologyService.findPath(startNodeId, task.targetNode, myMapId);
         if (rawPath.length === 0) {
+          this.logger.warn(`[dispatch] 경로 없음: ${startNodeId} → ${task.targetNode} (${robotId})`);
           await this.fmsService.setWaitReason(taskId, `경로 없음: ${startNodeId} → ${task.targetNode}`);
           this.emit({ type: 'task_failed', taskId, robotId, message: `경로를 찾을 수 없음: ${startNodeId} → ${task.targetNode}`, requiresAction: false });
           await this.fmsService.setStatus(taskId, TaskStatus.FAILED, this.server!);
@@ -557,7 +558,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       await this.robotService.updateStatus(robotId, RobotStatus.MOVING);
 
       const firstGoalId = pathQueue[0] ?? task.targetNode;
-      await this.sendNodeActionGoal(robotId, firstGoalId, pathQueue[1]);
+      await this.sendNodeActionGoal(robotId, firstGoalId);
 
       this.emit({
         type: 'assigned', taskId, robotId,
@@ -571,13 +572,9 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   // domain_bridge: /{robotId}/goal_pose (domain40) → /goal_pose (robot domain)
   // 도착 감지: checkWaypointArrival (amcl_pose 위치 기반)
   //
-  // nextNodeId 가 있으면 yaw = nodeId → nextNodeId 방향을 90° 단위로 스냅.
-  // 없으면(최종 목적지) node.yaw 사용.
-
   private async sendNodeActionGoal(
     robotId: string,
     nodeId: string,
-    nextNodeId?: string,
   ): Promise<void> {
     const node = await this.topologyService.findNodeById(nodeId);
     if (!node) {
@@ -585,23 +582,9 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    let yaw = node.yaw ?? 0;
-    if (nextNodeId) {
-      const nextNode = await this.topologyService.findNodeById(nextNodeId);
-      if (nextNode) {
-        const rawYaw = Math.atan2(nextNode.y - node.y, nextNode.x - node.x);
-        yaw = this.snapYaw(rawYaw);
-      }
-    }
-
+    const yaw = node.yaw ?? 0;
     this.fmsService.publishGoal(robotId, node.x, node.y, yaw);
     this.logger.log(`[goal_pose] ${robotId} → ${nodeId} (${node.x.toFixed(2)}, ${node.y.toFixed(2)}) yaw=${(yaw * 180 / Math.PI).toFixed(0)}°`);
-  }
-
-  // yaw를 90° 단위로 스냅 (코너에서 정확한 방향 전환)
-  private snapYaw(yaw: number): number {
-    const q = Math.PI / 2;
-    return Math.round(yaw / q) * q;
   }
 
   // ── 헬퍼 ─────────────────────────────────────────────────────────────────
