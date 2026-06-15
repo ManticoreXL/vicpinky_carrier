@@ -562,6 +562,9 @@ export default function NavMapCanvas({
  if (pos?.x == null) continue;
 
  const { cx, cy } = worldToCanvas(pos.x, pos.y ?? 0, info, scale);
+ // 현재 맵 범위 밖 좌표는 다른 맵의 AMCL이므로 렌더 스킵
+ const pad = 30;
+ if (cx < -pad || cy < -pad || cx > canvas.width + pad || cy > canvas.height + pad) continue;
  const yaw = ori ? quatToYaw({ x: ori.x ?? 0, y: ori.y ?? 0, z: ori.z ?? 0, w: ori.w ?? 1 }) : 0;
  drawRobotMarker(ctx, cx, cy, yaw, robot.color, robot.label, selectedBots.has(robot.id));
  }
