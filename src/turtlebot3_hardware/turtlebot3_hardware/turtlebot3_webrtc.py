@@ -91,7 +91,7 @@ class CameraReader:
 # ── 오디오 입출력 스레드 ─────────────────────────────────────────────────────
 
 class AudioReader:
-    def __init__(self, device_index=1, rate=48000, channels=1):
+    def __init__(self, device_index=1, rate=48000, channels=2):
         self.p = pyaudio.PyAudio()
         self.rate = rate
         self.channels = channels
@@ -204,11 +204,21 @@ class LiveAudioTrack(AudioStreamTrack):
         self.time_base = Fraction(1, self.reader.rate)
 
     async def recv(self):
-        # 큐에서 오디오 청크를 비동기적으로 획득
+        # 큐에서 오디오 청크 획득 (스테레오, 16bit 데이터)
         data = await asyncio.get_event_loop().run_in_executor(None, self.reader.q.get)
         
-        frame = AudioFrame(format='s16', layout='mono', samples=len(data)//2)
-        frame.planes[0].update(data)
+        # 바이너리 데이터를 16bit 정수형 NumPy 배열로 변환
+        audio_array = np.frombuffer(data, dtype=np.int16)
+        
+        # 2채널(Stereo) 데이터를 1채널(Mono)로 변환 (왼쪽 채널만 사용)
+        mono_array = audio_array[0::2]
+        
+        # 모노 데이터를 다시 바이너리로 변환
+        mono_data = mono_array.tobytes()
+
+        # AudioFrame을 생성하여 전송 (samples 수는 절반으로 줄어듦)
+        frame = AudioFrame(format='s16', layout='mono', samples=len(mono_data)//2)
+        frame.planes[0].update(mono_data)
         frame.pts = self.pts
         frame.sample_rate = self.reader.rate
         frame.time_base = self.time_base
