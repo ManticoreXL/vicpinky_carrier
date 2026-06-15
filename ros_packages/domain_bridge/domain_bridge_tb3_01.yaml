@@ -1,147 +1,147 @@
 name: domain_bridge_tb3_01
 topics:
 
-  # ── UPLINK: 로봇(41)의 순정 데이터를 가져와서 관제탑(40)에 꼬리표 달아주기 ──
+  # ── UPLINK: 로봇(41)의 순정 데이터를 가져와서 관제탑(49)에 꼬리표 달아주기 ──
   /scan:
     type: sensor_msgs/msg/LaserScan
     from_domain: 41
-    to_domain: 40
+    to_domain: 49
     remap: /tb3_01/scan
 
   /odom:
     type: nav_msgs/msg/Odometry
     from_domain: 41
-    to_domain: 40
+    to_domain: 49
     remap: /tb3_01/odom
 
   /battery_state:
     type: sensor_msgs/msg/BatteryState
     from_domain: 41
-    to_domain: 40
+    to_domain: 49
     remap: /tb3_01/battery_state
 
   /imu:
     type: sensor_msgs/msg/Imu
     from_domain: 41
-    to_domain: 40
+    to_domain: 49
     remap: /tb3_01/imu
 
   /joint_states:
     type: sensor_msgs/msg/JointState
     from_domain: 41
-    to_domain: 40
+    to_domain: 49
     remap: /tb3_01/joint_states
 
   /magnetic_field:
     type: sensor_msgs/msg/MagneticField
     from_domain: 41
-    to_domain: 40
+    to_domain: 49
     remap: /tb3_01/magnetic_field
 
   /sensor_state:
     type: turtlebot3_msgs/msg/SensorState
     from_domain: 41
-    to_domain: 40
+    to_domain: 49
     remap: /tb3_01/sensor_state
 
   /robot_description:
     type: std_msgs/msg/String
     from_domain: 41
-    to_domain: 40
+    to_domain: 49
     remap: /tb3_01/robot_description
 
   /mode:
     type: std_msgs/msg/String
     from_domain: 41
-    to_domain: 40
+    to_domain: 49
     remap: /tb3_01/mode
 
   /yolo/person_detected:
     type: std_msgs/msg/Bool
     from_domain: 41
-    to_domain: 40
+    to_domain: 49
     remap: /tb3_01/yolo/person_detected
 
   /tf:
     type: tf2_msgs/msg/TFMessage
     from_domain: 41
-    to_domain: 40
+    to_domain: 49
     remap: /tb3_01/tf
 
   /tf_static:
     type: tf2_msgs/msg/TFMessage
     from_domain: 41
-    to_domain: 40
+    to_domain: 49
     remap: /tb3_01/tf_static
 
-  # ── DOWNLINK: 관제탑(40)의 꼬리표 달린 명령을 로봇(41)에게 순정으로 떼서 주기 ──
+  # ── DOWNLINK: 관제탑(49)의 꼬리표 달린 명령을 로봇(41)에게 순정으로 떼서 주기 ──
   /amcl_pose:
     type: geometry_msgs/msg/PoseWithCovarianceStamped
     from_domain: 41
-    to_domain: 40
+    to_domain: 49
     remap: /tb3_01/amcl_pose
 
   /plan:
     type: nav_msgs/msg/Path
     from_domain: 41
-    to_domain: 40
+    to_domain: 49
     remap: /tb3_01/plan
 
-  # ── DOWNLINK: 관제탑(40)의 꼬리표 달린 명령을 로봇(41)에게 순정으로 떼서 주기 ──
+  # ── DOWNLINK: 관제탑(49)의 꼬리표 달린 명령을 로봇(41)에게 순정으로 떼서 주기 ──
   /tb3_01/cmd_vel:
     type: geometry_msgs/msg/TwistStamped
-    from_domain: 40
+    from_domain: 49
     to_domain: 41
     remap: /cmd_vel
 
   /tb3_01/cmd:
     type: std_msgs/msg/String
-    from_domain: 40
+    from_domain: 49
     to_domain: 41
     remap: /cmd
 
   /tb3_01/goal_pose:
     type: geometry_msgs/msg/PoseStamped
-    from_domain: 40
+    from_domain: 49
     to_domain: 41
     remap: /goal_pose
 
   /tb3_01/initialpose:
     type: geometry_msgs/msg/PoseWithCovarianceStamped
-    from_domain: 40
+    from_domain: 49
     to_domain: 41
     remap: /initialpose
 
 services:
 
-  # ── DOWNLINK SERVICES: 관제탑(40)에서 로봇(41)의 서비스 호출하기 ──
+  # ── DOWNLINK SERVICES: 관제탑(49)에서 로봇(41)의 서비스 호출하기 ──
   /tb3_01/reset:
     type: std_srvs/srv/Trigger
-    from_domain: 40
+    from_domain: 49
     to_domain: 41
     remap: /reset
 
   /tb3_01/reset_odometry:
     type: std_srvs/srv/Trigger
-    from_domain: 40
+    from_domain: 49
     to_domain: 41
     remap: /reset_odometry
 
   /tb3_01/motor_power:
     type: std_srvs/srv/SetBool
-    from_domain: 40
+    from_domain: 49
     to_domain: 41
     remap: /motor_power
 
   /tb3_01/sound:
     type: turtlebot3_msgs/srv/Sound
-    from_domain: 40
+    from_domain: 49
     to_domain: 41
     remap: /sound
 
   /tb3_01/run_diagnosis:
     type: turtlebot3_custom_msgs/srv/SelfDiagnosis
-    from_domain: 40
+    from_domain: 49
     to_domain: 41
     remap: /run_diagnosis
 
