@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+import type { Server } from 'socket.io';
 import { Node, NodeDocument, NodeType } from './node.schema';
 import { Edge, EdgeDocument, EdgeDirection } from './edge.schema';
 
@@ -9,10 +10,14 @@ const MIN_WEIGHT = 0.1;
 
 @Injectable()
 export class TopologyService {
+  private server: Server | null = null;
+
   constructor(
     @InjectModel(Node.name) private readonly nodeModel: Model<NodeDocument>,
     @InjectModel(Edge.name) private readonly edgeModel: Model<EdgeDocument>,
   ) {}
+
+  setServer(server: Server) { this.server = server; }
 
   // ── Node CRUD ─────────────────────────────────────────────────────────────
 
@@ -82,6 +87,7 @@ export class TopologyService {
 
   async setNodeLocked(node_id: string, isLocked: boolean): Promise<void> {
     await this.nodeModel.updateOne({ node_id }, { isLocked });
+    this.server?.emit('node_lock_changed', { node_id, isLocked });
   }
 
   async findLockedNodeIds(map_id: string): Promise<Set<string>> {

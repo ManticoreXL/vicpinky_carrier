@@ -524,7 +524,7 @@ function NodeSection() {
  <div className="flex-1 min-w-0">
  <div className="flex items-center gap-3 mb-2">
  <SectionHeader title="노드" count={displayed.length} onAdd={() => { setAdding(true); setErr(""); }} onRefresh={load} loading={loading} noMargin />
- <select className={`${SEL} w-40`} value={mapFilter} onChange={e => setMapFilter(e.target.value)}>
+ <select className={`${SEL} w-40`} value={mapFilter} onChange={e => setMapFilter(e.target.value)} onFocus={() => void load()}>
  <option value="">전체 맵</option>
  {maps.map(m => <option key={m} value={m}>{m}</option>)}
  </select>
@@ -707,7 +707,7 @@ function EdgeSection() {
  <div className="flex-1 min-w-0">
  <div className="flex items-center gap-3 mb-2">
  <SectionHeader title="엣지" count={displayed.length} onAdd={() => { setAdding(true); setErr(""); }} onRefresh={load} loading={loading} noMargin />
- <select className={`${SEL} w-40`} value={mapFilter} onChange={e => setMapFilter(e.target.value)}>
+ <select className={`${SEL} w-40`} value={mapFilter} onChange={e => setMapFilter(e.target.value)} onFocus={() => void load()}>
  <option value="">전체 맵</option>
  {nodeMaps.map(m => <option key={m} value={m}>{m}</option>)}
  </select>

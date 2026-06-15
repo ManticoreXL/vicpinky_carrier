@@ -91,7 +91,10 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     if (this.loopTimer) clearTimeout(this.loopTimer);
   }
 
-  setServer(server: Server) { this.server = server; }
+  setServer(server: Server) {
+    this.server = server;
+    this.topologyService.setServer(server);
+  }
 
   // ── 외부 API ─────────────────────────────────────────────────────────────
 
