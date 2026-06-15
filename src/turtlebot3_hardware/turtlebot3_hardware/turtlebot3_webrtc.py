@@ -3,15 +3,13 @@ import threading
 import logging
 import time
 import argparse
+from fractions import Fraction
+
 import cv2
 import numpy as np
 import socketio
-import pyaudio
-import queue
-
-from fractions import Fraction
-from av import VideoFrame, AudioFrame
-from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack, AudioStreamTrack
+from av import VideoFrame
+from aiortc import RTCPeerConnection, RTCSessionDescription, VideoStreamTrack
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("robot_webrtc")
@@ -88,70 +86,6 @@ class CameraReader:
         logger.info("카메라 캡처 스레드 종료")
 
 
-# ── 오디오 입출력 스레드 ─────────────────────────────────────────────────────
-
-class AudioReader:
-    def __init__(self, device_index=1, rate=48000, channels=2):
-        self.p = pyaudio.PyAudio()
-        self.rate = rate
-        self.channels = channels
-        self.chunk = int(rate * 0.02)
-        self.q = queue.Queue()
-        
-        self.stream = None
-        self.device_index = device_index
-
-    def _callback(self, in_data, frame_count, time_info, status):
-        self.q.put(in_data)
-        return (None, pyaudio.paContinue)
-
-    def start(self):
-        if self.stream is None or not self.stream.is_active():
-            self.stream = self.p.open(
-                format=pyaudio.paInt16,
-                channels=self.channels,
-                rate=self.rate,
-                input=True,
-                input_device_index=self.device_index,
-                frames_per_buffer=self.chunk,
-                stream_callback=self._callback
-            )
-            self.stream.start_stream()
-
-    def stop(self):
-        if self.stream is not None and self.stream.is_active():
-            self.stream.stop_stream()
-            self.stream.close()
-            self.stream = None
-
-class AudioWriter:
-    def __init__(self, device_index=1, rate=48000, channels=1):
-        self.p = pyaudio.PyAudio()
-        self.rate = rate
-        self.channels = channels
-        self.device_index = device_index
-        self.stream = None
-
-    def start(self):
-        if self.stream is None or not self.stream.is_active():
-            self.stream = self.p.open(
-                format=pyaudio.paInt16,
-                channels=self.channels,
-                rate=self.rate,
-                output=True,
-                output_device_index=self.device_index
-            )
-
-    def write(self, data):
-        if self.stream is not None and self.stream.is_active():
-            self.stream.write(data)
-
-    def stop(self):
-        if self.stream is not None and self.stream.is_active():
-            self.stream.stop_stream()
-            self.stream.close()
-            self.stream = None
-
 # ── 클라이언트별 라이브 트랙 ──────────────────────────────────────────────────
 
 class LiveCameraTrack(VideoStreamTrack):
@@ -194,39 +128,6 @@ class LiveCameraTrack(VideoStreamTrack):
         return vf
 
 
-class LiveAudioTrack(AudioStreamTrack):
-    kind = "audio"
-
-    def __init__(self, reader):
-        super().__init__()
-        self.reader = reader
-        self.pts = 0
-        self.time_base = Fraction(1, self.reader.rate)
-
-    async def recv(self):
-        # 큐에서 오디오 청크 획득 (스테레오, 16bit 데이터)
-        data = await asyncio.get_event_loop().run_in_executor(None, self.reader.q.get)
-        
-        # 바이너리 데이터를 16bit 정수형 NumPy 배열로 변환
-        audio_array = np.frombuffer(data, dtype=np.int16)
-        
-        # 2채널(Stereo) 데이터를 1채널(Mono)로 변환 (왼쪽 채널만 사용)
-        mono_array = audio_array[0::2]
-        
-        # 모노 데이터를 다시 바이너리로 변환
-        mono_data = mono_array.tobytes()
-
-        # AudioFrame을 생성하여 전송 (samples 수는 절반으로 줄어듦)
-        frame = AudioFrame(format='s16', layout='mono', samples=len(mono_data)//2)
-        frame.planes[0].update(mono_data)
-        frame.pts = self.pts
-        frame.sample_rate = self.reader.rate
-        frame.time_base = self.time_base
-        
-        self.pts += frame.samples
-        return frame
-
-
 # ── WebRTC 연결 관리 ──────────────────────────────────────────────────────────
 
 class WebRTCManager:
@@ -246,27 +147,19 @@ class WebRTCManager:
                 except Exception:
                     pass
 
-            # 브라우저 요청이 들어왔으므로 이 시점에 마이크 하드웨어를 점유합니다.
-            logger.info("통화 스트림 요청 수신: 오디오(마이크) 장치를 점유합니다.")
-            self.audio.start()
-
             # LAN 직결: STUN 없이 host candidate만 사용 → 빠르고 안정적
+            # (인터넷 없는 로봇에서 STUN 타임아웃으로 연결 실패하는 문제 제거)
             pc = RTCPeerConnection()
             self.pcs[browser_id] = pc
 
             # 클라이언트마다 독립 트랙 — 공유 버퍼에서 최신 프레임 읽음
-            video_track = LiveCameraTrack(
+            track = LiveCameraTrack(
                 self.camera.buffer,
                 width=self.camera.width,
                 height=self.camera.height,
                 fps=self.camera._fps,
             )
-            pc.addTrack(video_track)
-
-            audio_track = LiveAudioTrack(
-                self.audio
-            )
-            pc.addTrack(audio_track)
+            pc.addTrack(track)
 
             @pc.on("connectionstatechange")
             async def on_state():
@@ -281,32 +174,7 @@ class WebRTCManager:
                         await pc.close()
                     except Exception:
                         pass
-                    
-                    # 연결이 끊어지면 즉시 마이크 및 스피커 하드웨어 점유를 해제합니다.
-                    logger.info("통화 종료: 오디오 장치 점유를 해제합니다.")
-                    self.audio.stop()
-                    self.audio_writer.stop()
-                    
                     logger.info(f"현재 송출 수: {len(self.pcs)}")
-
-            @pc.on("track")
-            def on_track(track):
-                if track.kind == "audio":
-                    logger.info("PC로부터 오디오 수신 시작 (스피커 점유)")
-                    self.audio_writer.start()
-                    
-                    async def consume_audio():
-                        while True:
-                            try:
-                                frame = await track.recv()
-                                # 16bit PCM 데이터를 추출하여 스피커로 출력
-                                data = frame.to_ndarray().tobytes()
-                                self.audio_writer.write(data)
-                            except Exception as e:
-                                logger.info("오디오 트랙 수신 종료 (스피커 반환)")
-                                self.audio_writer.stop()
-                                break
-                    asyncio.ensure_future(consume_audio())
 
             offer = await pc.createOffer()
             await pc.setLocalDescription(offer)
@@ -448,17 +316,13 @@ class SignalingClient:
 
 # ── 메인 ─────────────────────────────────────────────────────────────────────
 
-async def async_main(args):
+async def main(args):
     loop = asyncio.get_event_loop()
 
-    camera = CameraReader(args.device, args.width, args.height, args.fps)
+    camera    = CameraReader(args.device, args.width, args.height, args.fps)
     camera.start()
 
-    webrtc = WebRTCManager(
-        bot_id=args.bot_id, 
-        camera=camera,
-    )
-
+    webrtc    = WebRTCManager(bot_id=args.bot_id, camera=camera)
     signaling = SignalingClient(
         server_url=args.server,
         bot_id=args.bot_id,
@@ -481,7 +345,8 @@ async def async_main(args):
         await webrtc.close_all()
         camera.stop()
 
-def main(args=None):
+
+if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="터틀봇 WebRTC 카메라 스트리머")
     parser.add_argument("--bot-id",  default="tb3_01",                  help="로봇 ID")
     parser.add_argument("--device",  type=int, default=0,               help="카메라 장치 번호")
@@ -489,11 +354,6 @@ def main(args=None):
     parser.add_argument("--width",   type=int, default=640)
     parser.add_argument("--height",  type=int, default=480)
     parser.add_argument("--fps",     type=int, default=30)
-    
-    parsed_args, unknown = parser.parse_known_args()
+    args = parser.parse_args()
 
-    asyncio.run(async_main(parsed_args))
-
-
-if __name__ == "__main__":
-    main()
+    asyncio.run(main(args))
