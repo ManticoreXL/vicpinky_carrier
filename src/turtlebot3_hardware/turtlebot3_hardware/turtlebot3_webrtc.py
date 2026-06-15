@@ -230,10 +230,10 @@ class LiveAudioTrack(AudioStreamTrack):
 # ── WebRTC 연결 관리 ──────────────────────────────────────────────────────────
 
 class WebRTCManager:
-    def __init__(self, bot_id: str, camera: CameraReader, audio: AudioReader, audio_writer):
+    def __init__(self, bot_id: str, camera: CameraReader, audio_reader: AudioReader, audio_writer: AudioWriter):
         self.bot_id = bot_id
         self.camera = camera
-        self.audio = audio
+        self.audio_reader = audio_reader
         self.audio_writer = audio_writer  # 스피커 제어 객체 추가
         self.pcs: dict[str, RTCPeerConnection] = {}
         self._lock = asyncio.Lock()
@@ -456,7 +456,8 @@ async def async_main(args):
     camera = CameraReader(args.device, args.width, args.height, args.fps)
     camera.start()
 
-    audio = AudioReader(device_index=1)
+    audio_reader = AudioReader(device_index=1)
+    audio_writer = AudioWriter(device_index=1)
 
     webrtc = WebRTCManager(bot_id=args.bot_id, camera=camera, audio=audio)
 
