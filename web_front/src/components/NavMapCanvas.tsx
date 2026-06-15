@@ -101,6 +101,8 @@ export default function NavMapCanvas({
  const robotPosRef = useRef<Record<string, RobotPos>>(robotPositions);
  const onNodeClickRef = useRef(onNodeClick);
  const lockedNodesRef = useRef<Set<string>>(lockedNodes);
+ const assignmentsRef = useRef<Record<string, string>>({});
+ const selectedMapRef = useRef<string>("");
  const drawRef = useRef<() => void>(() => {});
 
  const [availableMaps, setAvailableMaps] = useState<string[]>([]);
@@ -125,6 +127,8 @@ export default function NavMapCanvas({
  useEffect(() => { robotPosRef.current = robotPositions; }, [robotPositions]);
  useEffect(() => { onNodeClickRef.current = onNodeClick; }, [onNodeClick]);
  useEffect(() => { lockedNodesRef.current = lockedNodes; drawRef.current(); }, [lockedNodes]);
+ useEffect(() => { assignmentsRef.current = assignments; }, [assignments]);
+ useEffect(() => { selectedMapRef.current = selectedMap; }, [selectedMap]);
 
  // ── 맵 목록 + 할당 로드 ──────────────────────────────────────────────────
 
@@ -234,8 +238,10 @@ export default function NavMapCanvas({
  ctx.fillRect(0, 0, canvas.width, canvas.height);
  }
 
- // ── 경로 그리기 ──────────────────────────────────────────────────────
+ // ── 경로 그리기 (현재 맵에 배정된 로봇만) ───────────────────────────
  for (const robot of TB3_ROBOTS) {
+ const robotAssignedMap = assignmentsRef.current[robot.id];
+ if (robotAssignedMap && robotAssignedMap !== selectedMapRef.current) continue;
  const planData = rosMessages[`/${robot.id}/plan`]?.data as {
  poses?: Array<{ pose?: { position?: { x?: number; y?: number } } }>
  } | undefined;
@@ -279,11 +285,15 @@ export default function NavMapCanvas({
  const apaths = activePathsRef.current;
  const robPos = robotPosRef.current;
 
- // active 경로 맵 구성
+ // active 경로 맵 구성 (현재 맵 배정 로봇만)
  const robotColorMap: Record<string, string> = {};
  const activeNodeMap: Record<string, string> = {};
  const activeEdgeMap: Record<string, string> = {};
- apaths.forEach(({ robotId, pathQueue, fromNodeId }, i) => {
+ const filteredApaths = apaths.filter(({ robotId }) => {
+ const assigned = assignmentsRef.current[robotId];
+ return !assigned || assigned === selectedMapRef.current;
+ });
+ filteredApaths.forEach(({ robotId, pathQueue, fromNodeId }, i) => {
  robotColorMap[robotId] = ROBOT_COLORS[i % ROBOT_COLORS.length];
  if (fromNodeId) activeNodeMap[fromNodeId] = robotId;
  pathQueue.forEach(id => { activeNodeMap[id] = robotId; });
@@ -470,8 +480,10 @@ export default function NavMapCanvas({
  });
  }
 
- // ── 로봇 마커 (amcl_pose) ─────────────────────────────────────────────
+ // ── 로봇 마커 (amcl_pose, 현재 맵 배정 로봇만) ───────────────────────
  for (const robot of TB3_ROBOTS) {
+ const robotAssignedMap2 = assignmentsRef.current[robot.id];
+ if (robotAssignedMap2 && robotAssignedMap2 !== selectedMapRef.current) continue;
  const amcl = rosMessages[`/${robot.id}/amcl_pose`]?.data as {
  pose?: { pose?: { position?: { x?: number; y?: number }; orientation?: { x?: number; y?: number; z?: number; w?: number } } }
  } | undefined;
