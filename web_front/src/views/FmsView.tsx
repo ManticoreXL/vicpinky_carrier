@@ -50,7 +50,7 @@ export default function FmsView({
  const [filterTab, setFilterTab] = useState<string>("all");
  const [contentTab, setContentTab] = useState<"fleet" | "map">("map");
  const [mapAssignments, setMapAssignments] = useState<Record<string, string>>({});
- const [form, setForm] = useState({ type: "SUPPLY" as TaskType, targetNode: "", priority: 5, robotId: "" });
+ const [form, setForm] = useState({ type: "SUPPLY" as TaskType, targetNode: "", priority: 5, preferredRobotId: "" });
 
  useEffect(() => {
  fetch(`${BACKEND_URL}/api/map/assignments`).then(r => r.json()).then(d => setMapAssignments(d)).catch(() => {});
@@ -154,7 +154,7 @@ export default function FmsView({
  </div>
  <div>
  <span className="sub-label">Preferred Asset</span>
- <select value={form.robotId} onChange={e => setForm(f => ({ ...f, robotId: e.target.value }))} className="w-full bg-black/40 border border-white/[0.05] rounded-xl px-3 py-2 text-sm text-white appearance-none focus:outline-none focus:border-white/[0.05]">
+ <select value={form.preferredRobotId} onChange={e => setForm(f => ({ ...f, preferredRobotId: e.target.value }))} className="w-full bg-black/40 border border-white/[0.05] rounded-xl px-3 py-2 text-sm text-white appearance-none focus:outline-none focus:border-white/[0.05]">
  <option value="">AUTO ASSIGNMENT</option>
  {ROBOTS.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
  </select>
