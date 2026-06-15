@@ -316,7 +316,7 @@ class SignalingClient:
 
 # ── 메인 ─────────────────────────────────────────────────────────────────────
 
-async def main(args):
+async def async_main(args):
     loop = asyncio.get_event_loop()
 
     camera    = CameraReader(args.device, args.width, args.height, args.fps)
@@ -346,7 +346,7 @@ async def main(args):
         camera.stop()
 
 
-if __name__ == "__main__":
+def main(args=None):
     parser = argparse.ArgumentParser(description="터틀봇 WebRTC 카메라 스트리머")
     parser.add_argument("--bot-id",  default="tb3_01",                  help="로봇 ID")
     parser.add_argument("--device",  type=int, default=0,               help="카메라 장치 번호")
@@ -354,6 +354,11 @@ if __name__ == "__main__":
     parser.add_argument("--width",   type=int, default=640)
     parser.add_argument("--height",  type=int, default=480)
     parser.add_argument("--fps",     type=int, default=30)
-    args = parser.parse_args()
 
-    asyncio.run(main(args))
+    parsed_args, _ = parser.parse_known_args()
+
+    asyncio.run(async_main(parsed_args))
+
+
+if __name__ == "__main__":
+    main()
