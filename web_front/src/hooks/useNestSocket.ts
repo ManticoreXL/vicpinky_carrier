@@ -121,8 +121,6 @@ export function useNestSocket() {
  const [tmAlerts, setTmAlerts] = useState<TaskManagerAlert[]>([]);
  // 로봇별 실시간 상태 (robot_id → status)
  const [robotStatuses, setRobotStatuses] = useState<Record<string, string>>({});
- // 로봇별 점유 엣지 (robot_id → {from, to, mapId})
- const [occupiedEdges, setOccupiedEdges] = useState<Record<string, { from: string; to: string; mapId: string }>>({});
  // 잠긴 노드 집합 (node_id)
  const [lockedNodes, setLockedNodes] = useState<Set<string>>(new Set());
 
@@ -223,11 +221,6 @@ export function useNestSocket() {
  setRobotStatuses((prev) => ({ ...prev, [payload.robot_id]: payload.status }));
  });
 
- // ── 엣지 점유 상태 ──────────────────────────────────────────────────────
- socket.on("occupied_edges", (payload: Record<string, { from: string; to: string; mapId: string }>) => {
- setOccupiedEdges(payload);
- });
-
  // ── 노드 잠금 초기 상태 (연결 시 서버 DB 기준으로 동기화) ──────────────
  socket.on("node_lock_init", (nodeIds: string[]) => {
  setLockedNodes(new Set(nodeIds));
@@ -309,6 +302,6 @@ export function useNestSocket() {
  activeGoals, actionFeedbacks, actionResults,
  mapTimestamps, mapInfos,
  fmsTasks, tmAlerts,
- robotStatuses, occupiedEdges, lockedNodes,
+ robotStatuses, lockedNodes,
  };
 }

@@ -31,7 +31,6 @@ interface Props {
  emitNavInitialPose: (robotId: string, x: number, y: number, yaw: number) => void;
  ackTmAlert: (alertId: string) => void;
  setRobotHome: (robotId: string, x: number, y: number, yaw: number) => void;
- occupiedEdges?: Record<string, { from: string; to: string; mapId: string }>;
  lockedNodes?: Set<string>;
 }
 
@@ -45,7 +44,7 @@ export default function FmsView({
  rosMessages, fmsTasks, tmAlerts, socket,
  emitFmsDispatch, emitFmsCancel,
  emitNavGoal, emitNavInitialPose,
- ackTmAlert, setRobotHome, occupiedEdges = {},
+ ackTmAlert, setRobotHome,
  lockedNodes = new Set(),
 }: Props) {
  const [filterTab, setFilterTab] = useState<string>("all");
@@ -100,7 +99,7 @@ export default function FmsView({
  {contentTab === "map" ? (
  <NavMapCanvas
  rosMessages={rosMessages} socket={socket} onSendGoal={emitNavGoal} onSetInitialPose={emitNavInitialPose} onSetHome={setRobotHome}
- activePaths={activePaths} robotPositions={robotPositions} occupiedEdges={occupiedEdges} lockedNodes={lockedNodes}
+ activePaths={activePaths} robotPositions={robotPositions} lockedNodes={lockedNodes}
  onNodeClick={n => setForm(f => ({ ...f, targetNode: n }))}
  />
  ) : (

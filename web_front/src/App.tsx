@@ -30,7 +30,7 @@ export default function App() {
  activeGoals, actionFeedbacks, actionResults,
  mapTimestamps, mapInfos,
  fmsTasks, tmAlerts, ackTmAlert, setRobotHome,
- robotStatuses, occupiedEdges, lockedNodes,
+ robotStatuses, lockedNodes,
  } = useNestSocket();
  const [selectedRobot, setSelectedRobot] = useState<string>("vicpinky");
  const [appMode, setAppMode] = useState<AppMode>("control");
@@ -119,7 +119,6 @@ export default function App() {
  tmAlerts={tmAlerts}
  ackTmAlert={ackTmAlert}
  setRobotHome={setRobotHome}
- occupiedEdges={occupiedEdges}
  lockedNodes={lockedNodes}
  />
  </div>

@@ -73,8 +73,6 @@ interface Props {
  robotPositions?: Record<string, RobotPos>;
  onNodeClick?: (nodeId: string) => void;
  lockedNodes?: Set<string>;
- // robot_id → 현재 점유 중인 엣지 {from, to}
- occupiedEdges?: Record<string, { from: string; to: string; mapId: string }>;
 }
 
 interface DragState {
@@ -87,7 +85,7 @@ interface DragState {
 
 export default function NavMapCanvas({
  rosMessages, socket, onSendGoal, onSetInitialPose, onSetHome,
- activePaths = [], robotPositions = {}, onNodeClick, lockedNodes = new Set(), occupiedEdges = {},
+ activePaths = [], robotPositions = {}, onNodeClick, lockedNodes = new Set(),
 }: Props) {
  const canvasRef = useRef<HTMLCanvasElement>(null);
  const wrapRef = useRef<HTMLDivElement>(null);
@@ -103,7 +101,6 @@ export default function NavMapCanvas({
  const robotPosRef = useRef<Record<string, RobotPos>>(robotPositions);
  const onNodeClickRef = useRef(onNodeClick);
  const lockedNodesRef = useRef<Set<string>>(lockedNodes);
- const occupiedEdgesRef = useRef<Record<string, { from: string; to: string; mapId: string }>>({});
  const drawRef = useRef<() => void>(() => {});
 
  const [availableMaps, setAvailableMaps] = useState<string[]>([]);
@@ -128,7 +125,6 @@ export default function NavMapCanvas({
  useEffect(() => { robotPosRef.current = robotPositions; }, [robotPositions]);
  useEffect(() => { onNodeClickRef.current = onNodeClick; }, [onNodeClick]);
  useEffect(() => { lockedNodesRef.current = lockedNodes; drawRef.current(); }, [lockedNodes]);
- useEffect(() => { occupiedEdgesRef.current = occupiedEdges; drawRef.current(); }, [occupiedEdges]);
 
  // ── 맵 목록 + 할당 로드 ──────────────────────────────────────────────────
 
@@ -297,18 +293,6 @@ export default function NavMapCanvas({
  }
  });
 
- // 점유 엣지 집합 구성 ("A→B" 키) — occupiedEdgesRef에서 읽음
- const occupiedEdgeKeys = new Set<string>();
- const occupiedEdgeRobotMap: Record<string, string> = {};
- Object.entries(occupiedEdgesRef.current).forEach(([rid, oe]) => {
- const k1 = `${oe.from}→${oe.to}`;
- const k2 = `${oe.to}→${oe.from}`;
- occupiedEdgeKeys.add(k1);
- occupiedEdgeKeys.add(k2);
- occupiedEdgeRobotMap[k1] = rid;
- occupiedEdgeRobotMap[k2] = rid;
- });
-
  // 엣지 렌더 — 가중치 기반 두께 + 검정 아웃라인으로 SLAM 맵 배경에서 선명하게
  topoEdges.forEach(e => {
  const sn = topoNodes.find(n => n.node_id === e.startNode);
@@ -321,23 +305,18 @@ export default function NavMapCanvas({
  const fwdKey = `${e.startNode}→${e.endNode}`;
  const bwdKey = `${e.endNode}→${e.startNode}`;
  const ar = activeEdgeMap[fwdKey] ?? activeEdgeMap[bwdKey];
- const isOccupied = occupiedEdgeKeys.has(fwdKey) || occupiedEdgeKeys.has(bwdKey);
- const occRobot = occupiedEdgeRobotMap[fwdKey] ?? occupiedEdgeRobotMap[bwdKey];
  const w = e.weight ?? 1;
- const isBlocked = w <= 0.1; // weight 임계값 이하 = 진입 불가
- const isLow = w < 1; // 비메인 도로
+ const isBlocked = w <= 0.1;
+ const isLow = w < 1;
 
- // 선 굵기: 가중치 비례 (최소 2, 최대 6)
  const baseLw = ar ? Math.min(6, 2 + w) : isBlocked ? 2 : Math.max(2, Math.min(6, 1 + w * 1.5));
 
- // 색상 결정
  let lineColor: string;
  if (ar) lineColor = robotColorMap[ar];
- else if (isOccupied) lineColor = occRobot ? (robotColorMap[occRobot] ?? "#f97316") : "#f97316";
  else if (e.isLocked) lineColor = "#f87171";
  else if (isBlocked) lineColor = "#6b7280";
- else if (isLow) lineColor = "#6ee7b7"; // 비메인 = 연초록
- else lineColor = "#22d3ee"; // 메인 = 시안
+ else if (isLow) lineColor = "#6ee7b7";
+ else lineColor = "#22d3ee";
 
  ctx.save();
 
@@ -406,9 +385,9 @@ export default function NavMapCanvas({
  ctx.fill();
  }
 
- // 활성 엣지 로봇 라벨 (경로 로봇 or 점유 로봇)
- const labelRobot = ar ?? (isOccupied ? occRobot : null);
- const labelColor = ar ? robotColorMap[ar] : (occRobot ? (robotColorMap[occRobot] ?? "#f97316") : null);
+ // 활성 엣지 로봇 라벨
+ const labelRobot = ar ?? null;
+ const labelColor = ar ? robotColorMap[ar] : null;
  if (labelRobot && labelColor) {
  const mx = (sx + ex) / 2, my = (sy + ey) / 2;
  ctx.font = "bold 8px monospace";
