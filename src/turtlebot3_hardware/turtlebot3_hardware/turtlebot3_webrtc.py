@@ -230,10 +230,11 @@ class LiveAudioTrack(AudioStreamTrack):
 # ── WebRTC 연결 관리 ──────────────────────────────────────────────────────────
 
 class WebRTCManager:
-    def __init__(self, bot_id: str, camera: CameraReader, audio: AudioReader):
+    def __init__(self, bot_id: str, camera: CameraReader, audio: AudioReader, audio_writer):
         self.bot_id = bot_id
         self.camera = camera
         self.audio = audio
+        self.audio_writer = audio_writer  # 스피커 제어 객체 추가
         self.pcs: dict[str, RTCPeerConnection] = {}
         self._lock = asyncio.Lock()
 
@@ -247,8 +248,11 @@ class WebRTCManager:
                 except Exception:
                     pass
 
+            # 브라우저 요청이 들어왔으므로 이 시점에 마이크 하드웨어를 점유합니다.
+            logger.info("통화 스트림 요청 수신: 오디오(마이크) 장치를 점유합니다.")
+            self.audio.start()
+
             # LAN 직결: STUN 없이 host candidate만 사용 → 빠르고 안정적
-            # (인터넷 없는 로봇에서 STUN 타임아웃으로 연결 실패하는 문제 제거)
             pc = RTCPeerConnection()
             self.pcs[browser_id] = pc
 
@@ -279,13 +283,18 @@ class WebRTCManager:
                         await pc.close()
                     except Exception:
                         pass
+                    
+                    # 연결이 끊어지면 즉시 마이크 및 스피커 하드웨어 점유를 해제합니다.
+                    logger.info("통화 종료: 오디오 장치 점유를 해제합니다.")
+                    self.audio.stop()
+                    self.audio_writer.stop()
+                    
                     logger.info(f"현재 송출 수: {len(self.pcs)}")
 
-            # create_offer 내부 pc = RTCPeerConnection() 선언부 아래 추가
             @pc.on("track")
             def on_track(track):
                 if track.kind == "audio":
-                    logger.info("PC로부터 오디오 수신 시작")
+                    logger.info("PC로부터 오디오 수신 시작 (스피커 점유)")
                     self.audio_writer.start()
                     
                     async def consume_audio():
@@ -296,7 +305,7 @@ class WebRTCManager:
                                 data = frame.to_ndarray().tobytes()
                                 self.audio_writer.write(data)
                             except Exception as e:
-                                logger.info("통화 종료")
+                                logger.info("오디오 트랙 수신 종료 (스피커 반환)")
                                 self.audio_writer.stop()
                                 break
                     asyncio.ensure_future(consume_audio())
