@@ -28,8 +28,8 @@ def generate_launch_description():
 
     rosbridge_node = Node(
         package='rosbridge_server',
-        executable='rosbridge_websocker',
-        name='rosbridge_websocker',
+        executable='rosbridge_websocket',
+        name='rosbridge_websocket',
         output='screen',
         parameters=[{'port': 9090}]
     )
