@@ -273,26 +273,6 @@ export class MapService implements OnModuleInit {
     return Object.fromEntries(this.robotAssignments);
   }
 
-  // 맵 파일만 nav2에 로드 (할당 저장·태스크 취소 없이 순수 load_map 서비스 호출)
-  async loadMapOnly(robotId: string, mapName: string): Promise<void> {
-    const mapUrl = path.join(MAPS_DIR, `${mapName}.yaml`);
-    this.rosService.callService(
-      {
-        serviceName: `/${robotId}/map_server/load_map`,
-        serviceType: 'nav2_msgs/srv/LoadMap',
-        request: { map_url: mapUrl },
-      },
-      (res) => {
-        const r = res as { result?: number; _ok?: boolean };
-        if (r?._ok === false) {
-          this.logger.warn(`[${robotId}] load_map 실패 — 서비스 없음 (도메인 브릿지 미재시작 또는 nav2 미실행): ${mapName}`);
-        } else {
-          this.logger.log(`[${robotId}] load_map → ${mapName} (result=${r?.result ?? 'ok'})`);
-        }
-      },
-    );
-  }
-
   async assignMap(robotId: string, mapName: string): Promise<{ ok: boolean; message: string }> {
     this.robotAssignments.set(robotId, mapName);
     this.saveAssignments();
@@ -301,33 +281,8 @@ export class MapService implements OnModuleInit {
     // 맵 전환: 기존 태스크 취소 + 위치·캐시 초기화
     await this.taskManager.handleMapChange(robotId);
 
-    const mapUrl = path.join(MAPS_DIR, `${mapName}.yaml`);
-    return new Promise((resolve) => {
-      let done = false;
-      const finish = (ok: boolean, message: string) => {
-        if (done) return;
-        done = true;
-        resolve({ ok, message });
-      };
-      try {
-        this.rosService.callService(
-          {
-            serviceName: `/${robotId}/map_server/load_map`,
-            serviceType: 'nav2_msgs/srv/LoadMap',
-            request: { map_url: mapUrl },
-          },
-          (res) => {
-            const r = res as { result?: number };
-            const ok = r?.result === 0 || r?.result == null;
-            this.logger.log(`[${robotId}] load_map → ${mapName} (result=${r?.result})`);
-            finish(ok, ok ? '맵 로드 완료' : `맵 로드 실패 (code ${r?.result})`);
-          },
-        );
-      } catch (err: unknown) {
-        finish(false, err instanceof Error ? err.message : String(err));
-      }
-      setTimeout(() => finish(true, '요청 전송됨 (응답 없음)'), 5000);
-    });
+    this.logger.log(`[${robotId}] 맵 할당 → ${mapName} (로봇이 직접 map_server 관리)`);
+    return { ok: true, message: '맵 할당 완료' };
   }
 
   private loadAssignments() {

@@ -551,7 +551,12 @@ function NodeSection() {
  </td>
  <td className={TD}><input className={`${INP} w-20`} type="number" step="0.01" value={addDraft.x ?? 0} onChange={e => setAddDraft(d => ({ ...d, x: +e.target.value }))} /></td>
  <td className={TD}><input className={`${INP} w-20`} type="number" step="0.01" value={addDraft.y ?? 0} onChange={e => setAddDraft(d => ({ ...d, y: +e.target.value }))} /></td>
- <td className={TD}><input className={`${INP} w-20`} type="number" step="0.01" value={addDraft.yaw ?? 0} onChange={e => setAddDraft(d => ({ ...d, yaw: +e.target.value }))} /></td>
+ <td className={TD}>
+            <div className="flex items-center gap-1">
+             <input className={`${INP} w-16`} type="number" step="0.01" value={addDraft.yaw ?? 0} onChange={e => setAddDraft(d => ({ ...d, yaw: +e.target.value }))} />
+             <span className="text-white/40 text-xs whitespace-nowrap">{((addDraft.yaw ?? 0) * 180 / Math.PI).toFixed(0)}°</span>
+            </div>
+           </td>
  <td className={TD} />
  <td className={TD}>
  <div className="flex gap-1">
@@ -577,7 +582,12 @@ function NodeSection() {
  </td>
  <td className={TD}>{isEdit ? <input className={`${INP} w-20`} type="number" step="0.01" value={d.x ?? n.x} onChange={e => setEditDraft(p => ({ ...p, x: +e.target.value }))} /> : n.x.toFixed(3)}</td>
  <td className={TD}>{isEdit ? <input className={`${INP} w-20`} type="number" step="0.01" value={d.y ?? n.y} onChange={e => setEditDraft(p => ({ ...p, y: +e.target.value }))} /> : n.y.toFixed(3)}</td>
- <td className={TD}>{isEdit ? <input className={`${INP} w-20`} type="number" step="0.01" value={d.yaw ?? n.yaw} onChange={e => setEditDraft(p => ({ ...p, yaw: +e.target.value }))} /> : n.yaw.toFixed(3)}</td>
+ <td className={TD}>{isEdit ? (
+            <div className="flex items-center gap-1">
+             <input className={`${INP} w-16`} type="number" step="0.01" value={d.yaw ?? n.yaw} onChange={e => setEditDraft(p => ({ ...p, yaw: +e.target.value }))} />
+             <span className="text-white/40 text-xs whitespace-nowrap">{((d.yaw ?? n.yaw) * 180 / Math.PI).toFixed(0)}°</span>
+            </div>
+           ) : <span>{n.yaw.toFixed(3)}<span className="text-white/35 ml-1">{(n.yaw * 180 / Math.PI).toFixed(0)}°</span></span>}</td>
  <td className={TD}>
  <button
  className={`px-2 py-0.5 text-xs font-bold rounded border transition-colors ${n.isLocked ? "bg-red-900/40 text-white/70 border-white/[0.05] hover:bg-red-800/50" : "bg-white/5 text-white/50 border-white/[0.05] hover:text-white/90"}`}

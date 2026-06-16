@@ -50,7 +50,7 @@ export class MapController {
     return res.json(this.mapService.getAssignments());
   }
 
-  /** 로봇에 맵 할당 + nav2 load_map 서비스 호출 */
+  /** 로봇에 맵 할당 (맵은 로봇이 직접 관리) */
   @Post('assign')
   async assignMap(
     @Body() body: { robotId: string; mapName: string },

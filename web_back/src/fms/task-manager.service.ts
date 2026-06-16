@@ -60,13 +60,21 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   private readonly lastFallAlert    = new Map<string, number>();
   // robotId → 온라인 여부 (undefined = 미확인)
   private readonly robotOnlineState = new Map<string, boolean>();
-  // robotId → 코너 회전 후 대기 타이머
-  private readonly cornerTimeouts   = new Map<string, NodeJS.Timeout>();
   // robotId → 점유 로봇 때문에 정지 중인 2-ahead 노드 ID
   private readonly stoppedForNode   = new Map<string, string>();
 
-  private static readonly CORNER_WAIT_MS  = 2_000; // 90° 회전 대기 시간
-  private static readonly CORNER_THRESH   = Math.PI / 4; // 45° 이상이면 코너 판정
+  // robotId → 코너 회전 상태
+  private readonly rotatingState = new Map<string, {
+    nextNodeId: string;
+    targetYaw: number;
+    phase: 'stopping' | 'rotating'; // stopping: 2s 정지, rotating: 회전 중 (yaw 수렴 대기)
+    timer: NodeJS.Timeout;
+  }>();
+
+  private static readonly CORNER_WAIT_MS     = 2_000;     // 정지 대기 시간
+  private static readonly CORNER_THRESH      = Math.PI / 4; // 45° 이상이면 코너 판정
+  private static readonly YAW_CONVERGE_THRESH = 0.15;     // ~8.6° — yaw 수렴 판정
+  private static readonly CORNER_SAFETY_MS   = 8_000;     // 회전 최대 허용 시간
 
   constructor(
     private readonly fmsService:      FmsService,
@@ -156,8 +164,8 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       }
 
       this.activeTasks.delete(robotId);
-      clearTimeout(this.cornerTimeouts.get(robotId));
-      this.cornerTimeouts.delete(robotId);
+      const rot = this.rotatingState.get(robotId);
+      if (rot) { clearTimeout(rot.timer); this.rotatingState.delete(robotId); }
       this.stoppedForNode.delete(robotId);
 
       // 3. 로봇 상태 IDLE 복귀
@@ -202,8 +210,8 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       this.robotCache.set(robotId, { ...cache, posX: null, posY: null, yaw: null });
     }
 
-    clearTimeout(this.cornerTimeouts.get(robotId));
-    this.cornerTimeouts.delete(robotId);
+    const rotM = this.rotatingState.get(robotId);
+    if (rotM) { clearTimeout(rotM.timer); this.rotatingState.delete(robotId); }
     this.stoppedForNode.delete(robotId);
 
     // 진행 중인 nav2 주행 중단 (맵 변경으로 이전 goal_pose 무효)
@@ -329,6 +337,22 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
           yaw = Math.atan2(2 * ((ori.w ?? 1) * (ori.z ?? 0) + (ori.x ?? 0) * (ori.y ?? 0)), 1 - 2 * ((ori.y ?? 0) ** 2 + (ori.z ?? 0) ** 2));
         }
         this.robotCache.set(id, { ...prev, posX: pos.x, posY: pos.y ?? 0, yaw, lastAmclMs: now });
+
+        // 코너 회전 중인 경우: yaw 수렴 여부 확인
+        const rotState = this.rotatingState.get(id);
+        if (rotState?.phase === 'rotating') {
+          let yawDiff = yaw - rotState.targetYaw;
+          while (yawDiff >  Math.PI) yawDiff -= 2 * Math.PI;
+          while (yawDiff < -Math.PI) yawDiff += 2 * Math.PI;
+          if (Math.abs(yawDiff) < TaskManagerService.YAW_CONVERGE_THRESH) {
+            clearTimeout(rotState.timer);
+            this.rotatingState.delete(id);
+            this.logger.log(`[코너] ${id} yaw 수렴 (${(yaw * 180 / Math.PI).toFixed(0)}°) → ${rotState.nextNodeId} 진행`);
+            void this.sendNodeActionGoal(id, rotState.nextNodeId);
+          }
+          return; // 회전 중에는 checkWaypointArrival 스킵
+        }
+
         void this.checkWaypointArrival(id, pos.x, pos.y ?? 0, yaw);
       }
     }
@@ -381,8 +405,8 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       this.logger.warn(`[AMCL타임아웃] ${robotId} — ${AMCL_TIMEOUT_MS / 1000}s간 amcl_pose 없음 → nav2 재시작 추정, 태스크 FAILED`);
 
       this.activeTasks.delete(robotId);
-      clearTimeout(this.cornerTimeouts.get(robotId));
-      this.cornerTimeouts.delete(robotId);
+      const rotA = this.rotatingState.get(robotId);
+      if (rotA) { clearTimeout(rotA.timer); this.rotatingState.delete(robotId); }
       this.stoppedForNode.delete(robotId);
 
       const task = await this.fmsService.getTask(taskId);
@@ -447,7 +471,8 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async checkWaypointArrival(robotId: string, x: number, y: number, yaw: number) {
-    // 충돌 대기 중이면 웨이포인트 처리 스킵
+    // 코너 회전 중이거나 충돌 대기 중이면 웨이포인트 처리 스킵
+    if (this.rotatingState.has(robotId)) return;
     if (this.stoppedForNode.has(robotId)) return;
 
     const taskId = this.activeTasks.get(robotId);
@@ -499,13 +524,30 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
         while (diff >  Math.PI) diff -= 2 * Math.PI;
         while (diff < -Math.PI) diff += 2 * Math.PI;
         if (Math.abs(diff) > TaskManagerService.CORNER_THRESH) {
-          this.logger.log(`[코너] ${robotId} @ ${nextId}: ${(Math.abs(diff) * 180 / Math.PI).toFixed(0)}° 회전 후 ${TaskManagerService.CORNER_WAIT_MS}ms 대기 → ${nextNodeId}`);
-          this.fmsService.publishGoal(robotId, node.x, node.y, outYaw);
-          const timer = setTimeout(() => {
-            this.cornerTimeouts.delete(robotId);
-            void this.sendNodeActionGoal(robotId, nextNodeId);
+          this.logger.log(`[코너] ${robotId} @ ${nextId}: ${(Math.abs(diff) * 180 / Math.PI).toFixed(0)}° 회전 필요 — 2s 정지 후 회전 → ${nextNodeId}`);
+
+          // Phase 1: 2초 정지
+          for (let i = 0; i < 3; i++) this.fmsService.publishStop(robotId);
+
+          const stopTimer = setTimeout(() => {
+            // Phase 2: 회전 goal 전송 (현재 위치에서 outYaw 방향으로 in-place 회전)
+            this.fmsService.publishGoal(robotId, node.x, node.y, outYaw);
+            this.logger.log(`[코너] ${robotId} 회전 시작 → ${(outYaw * 180 / Math.PI).toFixed(0)}° (${nextNodeId})`);
+
+            // 안전 타임아웃: 회전이 CORNER_SAFETY_MS 이상 걸리면 강제 진행
+            const safetyTimer = setTimeout(() => {
+              const s = this.rotatingState.get(robotId);
+              if (s?.nextNodeId === nextNodeId) {
+                this.logger.warn(`[코너] ${robotId} 회전 타임아웃 — 강제 진행 → ${nextNodeId}`);
+                this.rotatingState.delete(robotId);
+                void this.sendNodeActionGoal(robotId, nextNodeId);
+              }
+            }, TaskManagerService.CORNER_SAFETY_MS);
+
+            this.rotatingState.set(robotId, { nextNodeId, targetYaw: outYaw, phase: 'rotating', timer: safetyTimer });
           }, TaskManagerService.CORNER_WAIT_MS);
-          this.cornerTimeouts.set(robotId, timer);
+
+          this.rotatingState.set(robotId, { nextNodeId, targetYaw: outYaw, phase: 'stopping', timer: stopTimer });
           return;
         }
       }
