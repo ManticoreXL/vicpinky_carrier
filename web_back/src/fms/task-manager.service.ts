@@ -71,6 +71,10 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     timer: NodeJS.Timeout;
   }>();
 
+  // 동시 amcl_pose 이벤트로 인한 중복 goal 방지
+  private readonly waypointProcessing = new Set<string>();
+  private readonly lastSentGoal = new Map<string, { nodeId: string; ts: number }>();
+
   private static readonly CORNER_WAIT_MS     = 2_000;     // 정지 대기 시간
   private static readonly CORNER_THRESH      = Math.PI / 4; // 45° 이상이면 코너 판정
   private static readonly YAW_CONVERGE_THRESH = 0.15;     // ~8.6° — yaw 수렴 판정
@@ -437,30 +441,45 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       if (!task || task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED) continue;
 
       const pathQueue = task.pathQueue ?? [];
+      const myCache   = this.robotCache.get(robotId);
+      const myPos     = myCache?.posX != null ? `(${myCache.posX.toFixed(2)},${(myCache.posY ?? 0).toFixed(2)})` : 'N/A';
+
       if (pathQueue.length < 2) {
-        // 2-ahead 없으면 대기 해제
         if (this.stoppedForNode.has(robotId)) {
+          this.logger.log(`[충돌체크] ${robotId} pathQueue<2, 대기 해제 → 재출발 queue=[${pathQueue.join(',')}]`);
           this.stoppedForNode.delete(robotId);
           if (pathQueue.length > 0) await this.sendNodeActionGoal(robotId, pathQueue[0]);
         }
         continue;
       }
 
-      const twoAheadId = pathQueue[1];
+      const twoAheadId   = pathQueue[1];
+      const twoAheadNode = await this.topologyService.findNodeById(twoAheadId);
 
       // 다른 활성 로봇 중 twoAheadId를 실제로 점유 중인 로봇 탐색
-      // DB location 대신 AMCL 캐시 실좌표로 판단 → dispatch 직후 오탐 방지
-      const twoAheadNode = await this.topologyService.findNodeById(twoAheadId);
       let blockerId: string | null = null;
+      const distLogs: string[] = [];
       if (twoAheadNode) {
         for (const [otherId] of this.activeTasks) {
           if (otherId === robotId) continue;
           const otherCache = this.robotCache.get(otherId);
-          if (!otherCache?.posX) continue;
+          if (!otherCache?.posX) {
+            distLogs.push(`${otherId}=noAMCL`);
+            continue;
+          }
           const dist = Math.hypot(otherCache.posX - twoAheadNode.x, (otherCache.posY ?? 0) - twoAheadNode.y);
+          distLogs.push(`${otherId}=${dist.toFixed(2)}m`);
           if (dist < NODE_PASS_M) { blockerId = otherId; break; }
         }
+      } else {
+        distLogs.push(`twoAheadNode="${twoAheadId}" DB없음`);
       }
+
+      this.logger.log(
+        `[충돌체크] ${robotId} pos=${myPos} queue=[${pathQueue.join(',')}] 2ahead=${twoAheadId}` +
+        ` | ${distLogs.join(', ')}` +
+        (this.stoppedForNode.has(robotId) ? ` | 현재정지중(${this.stoppedForNode.get(robotId)})` : ''),
+      );
 
       if (blockerId) {
         if (!this.stoppedForNode.has(robotId)) {
@@ -477,87 +496,105 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async checkWaypointArrival(robotId: string, x: number, y: number, yaw: number) {
-    // 코너 회전 중이거나 충돌 대기 중이면 웨이포인트 처리 스킵
-    if (this.rotatingState.has(robotId)) return;
-    if (this.stoppedForNode.has(robotId)) return;
-
-    const taskId = this.activeTasks.get(robotId);
-    if (!taskId || !this.server) return;
-
-    const task = await this.fmsService.getTask(taskId);
-    if (!task || task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED) {
-      this.activeTasks.delete(robotId);
+    if (this.waypointProcessing.has(robotId)) return; // amcl_pose 연속 수신 시 중복 실행 방지
+    if (this.rotatingState.has(robotId)) {
+      this.logger.log(`[웨이포인트] ${robotId} 스킵 — 코너 회전 중 (phase=${this.rotatingState.get(robotId)?.phase})`);
       return;
     }
-
-    const remaining = [...(task.pathQueue ?? [])];
-    if (remaining.length === 0) return;
-
-    const nextId = remaining[0];
-    const node = await this.topologyService.findNodeById(nextId);
-    if (!node) return;
-
-    const isFinal   = remaining.length === 1;
-    const threshold = isFinal ? NODE_ARRIVE_M : NODE_PASS_M;
-
-    if (Math.hypot(x - node.x, y - node.y) > threshold) return;
-
-    await this.robotService.updateLocation(robotId, nextId);
-
-    if (isFinal) {
-      this.activeTasks.delete(robotId);
-
-      await this.fmsService.setStatus(taskId, TaskStatus.COMPLETED, this.server, {
-        completedAt: new Date(),
-        assignedRobot: { robot_id: robotId, is_completed: true },
-      });
-      await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
-      this.emit({ type: 'completed', taskId, robotId, message: `${robotId} 태스크 완료 (${task.targetNode})`, requiresAction: false });
-      this.fmsService.publishInitialPose(robotId, x, y, yaw);
-      this.returnHome(robotId);
+    if (this.stoppedForNode.has(robotId)) {
+      this.logger.log(`[웨이포인트] ${robotId} 스킵 — 충돌 대기 중 (node=${this.stoppedForNode.get(robotId)})`);
       return;
     }
+    this.waypointProcessing.add(robotId);
+    try {
+      const taskId = this.activeTasks.get(robotId);
+      if (!taskId || !this.server) return;
 
-    remaining.shift();
-    await this.fmsService.updatePathQueue(taskId, remaining, this.server);
-
-    if (remaining.length > 0) {
-      const nextNodeId = remaining[0];
-      const nextNode   = await this.topologyService.findNodeById(nextNodeId);
-      if (nextNode) {
-        const outYaw   = Math.atan2(nextNode.y - node.y, nextNode.x - node.x);
-        let   diff     = outYaw - yaw;
-        while (diff >  Math.PI) diff -= 2 * Math.PI;
-        while (diff < -Math.PI) diff += 2 * Math.PI;
-        if (Math.abs(diff) > TaskManagerService.CORNER_THRESH) {
-          this.logger.log(`[코너] ${robotId} @ ${nextId}: ${(Math.abs(diff) * 180 / Math.PI).toFixed(0)}° 회전 필요 — 2s 정지 후 회전 → ${nextNodeId}`);
-
-          // Phase 1: 2초 정지
-          for (let i = 0; i < 3; i++) this.fmsService.publishStop(robotId);
-
-          const stopTimer = setTimeout(() => {
-            // Phase 2: 회전 goal 전송 (현재 위치에서 outYaw 방향으로 in-place 회전)
-            this.fmsService.publishGoal(robotId, node.x, node.y, outYaw);
-            this.logger.log(`[코너] ${robotId} 회전 시작 → ${(outYaw * 180 / Math.PI).toFixed(0)}° (${nextNodeId})`);
-
-            // 안전 타임아웃: 회전이 CORNER_SAFETY_MS 이상 걸리면 강제 진행
-            const safetyTimer = setTimeout(() => {
-              const s = this.rotatingState.get(robotId);
-              if (s?.nextNodeId === nextNodeId) {
-                this.logger.warn(`[코너] ${robotId} 회전 타임아웃 — 강제 진행 → ${nextNodeId}`);
-                this.rotatingState.delete(robotId);
-                void this.sendNodeActionGoal(robotId, nextNodeId);
-              }
-            }, TaskManagerService.CORNER_SAFETY_MS);
-
-            this.rotatingState.set(robotId, { nextNodeId, targetYaw: outYaw, phase: 'rotating', timer: safetyTimer });
-          }, TaskManagerService.CORNER_WAIT_MS);
-
-          this.rotatingState.set(robotId, { nextNodeId, targetYaw: outYaw, phase: 'stopping', timer: stopTimer });
-          return;
-        }
+      const task = await this.fmsService.getTask(taskId);
+      if (!task || task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED) {
+        this.logger.log(`[웨이포인트] ${robotId} 태스크 ${taskId} 이미 종료(${task?.status}) — activeTasks 제거`);
+        this.activeTasks.delete(robotId);
+        return;
       }
-      await this.sendNodeActionGoal(robotId, nextNodeId);
+
+      const remaining = [...(task.pathQueue ?? [])];
+      if (remaining.length === 0) return;
+
+      const nextId = remaining[0];
+      const node = await this.topologyService.findNodeById(nextId);
+      if (!node) return;
+
+      const isFinal   = remaining.length === 1;
+      const threshold = isFinal ? NODE_ARRIVE_M : NODE_PASS_M;
+      const dist      = Math.hypot(x - node.x, y - node.y);
+
+      this.logger.log(
+        `[웨이포인트] ${robotId} pos=(${x.toFixed(2)},${y.toFixed(2)}) → next=${nextId}` +
+        ` dist=${dist.toFixed(2)}m threshold=${threshold}m${isFinal ? ' [최종]' : ''}` +
+        ` queue=[${remaining.join(',')}]`,
+      );
+
+      if (dist > threshold) return;
+
+      await this.robotService.updateLocation(robotId, nextId);
+
+      if (isFinal) {
+        this.activeTasks.delete(robotId);
+
+        await this.fmsService.setStatus(taskId, TaskStatus.COMPLETED, this.server, {
+          completedAt: new Date(),
+          assignedRobot: { robot_id: robotId, is_completed: true },
+        });
+        await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
+        this.emit({ type: 'completed', taskId, robotId, message: `${robotId} 태스크 완료 (${task.targetNode})`, requiresAction: false });
+        this.fmsService.publishInitialPose(robotId, x, y, yaw);
+        this.returnHome(robotId);
+        return;
+      }
+
+      remaining.shift();
+      await this.fmsService.updatePathQueue(taskId, remaining, this.server);
+
+      if (remaining.length > 0) {
+        const nextNodeId = remaining[0];
+        const nextNode   = await this.topologyService.findNodeById(nextNodeId);
+        if (nextNode) {
+          const outYaw   = Math.atan2(nextNode.y - node.y, nextNode.x - node.x);
+          let   diff     = outYaw - yaw;
+          while (diff >  Math.PI) diff -= 2 * Math.PI;
+          while (diff < -Math.PI) diff += 2 * Math.PI;
+          if (Math.abs(diff) > TaskManagerService.CORNER_THRESH) {
+            this.logger.log(`[코너] ${robotId} @ ${nextId}: ${(Math.abs(diff) * 180 / Math.PI).toFixed(0)}° 회전 필요 — 2s 정지 후 회전 → ${nextNodeId}`);
+
+            // Phase 1: 2초 정지
+            for (let i = 0; i < 3; i++) this.fmsService.publishStop(robotId);
+
+            const stopTimer = setTimeout(() => {
+              // Phase 2: 회전 goal 전송 (현재 위치에서 outYaw 방향으로 in-place 회전)
+              this.fmsService.publishGoal(robotId, node.x, node.y, outYaw);
+              this.logger.log(`[코너] ${robotId} 회전 시작 → ${(outYaw * 180 / Math.PI).toFixed(0)}° (${nextNodeId})`);
+
+              // 안전 타임아웃: 회전이 CORNER_SAFETY_MS 이상 걸리면 강제 진행
+              const safetyTimer = setTimeout(() => {
+                const s = this.rotatingState.get(robotId);
+                if (s?.nextNodeId === nextNodeId) {
+                  this.logger.warn(`[코너] ${robotId} 회전 타임아웃 — 강제 진행 → ${nextNodeId}`);
+                  this.rotatingState.delete(robotId);
+                  void this.sendNodeActionGoal(robotId, nextNodeId);
+                }
+              }, TaskManagerService.CORNER_SAFETY_MS);
+
+              this.rotatingState.set(robotId, { nextNodeId, targetYaw: outYaw, phase: 'rotating', timer: safetyTimer });
+            }, TaskManagerService.CORNER_WAIT_MS);
+
+            this.rotatingState.set(robotId, { nextNodeId, targetYaw: outYaw, phase: 'stopping', timer: stopTimer });
+            return;
+          }
+        }
+        await this.sendNodeActionGoal(robotId, nextNodeId);
+      }
+    } finally {
+      this.waypointProcessing.delete(robotId);
     }
   }
 
@@ -586,9 +623,6 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
         // 실제 DB 상태를 읽어서 emit (hardcode IDLE 방지 → MOVING 중이면 MOVING 유지)
         const actualRobot = await this.robotService.findById(robotId);
         const actualStatus = actualRobot?.status ?? 'IDLE';
-        if (wasOnline === false) {
-          this.emit({ type: 'info', robotId, message: `${robotId} 온라인 복귀`, requiresAction: false });
-        }
         this.server?.emit('robot_status_changed', { robot_id: robotId, status: actualStatus });
 
       } else if (!isNowOnline && wasOnline !== false) {
@@ -687,6 +721,13 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
         continue;
       }
 
+      this.logger.log(
+        `[dispatch] ${robotId} 태스크 ${taskId} 배정 시작` +
+        ` | location=${robot.location ?? 'null'}` +
+        ` | AMCL pos=${cache?.posX != null ? `(${cache.posX.toFixed(2)},${(cache.posY ?? 0).toFixed(2)})` : 'N/A'}` +
+        ` | target=${task.targetNode}`,
+      );
+
       // ── 경로 탐색 ─────────────────────────────────────────────────────────
       let pathQueue: string[] = [];
 
@@ -726,6 +767,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
       if (!startNodeId || startNodeId === task.targetNode) {
         // 출발 노드가 없거나 이미 목적지
+        this.logger.log(`[dispatch] ${robotId} startNode=${startNodeId ?? 'null'} — 목적지 직행 [${task.targetNode}]`);
         pathQueue = [task.targetNode];
       } else {
         const rawPath = await this.topologyService.findPath(startNodeId, task.targetNode, myMapId);
@@ -737,6 +779,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
           continue;
         }
         pathQueue = rawPath.slice(1);
+        this.logger.log(`[dispatch] ${robotId} 경로 확정: ${startNodeId} → ${task.targetNode} = [${pathQueue.join('→')}]`);
       }
 
       this.activeTasks.set(robotId, taskId);
@@ -763,6 +806,13 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     robotId: string,
     nodeId: string,
   ): Promise<void> {
+    const last = this.lastSentGoal.get(robotId);
+    if (last?.nodeId === nodeId && Date.now() - last.ts < 300) {
+      this.logger.debug(`[sendNodeGoal] ${robotId} → ${nodeId} 중복 스킵 (${Date.now() - last.ts}ms)`);
+      return;
+    }
+    this.lastSentGoal.set(robotId, { nodeId, ts: Date.now() });
+
     const node = await this.topologyService.findNodeById(nodeId);
     if (!node) {
       this.logger.warn(`[sendNodeGoal] 노드 "${nodeId}" DB에 없음`);
