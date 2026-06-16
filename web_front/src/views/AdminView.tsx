@@ -117,7 +117,7 @@ function RobotSection({ liveStatuses }: { liveStatuses: Record<string, string> }
 
  const load = useCallback(async () => {
  setLoading(true);
- try { setRobots(await api<Robot[]>("/api/fleet/robots")); } catch {}
+ try { setRobots(await api<Robot[]>("/api/fleet/robots")); } catch (e) { setErr(`로봇 로드 실패: ${String(e)}`); }
  setLoading(false);
  }, []);
 
@@ -263,7 +263,7 @@ function MapSection() {
 
  const load = useCallback(async () => {
  setLoading(true);
- try { setMaps(await api<FleetMap[]>("/api/fleet/maps")); } catch {}
+ try { setMaps(await api<FleetMap[]>("/api/fleet/maps")); } catch (e) { setErr(`맵 로드 실패: ${String(e)}`); }
  setLoading(false);
  }, []);
 
@@ -475,7 +475,7 @@ function NodeSection() {
  setNodes(all);
  // 노드에서 발견된 map_id도 목록에 추가
  setMaps(prev => [...new Set([...prev, ...all.map(n => n.map_id)])]);
- } catch {}
+ } catch (e) { setErr(`노드 로드 실패: ${String(e)}`); }
  setLoading(false);
  }, [mapFilter]);
 
@@ -657,7 +657,7 @@ function EdgeSection() {
  try {
  const all = await api<FleetEdge[]>("/api/fleet/topology/edges" + (mapFilter ? `?map_id=${mapFilter}` : ""));
  setEdges(all);
- } catch {}
+ } catch (e) { setErr(`엣지 로드 실패: ${String(e)}`); }
  setLoading(false);
  }, [mapFilter]);
 
@@ -885,7 +885,7 @@ function TaskSection() {
  setLoading(true);
  try {
  setTasks(await api<Task[]>("/api/fms/tasks" + (statusFilter ? `?status=${statusFilter}` : "") + (!statusFilter ? "?limit=100" : "&limit=100")));
- } catch {}
+ } catch (e) { setErr(`태스크 로드 실패: ${String(e)}`); }
  setLoading(false);
  }, [statusFilter]);
 
