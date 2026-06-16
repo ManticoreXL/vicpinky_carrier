@@ -121,6 +121,8 @@ export default function RobotSidebar({
  );
 }
 
+const ONLINE_THRESHOLD_MS = 5000;
+
 function RobotItem({
  robot, selected, onSelect, rosMessages, liveStatus,
 }: {
@@ -132,6 +134,9 @@ function RobotItem({
 }) {
  const { robot_id } = robot;
  const p = (topic: string) => rosMessages[`/${robot_id}/${topic}`]?.data;
+
+ const odomTs = rosMessages[`/${robot_id}/odom`]?.timestamp ?? 0;
+ const isOnline = odomTs > 0 && Date.now() - odomTs < ONLINE_THRESHOLD_MS;
 
  const batData = p("battery_state") as { percentage?: number } | undefined;
  const batPct = batData?.percentage != null
@@ -174,7 +179,7 @@ function RobotItem({
  <p className="text-[10px] text-white/30 truncate mb-2 pl-3.5">{urdf.modelName}</p>
  )}
 
- {batPct !== null && (
+ {isOnline && batPct !== null && (
  <div className="flex items-center gap-2 pl-3.5">
  <div className="flex-1 h-0.5 bg-white/[0.06] rounded-full overflow-hidden">
  <div
@@ -190,7 +195,7 @@ function RobotItem({
  </div>
  )}
 
- {pos?.x != null && (
+ {isOnline && pos?.x != null && (
  <div className="flex justify-between text-[10px] text-white/25 mt-1.5 pl-3.5">
  <span className="font-semibold tracking-wide">POS</span>
  <span>{pos.x.toFixed(2)}, {(pos.y ?? 0).toFixed(2)}</span>

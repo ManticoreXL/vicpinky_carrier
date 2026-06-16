@@ -51,6 +51,13 @@ export default function FmsView({
  const [mapAssignments, setMapAssignments] = useState<Record<string, string>>({});
  const [form, setForm] = useState({ type: "SUPPLY" as TaskType, targetNode: "", priority: 5, preferredRobotId: "" });
 
+ // rosMessages가 안 바뀌어도 isOnline() 재계산을 위해 주기적 리렌더
+ const [, setTick] = useState(0);
+ useEffect(() => {
+  const id = setInterval(() => setTick(t => t + 1), 2000);
+  return () => clearInterval(id);
+ }, []);
+
  useEffect(() => {
  fetch(`${BACKEND_URL}/api/map/assignments`).then(r => r.json()).then(d => setMapAssignments(d)).catch(() => {});
  }, []);
