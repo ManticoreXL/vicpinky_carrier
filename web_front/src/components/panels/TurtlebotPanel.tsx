@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
-import { PanelProps } from "../../hooks/useRos";
+import { PanelProps, PublishFn } from "../../hooks/useRos";
 import {
  RosMessage, CmdVelPayload,
  ActionGoalPayload, ActionFeedback, ActionResult, ActiveGoals,
@@ -330,6 +330,9 @@ export default function TurtlebotPanel({
  actionResults={actionResults}
  />
 
+ {/* ── 음성 명령 (/speak_cmd) ─────────────────────────────────────── */}
+ <SpeakCmdPanel botId={botId} publish={publish} />
+
  </PanelCard>
  </div>
  );
@@ -380,5 +383,106 @@ function KeyCap({ label, sub }: { label: string; sub: string }) {
  </div>
  <span className="text-white/30 text-xs ">{sub}</span>
  </div>
+ );
+}
+
+// ── SpeakCmdPanel ─────────────────────────────────────────────────────────────
+// 마이크로 말하면 STT → /{botId}/speak_cmd (std_msgs/String) 자동 발행
+
+type SpeakStatus = "idle" | "listening" | "sent";
+
+function SpeakCmdPanel({ botId, publish }: { botId: string; publish: PublishFn }) {
+ const [lastText, setLastText] = useState("");
+ const [status, setStatus]     = useState<SpeakStatus>("idle");
+ const sttTarget = `speak-cmd-${botId}`;
+
+ // AiAssistant로부터 STT 결과 수신
+ useEffect(() => {
+  const onStt = (e: Event) => {
+   const ce = e as CustomEvent<{ target?: string; text?: string }>;
+   if (ce.detail?.target !== sttTarget || !ce.detail?.text) return;
+   const text = ce.detail.text.trim();
+   if (!text) return;
+   setLastText(text);
+   setStatus("sent");
+   publish(`/${botId}/speak_cmd`, "std_msgs/String", { data: text });
+   setTimeout(() => setStatus("idle"), 2000);
+  };
+  window.addEventListener("stt-result", onStt);
+  return () => window.removeEventListener("stt-result", onStt);
+ }, [botId, publish, sttTarget]);
+
+ // listening 상태 동기화 (start-stt 발행 직후)
+ useEffect(() => {
+  const onStart = (e: Event) => {
+   const ce = e as CustomEvent<{ target?: string }>;
+   if (ce.detail?.target === sttTarget) setStatus("listening");
+  };
+  window.addEventListener("start-stt", onStart);
+  return () => window.removeEventListener("start-stt", onStart);
+ }, [sttTarget]);
+
+ const startMic = () => {
+  window.dispatchEvent(new CustomEvent("start-stt", { detail: { target: sttTarget } }));
+ };
+
+ const resend = () => {
+  if (!lastText) return;
+  publish(`/${botId}/speak_cmd`, "std_msgs/String", { data: lastText });
+  setStatus("sent");
+  setTimeout(() => setStatus("idle"), 2000);
+ };
+
+ return (
+  <Section label="음성 명령 (/speak_cmd)">
+   <div className="flex flex-col gap-3">
+    <div className="flex items-center gap-2">
+     {/* 마이크 버튼 */}
+     <button
+      onClick={startMic}
+      disabled={status === "listening"}
+      title="음성 인식 시작"
+      className={`w-9 h-9 flex-none border flex items-center justify-center transition-all ${
+       status === "listening"
+        ? "border-purple-500/40 bg-purple-500/10 text-purple-400 animate-pulse cursor-not-allowed"
+        : "border-white/[0.05] bg-transparent text-white/40 hover:border-purple-500/30 hover:text-purple-400"
+      }`}
+     >
+      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
+        d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+      </svg>
+     </button>
+
+     {/* 상태 표시 */}
+     <span className={`flex-1 text-xs ${
+      status === "listening" ? "text-purple-400 animate-pulse" :
+      status === "sent"      ? "text-green-500" : "text-white/30"
+     }`}>
+      {status === "listening" ? "인식 중…" :
+       status === "sent"      ? "전송 완료" :
+       lastText               ? lastText : "마이크를 눌러 말하세요"}
+     </span>
+
+     {/* 재전송 버튼 */}
+     {lastText && status === "idle" && (
+      <button
+       onClick={resend}
+       className="px-3 py-1 text-xs border border-white/[0.05] bg-transparent text-white/40
+                  hover:text-white/70 hover:border-white/[0.1] transition-all"
+      >
+       재전송
+      </button>
+     )}
+    </div>
+
+    {/* 마지막 인식 텍스트 (별도 행) */}
+    {lastText && status !== "idle" && (
+     <div className="bg-black/20 border border-white/[0.05] px-3 py-2 text-xs text-white/50 break-all">
+      {lastText}
+     </div>
+    )}
+   </div>
+  </Section>
  );
 }

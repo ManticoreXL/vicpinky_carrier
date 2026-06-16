@@ -59,6 +59,12 @@ topics:
     to_domain: 44
     remap: /goal_pose
 
+  /tb3_04/speak_cmd: # 음성 명령 TTS 전송용
+    type: std_msgs/msg/String
+    from_domain: 49
+    to_domain: 44
+    remap: /speak_cmd
+
 actions:
 
   # ── DOWNLINK ACTIONS: 관제탑(49)에서 로봇(44) 행동 제어 및 도착 여부 추적 ──
