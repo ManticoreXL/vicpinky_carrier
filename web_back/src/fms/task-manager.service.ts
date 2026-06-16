@@ -12,8 +12,8 @@ import type { RosMessage } from '../ros/ros.types';
 
 const LOOP_MS          = 2_000;
 const ONLINE_MS        = 5_000;
-const OFFLINE_AFTER_MS = 10_000;
-const AMCL_TIMEOUT_MS  = 10_000; // nav2 재시작 감지 — amcl_pose 없을 때
+const OFFLINE_AFTER_MS = 20_000; // 느린 로봇 / WiFi 혼잡 대비 20s
+const AMCL_TIMEOUT_MS  = 20_000; // nav2 재시작 감지 — amcl_pose 없을 때
 const FALL_THRESH_RAD  = 0.5;    // ~28.6° 이상 기울면 전복 판정
 
 // 위치 감지 반경 (노드 위주 경로)
@@ -448,12 +448,18 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
       const twoAheadId = pathQueue[1];
 
-      // 다른 활성 로봇 중 twoAheadId에 위치한 로봇 탐색
+      // 다른 활성 로봇 중 twoAheadId를 실제로 점유 중인 로봇 탐색
+      // DB location 대신 AMCL 캐시 실좌표로 판단 → dispatch 직후 오탐 방지
+      const twoAheadNode = await this.topologyService.findNodeById(twoAheadId);
       let blockerId: string | null = null;
-      for (const [otherId] of this.activeTasks) {
-        if (otherId === robotId) continue;
-        const other = await this.robotService.findById(otherId);
-        if (other?.location === twoAheadId) { blockerId = otherId; break; }
+      if (twoAheadNode) {
+        for (const [otherId] of this.activeTasks) {
+          if (otherId === robotId) continue;
+          const otherCache = this.robotCache.get(otherId);
+          if (!otherCache?.posX) continue;
+          const dist = Math.hypot(otherCache.posX - twoAheadNode.x, (otherCache.posY ?? 0) - twoAheadNode.y);
+          if (dist < NODE_PASS_M) { blockerId = otherId; break; }
+        }
       }
 
       if (blockerId) {
