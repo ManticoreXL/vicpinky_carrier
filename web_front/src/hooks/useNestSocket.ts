@@ -91,7 +91,7 @@ export interface FmsDispatchPayload {
 
 export interface TaskManagerAlert {
  id: string;
- type: 'battery' | 'robot_offline' | 'task_failed' | 'assigned' | 'completed' | 'info';
+ type: 'fall' | 'robot_offline' | 'task_failed' | 'assigned' | 'completed' | 'info';
  taskId?: string;
  robotId?: string;
  message: string;

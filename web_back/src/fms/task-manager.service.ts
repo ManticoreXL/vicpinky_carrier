@@ -13,7 +13,8 @@ import type { RosMessage } from '../ros/ros.types';
 const LOOP_MS          = 2_000;
 const ONLINE_MS        = 5_000;
 const OFFLINE_AFTER_MS = 30_000;
-const BATTERY_MIN_PCT  = 20;
+const AMCL_TIMEOUT_MS  = 10_000; // nav2 재시작 감지 — amcl_pose 없을 때
+const FALL_THRESH_RAD  = 0.5;    // ~28.6° 이상 기울면 전복 판정
 
 // 위치 감지 반경 (노드 위주 경로)
 const NODE_PASS_M   = 1.5;  // 중간 노드 통과 감지
@@ -23,7 +24,7 @@ const NODE_ARRIVE_M = 0.5;  // 최종 목적지 도착 감지 (action result 백
 
 export interface TaskManagerAlert {
   id: string;
-  type: 'battery' | 'robot_offline' | 'task_failed' | 'assigned' | 'completed' | 'info';
+  type: 'fall' | 'robot_offline' | 'task_failed' | 'assigned' | 'completed' | 'info';
   taskId?: string;
   robotId?: string;
   message: string;
@@ -32,11 +33,12 @@ export interface TaskManagerAlert {
 }
 
 interface RobotCache {
-  lastSeen:   number;
-  batteryPct: number | null;
-  posX:       number | null;
-  posY:       number | null;
-  yaw:        number | null;
+  lastSeen:    number;
+  batteryPct:  number | null;
+  posX:        number | null;
+  posY:        number | null;
+  yaw:         number | null;
+  lastAmclMs:  number | null; // amcl_pose 마지막 수신 시각
 }
 
 // ── 서비스 ────────────────────────────────────────────────────────────────────
@@ -54,8 +56,8 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   private readonly homePositions    = new Map<string, { x: number; y: number; yaw: number }>();
   // robotId → ROS 상태 캐시
   private readonly robotCache       = new Map<string, RobotCache>();
-  // 배터리 알림 중복 방지
-  private readonly lastBatteryAlert = new Map<string, number>();
+  // 전복 알림 중복 방지 (30s 쿨다운)
+  private readonly lastFallAlert    = new Map<string, number>();
   // robotId → 온라인 여부 (undefined = 미확인)
   private readonly robotOnlineState = new Map<string, boolean>();
   // robotId → 코너 회전 후 대기 타이머
@@ -301,7 +303,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     const botMatch = msg.topic.match(/^\/([^/]+)\//);
     if (botMatch) {
       const id   = botMatch[1];
-      const prev = this.robotCache.get(id) ?? { lastSeen: 0, batteryPct: null, posX: null, posY: null, yaw: null };
+      const prev = this.robotCache.get(id) ?? { lastSeen: 0, batteryPct: null, posX: null, posY: null, yaw: null, lastAmclMs: null };
       this.robotCache.set(id, { ...prev, lastSeen: now });
     }
 
@@ -310,7 +312,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       const id  = batMatch[1];
       let pct   = (msg.data as { percentage?: number })?.percentage ?? null;
       if (pct != null && pct <= 1.01) pct *= 100;
-      const prev = this.robotCache.get(id) ?? { lastSeen: now, batteryPct: null, posX: null, posY: null, yaw: null };
+      const prev = this.robotCache.get(id) ?? { lastSeen: now, batteryPct: null, posX: null, posY: null, yaw: null, lastAmclMs: null };
       this.robotCache.set(id, { ...prev, batteryPct: pct });
     }
 
@@ -321,13 +323,37 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       const pos      = poseData?.position;
       const ori      = poseData?.orientation;
       if (pos?.x != null) {
-        const prev = this.robotCache.get(id) ?? { lastSeen: now, batteryPct: null, posX: null, posY: null, yaw: null };
+        const prev = this.robotCache.get(id) ?? { lastSeen: now, batteryPct: null, posX: null, posY: null, yaw: null, lastAmclMs: null };
         let yaw = 0;
         if (ori) {
           yaw = Math.atan2(2 * ((ori.w ?? 1) * (ori.z ?? 0) + (ori.x ?? 0) * (ori.y ?? 0)), 1 - 2 * ((ori.y ?? 0) ** 2 + (ori.z ?? 0) ** 2));
         }
-        this.robotCache.set(id, { ...prev, posX: pos.x, posY: pos.y ?? 0, yaw });
+        this.robotCache.set(id, { ...prev, posX: pos.x, posY: pos.y ?? 0, yaw, lastAmclMs: now });
         void this.checkWaypointArrival(id, pos.x, pos.y ?? 0, yaw);
+      }
+    }
+
+    // IMU — 전복 감지 (roll/pitch > FALL_THRESH_RAD)
+    const imuMatch = msg.topic.match(/^\/([^/]+)\/imu$/);
+    if (imuMatch) {
+      const id  = imuMatch[1];
+      const ori = (msg.data as { orientation?: { x?: number; y?: number; z?: number; w?: number } })?.orientation;
+      if (ori) {
+        const x = ori.x ?? 0, y = ori.y ?? 0, z = ori.z ?? 0, w = ori.w ?? 1;
+        const roll  = Math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y));
+        const sinp  = 2 * (w * y - z * x);
+        const pitch = Math.abs(sinp) >= 1 ? Math.sign(sinp) * Math.PI / 2 : Math.asin(sinp);
+        if (Math.abs(roll) > FALL_THRESH_RAD || Math.abs(pitch) > FALL_THRESH_RAD) {
+          const last = this.lastFallAlert.get(id) ?? 0;
+          if (now - last > 30_000) {
+            this.lastFallAlert.set(id, now);
+            this.emit({
+              type: 'fall', robotId: id,
+              message: `${id} 전복 감지 — roll ${(roll * 180 / Math.PI).toFixed(0)}° / pitch ${(pitch * 180 / Math.PI).toFixed(0)}°`,
+              requiresAction: true,
+            });
+          }
+        }
       }
     }
   }
@@ -336,6 +362,43 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   // 노드 간 0.5m 간격의 좌표 웨이포인트를 삽입해 엣지를 정확히 따라가게 함
 
   // ── 경유 노드 통과 감지 (위치 추적 전용) ────────────────────────────────
+
+  // ── AMCL 타임아웃 감지 (nav2 재시작) ────────────────────────────────────
+  //
+  // amcl_pose가 AMCL_TIMEOUT_MS 이상 안 오면 nav2가 꺼진 것으로 판단.
+  // 활성 태스크를 FAILED 처리하고 로봇을 IDLE로 복귀.
+
+  private async checkAmclTimeout() {
+    if (!this.server) return;
+    const now = Date.now();
+
+    for (const [robotId, taskId] of this.activeTasks) {
+      const cache = this.robotCache.get(robotId);
+      if (!cache || cache.lastAmclMs == null) continue; // 한 번도 amcl 못 받은 로봇은 스킵
+
+      if (now - cache.lastAmclMs < AMCL_TIMEOUT_MS) continue;
+
+      this.logger.warn(`[AMCL타임아웃] ${robotId} — ${AMCL_TIMEOUT_MS / 1000}s간 amcl_pose 없음 → nav2 재시작 추정, 태스크 FAILED`);
+
+      this.activeTasks.delete(robotId);
+      clearTimeout(this.cornerTimeouts.get(robotId));
+      this.cornerTimeouts.delete(robotId);
+      this.stoppedForNode.delete(robotId);
+
+      const task = await this.fmsService.getTask(taskId);
+      if (task && task.status !== TaskStatus.COMPLETED && task.status !== TaskStatus.FAILED) {
+        await this.fmsService.setStatus(taskId, TaskStatus.FAILED, this.server, { completedAt: new Date() });
+      }
+      await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
+
+      this.emit({
+        type: 'info', taskId, robotId,
+        message: `${robotId} nav2 재시작 감지 — 태스크 취소, 재포징 후 재시작 필요`,
+        requiresAction: true,
+      });
+      this.server.emit('robot_status_changed', { robot_id: robotId, status: 'IDLE' });
+    }
+  }
 
   // ── 2-ahead 노드 충돌 감지 ──────────────────────────────────────────────
   //
@@ -456,6 +519,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     if (!this.running) return;
     try {
       await this.syncOnlineStatus();
+      await this.checkAmclTimeout();
       await this.process();
       await this.checkNodeConflicts();
     } catch (e) { this.logger.error('루프 오류', e); }
@@ -571,19 +635,6 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       if (!online) {
         this.logger.warn(`[dispatch] ${robotId} 오프라인 — 건너뜀`);
         await this.fmsService.setWaitReason(taskId, '로봇 오프라인 — 재연결 대기');
-        freeRobots.unshift(robot);
-        continue;
-      }
-
-      // 배터리 확인
-      const bat = cache?.batteryPct;
-      if (bat != null && bat < BATTERY_MIN_PCT) {
-        await this.fmsService.setWaitReason(taskId, `배터리 부족 (${bat.toFixed(0)}%)`);
-        const lastAlert = this.lastBatteryAlert.get(robotId) ?? 0;
-        if (Date.now() - lastAlert > 60_000) {
-          this.lastBatteryAlert.set(robotId, Date.now());
-          this.emit({ type: 'battery', taskId, robotId, message: `${robotId} 배터리 부족 (${bat.toFixed(0)}%)`, requiresAction: true });
-        }
         freeRobots.unshift(robot);
         continue;
       }
