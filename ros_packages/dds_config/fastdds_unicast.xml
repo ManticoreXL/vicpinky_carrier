@@ -15,6 +15,7 @@
 -->
 <dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
   <profiles>
+
     <participant profile_name="unicast_profile" is_default_profile="true">
       <rtps>
         <builtin>
@@ -47,5 +48,6 @@
         </builtin>
       </rtps>
     </participant>
+
   </profiles>
 </dds>

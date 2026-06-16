@@ -7,141 +7,84 @@ topics:
     from_domain: 42
     to_domain: 49
     remap: /tb3_02/scan
-    qos:
-      reliability: best_effort
-      history: keep_last
-      depth: 1
 
   /odom:
     type: nav_msgs/msg/Odometry
     from_domain: 42
     to_domain: 49
     remap: /tb3_02/odom
-    qos:
-      reliability: best_effort
-      history: keep_last
-      depth: 1
 
   /battery_state:
     type: sensor_msgs/msg/BatteryState
     from_domain: 42
     to_domain: 49
     remap: /tb3_02/battery_state
-    qos:
-      reliability: best_effort
-      history: keep_last
-      depth: 1
 
   /imu:
     type: sensor_msgs/msg/Imu
     from_domain: 42
     to_domain: 49
     remap: /tb3_02/imu
-    qos:
-      reliability: best_effort
-      history: keep_last
-      depth: 1
 
   /joint_states:
     type: sensor_msgs/msg/JointState
     from_domain: 42
     to_domain: 49
     remap: /tb3_02/joint_states
-    qos:
-      reliability: best_effort
-      history: keep_last
-      depth: 1
 
   /magnetic_field:
     type: sensor_msgs/msg/MagneticField
     from_domain: 42
     to_domain: 49
     remap: /tb3_02/magnetic_field
-    qos:
-      reliability: best_effort
-      history: keep_last
-      depth: 1
 
   /sensor_state:
     type: turtlebot3_msgs/msg/SensorState
     from_domain: 42
     to_domain: 49
     remap: /tb3_02/sensor_state
-    qos:
-      reliability: best_effort
-      history: keep_last
-      depth: 1
 
   /robot_description:
     type: std_msgs/msg/String
     from_domain: 42
     to_domain: 49
     remap: /tb3_02/robot_description
-    qos:
-      reliability: reliable
-      history: keep_last
-      depth: 1
 
   /mode:
     type: std_msgs/msg/String
     from_domain: 42
     to_domain: 49
     remap: /tb3_02/mode
-    qos:
-      reliability: reliable
-      history: keep_last
-      depth: 10
 
   /yolo/person_detected:
     type: std_msgs/msg/Bool
     from_domain: 42
     to_domain: 49
     remap: /tb3_02/yolo/person_detected
-    qos:
-      reliability: best_effort
-      history: keep_last
-      depth: 1
 
   /tf:
     type: tf2_msgs/msg/TFMessage
     from_domain: 42
     to_domain: 49
     remap: /tb3_02/tf
-    qos:
-      reliability: best_effort
-      history: keep_last
-      depth: 10
 
   /tf_static:
     type: tf2_msgs/msg/TFMessage
     from_domain: 42
     to_domain: 49
     remap: /tb3_02/tf_static
-    qos:
-      reliability: reliable
-      history: keep_last
-      depth: 1
 
-  # ── UPLINK: nav2 상태 ──
   /amcl_pose:
     type: geometry_msgs/msg/PoseWithCovarianceStamped
     from_domain: 42
     to_domain: 49
     remap: /tb3_02/amcl_pose
-    qos:
-      reliability: reliable
-      history: keep_last
-      depth: 1
 
   /plan:
     type: nav_msgs/msg/Path
     from_domain: 42
     to_domain: 49
     remap: /tb3_02/plan
-    qos:
-      reliability: reliable
-      history: keep_last
-      depth: 1
 
   # ── DOWNLINK: 관제탑(49)의 꼬리표 달린 명령을 로봇(42)에게 순정으로 떼서 주기 ──
   /tb3_02/cmd_vel:
@@ -149,40 +92,24 @@ topics:
     from_domain: 49
     to_domain: 42
     remap: /cmd_vel
-    qos:
-      reliability: best_effort
-      history: keep_last
-      depth: 1
 
   /tb3_02/cmd:
     type: std_msgs/msg/String
     from_domain: 49
     to_domain: 42
     remap: /cmd
-    qos:
-      reliability: reliable
-      history: keep_last
-      depth: 10
 
   /tb3_02/goal_pose:
     type: geometry_msgs/msg/PoseStamped
     from_domain: 49
     to_domain: 42
     remap: /goal_pose
-    qos:
-      reliability: reliable
-      history: keep_last
-      depth: 1
 
   /tb3_02/initialpose:
     type: geometry_msgs/msg/PoseWithCovarianceStamped
     from_domain: 49
     to_domain: 42
     remap: /initialpose
-    qos:
-      reliability: reliable
-      history: keep_last
-      depth: 1
 
 services:
 
