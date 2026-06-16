@@ -1,106 +1,69 @@
 name: domain_bridge_tb3_02
 topics:
 
-  # ── UPLINK: 로봇(42) → 관제탑(49) ──────────────────────────────────────────
-  /scan:
-    type: sensor_msgs/msg/LaserScan
-    from_domain: 42
-    to_domain: 49
-    remap: /tb3_02/scan
-
+  # ── UPLINK: 로봇(42) 상태를 관제탑(49) 웹 UI로 전송 ──
   /odom:
     type: nav_msgs/msg/Odometry
     from_domain: 42
     to_domain: 49
     remap: /tb3_02/odom
 
-  /battery_state:
-    type: sensor_msgs/msg/BatteryState
+  /tf: # 로봇의 실시간 부드러운 움직임 표시 (필수)
+    type: tf2_msgs/msg/TFMessage
     from_domain: 42
     to_domain: 49
-    remap: /tb3_02/battery_state
+    remap: /tb3_02/tf
 
-  /imu:
-    type: sensor_msgs/msg/Imu
+  /tf_static:
+    type: tf2_msgs/msg/TFMessage
     from_domain: 42
     to_domain: 49
-    remap: /tb3_02/imu
+    remap: /tb3_02/tf_static
 
-  /amcl_pose:
+  /amcl_pose: # 지도 위 로봇의 현재 정확한 좌표 (필수)
     type: geometry_msgs/msg/PoseWithCovarianceStamped
     from_domain: 42
     to_domain: 49
     remap: /tb3_02/amcl_pose
 
-  /plan:
+  /plan: # 로봇이 향하고 있는 경로 선 표시 (필수)
     type: nav_msgs/msg/Path
     from_domain: 42
     to_domain: 49
     remap: /tb3_02/plan
 
-  # ── DOWNLINK: 관제탑(49) → 로봇(42) ────────────────────────────────────────
-  /tb3_02/cmd_vel:
+  /battery_state: # FMS 배터리 관제용 (필수)
+    type: sensor_msgs/msg/BatteryState
+    from_domain: 42
+    to_domain: 49
+    remap: /tb3_02/battery_state
+
+  # ── DOWNLINK: 관제탑(49)에서 로봇(42)으로 명령 전송 ──
+  /tb3_02/cmd_vel: # 비상 정지 및 조이스틱 수동 제어용
     type: geometry_msgs/msg/TwistStamped
     from_domain: 49
     to_domain: 42
     remap: /cmd_vel
+    qos:
+      reliability: reliable
 
-  /tb3_02/cmd:
-    type: std_msgs/msg/String
-    from_domain: 49
-    to_domain: 42
-    remap: /cmd
-
-  /tb3_02/goal_pose:
-    type: geometry_msgs/msg/PoseStamped
-    from_domain: 49
-    to_domain: 42
-    remap: /goal_pose
-
-  /tb3_02/initialpose:
+  /tb3_02/initialpose: # 서버에서 초기 위치 집어주기 (필수)
     type: geometry_msgs/msg/PoseWithCovarianceStamped
     from_domain: 49
     to_domain: 42
     remap: /initialpose
 
-services:
-
-  # ── DOWNLINK SERVICES: 관제탑(49)에서 로봇(42)의 서비스 호출하기 ──
-  /tb3_02/reset:
-    type: std_srvs/srv/Trigger
+  /tb3_02/goal_pose: # 단순 목적지 전송용
+    type: geometry_msgs/msg/PoseStamped
     from_domain: 49
     to_domain: 42
-    remap: /reset
-
-  /tb3_02/reset_odometry:
-    type: std_srvs/srv/Trigger
-    from_domain: 49
-    to_domain: 42
-    remap: /reset_odometry
-
-  /tb3_02/motor_power:
-    type: std_srvs/srv/SetBool
-    from_domain: 49
-    to_domain: 42
-    remap: /motor_power
-
-  /tb3_02/sound:
-    type: turtlebot3_msgs/srv/Sound
-    from_domain: 49
-    to_domain: 42
-    remap: /sound
-
-  /tb3_02/run_diagnosis:
-    type: turtlebot3_custom_msgs/srv/SelfDiagnosis
-    from_domain: 49
-    to_domain: 42
-    remap: /run_diagnosis
+    remap: /goal_pose
 
 actions:
 
-  # ── DOWNLINK ACTIONS: 관제탑(40)에서 로봇(42)의 nav2 action 호출 ──
-  /tb3_02/navigate_to_pose:
+  # ── DOWNLINK ACTIONS: 관제탑(49)에서 로봇(42) 행동 제어 및 도착 여부 추적 ──
+  /tb3_02/navigate_to_pose: # 목적지 할당 및 피드백(도착/실패) 수신용 (필수)
     type: nav2_msgs/action/NavigateToPose
-    from_domain: 40
+    from_domain: 49  # 💡 40으로 오타나 있던 도메인 ID 수정 완료
     to_domain: 42
     remap: /navigate_to_pose
