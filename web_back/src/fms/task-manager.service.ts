@@ -12,7 +12,7 @@ import type { RosMessage } from '../ros/ros.types';
 
 const LOOP_MS          = 2_000;
 const ONLINE_MS        = 5_000;
-const OFFLINE_AFTER_MS = 30_000;
+const OFFLINE_AFTER_MS = 10_000;
 const AMCL_TIMEOUT_MS  = 10_000; // nav2 재시작 감지 — amcl_pose 없을 때
 const FALL_THRESH_RAD  = 0.5;    // ~28.6° 이상 기울면 전복 판정
 
