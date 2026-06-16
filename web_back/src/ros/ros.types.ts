@@ -57,19 +57,13 @@ const TB3_IDS = ['tb3_01', 'tb3_02', 'tb3_03', 'tb3_04'] as const;
 
 function tb3Topics(id: string): RosTopicConfig[] {
   return [
-    { name: `/${id}/cmd_vel`,            messageType: 'geometry_msgs/TwistStamped' },
-    { name: `/${id}/imu`,               messageType: 'sensor_msgs/Imu' },
-    { name: `/${id}/battery_state`,     messageType: 'sensor_msgs/BatteryState' },
-    { name: `/${id}/joint_states`,      messageType: 'sensor_msgs/JointState' },
-    { name: `/${id}/magnetic_field`,    messageType: 'sensor_msgs/MagneticField' },
-    { name: `/${id}/odom`,              messageType: 'nav_msgs/Odometry' },
-    { name: `/${id}/robot_description`,    messageType: 'std_msgs/String' },
-    { name: `/${id}/scan`,                messageType: 'sensor_msgs/LaserScan' },
-    { name: `/${id}/sensor_state`,        messageType: 'turtlebot3_msgs/SensorState' },
-    { name: `/${id}/mode`,                messageType: 'std_msgs/String' },
-    { name: `/${id}/yolo/person_detected`, messageType: 'std_msgs/Bool' },
-    { name: `/${id}/amcl_pose`,           messageType: 'geometry_msgs/PoseWithCovarianceStamped' },
-    { name: `/${id}/plan`,               messageType: 'nav_msgs/Path' },
+    { name: `/${id}/cmd_vel`,   messageType: 'geometry_msgs/TwistStamped' },
+    { name: `/${id}/odom`,      messageType: 'nav_msgs/Odometry' },
+    { name: `/${id}/battery_state`, messageType: 'sensor_msgs/BatteryState' },
+    { name: `/${id}/imu`,       messageType: 'sensor_msgs/Imu' },
+    { name: `/${id}/scan`,      messageType: 'sensor_msgs/LaserScan' },
+    { name: `/${id}/amcl_pose`, messageType: 'geometry_msgs/PoseWithCovarianceStamped' },
+    { name: `/${id}/plan`,      messageType: 'nav_msgs/Path' },
   ];
 }
 
