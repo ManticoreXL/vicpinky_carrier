@@ -81,7 +81,10 @@ export class RosService implements OnModuleInit, OnModuleDestroy {
       const id = parsed['id'] as string;
       const cb = this.serviceCallbacks.get(id);
       if (cb) {
-        cb(parsed['values']);
+        // parsed['result']: rosbridge 레벨 성공/실패 (true/false)
+        // parsed['values']: 실제 서비스 응답 데이터
+        const values = (parsed['values'] as Record<string, unknown>) ?? {};
+        cb({ ...values, _ok: parsed['result'] as boolean });
         this.serviceCallbacks.delete(id);
       }
     }

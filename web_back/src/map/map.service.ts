@@ -283,8 +283,12 @@ export class MapService implements OnModuleInit {
         request: { map_url: mapUrl },
       },
       (res) => {
-        const r = res as { result?: number };
-        this.logger.log(`[${robotId}] load_map (initialpose용) → ${mapName} (result=${r?.result})`);
+        const r = res as { result?: number; _ok?: boolean };
+        if (r?._ok === false) {
+          this.logger.warn(`[${robotId}] load_map 실패 — 서비스 없음 (도메인 브릿지 미재시작 또는 nav2 미실행): ${mapName}`);
+        } else {
+          this.logger.log(`[${robotId}] load_map → ${mapName} (result=${r?.result ?? 'ok'})`);
+        }
       },
     );
   }

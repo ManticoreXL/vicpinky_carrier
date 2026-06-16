@@ -7,12 +7,20 @@ topics:
     from_domain: 41
     to_domain: 49
     remap: /tb3_01/scan
+    qos:
+      reliability: best_effort
+      history: keep_last
+      depth: 1
 
   /odom:
     type: nav_msgs/msg/Odometry
     from_domain: 41
     to_domain: 49
     remap: /tb3_01/odom
+    qos:
+      reliability: best_effort
+      history: keep_last
+      depth: 1
 
   /battery_state:
     type: sensor_msgs/msg/BatteryState
@@ -25,6 +33,10 @@ topics:
     from_domain: 41
     to_domain: 49
     remap: /tb3_01/imu
+    qos:
+      reliability: best_effort
+      history: keep_last
+      depth: 1
 
   /joint_states:
     type: sensor_msgs/msg/JointState
@@ -67,12 +79,20 @@ topics:
     from_domain: 41
     to_domain: 49
     remap: /tb3_01/tf
+    qos:
+      reliability: best_effort
+      history: keep_last
+      depth: 10
 
   /tf_static:
     type: tf2_msgs/msg/TFMessage
     from_domain: 41
     to_domain: 49
     remap: /tb3_01/tf_static
+    qos:
+      reliability: reliable
+      history: keep_last
+      depth: 1
 
   # ── DOWNLINK: 관제탑(49)의 꼬리표 달린 명령을 로봇(41)에게 순정으로 떼서 주기 ──
   /amcl_pose:

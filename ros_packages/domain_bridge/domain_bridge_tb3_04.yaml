@@ -7,12 +7,20 @@ topics:
     from_domain: 44
     to_domain: 49
     remap: /tb3_04/scan
+    qos:
+      reliability: best_effort
+      history: keep_last
+      depth: 1
 
   /odom:
     type: nav_msgs/msg/Odometry
     from_domain: 44
     to_domain: 49
     remap: /tb3_04/odom
+    qos:
+      reliability: best_effort
+      history: keep_last
+      depth: 1
 
   /battery_state:
     type: sensor_msgs/msg/BatteryState
@@ -25,6 +33,10 @@ topics:
     from_domain: 44
     to_domain: 49
     remap: /tb3_04/imu
+    qos:
+      reliability: best_effort
+      history: keep_last
+      depth: 1
 
   /joint_states:
     type: sensor_msgs/msg/JointState
@@ -73,12 +85,20 @@ topics:
     from_domain: 44
     to_domain: 49
     remap: /tb3_04/tf
+    qos:
+      reliability: best_effort
+      history: keep_last
+      depth: 10
 
   /tf_static:
     type: tf2_msgs/msg/TFMessage
     from_domain: 44
     to_domain: 49
     remap: /tb3_04/tf_static
+    qos:
+      reliability: reliable
+      history: keep_last
+      depth: 1
 
   /amcl_pose:
     type: geometry_msgs/msg/PoseWithCovarianceStamped
