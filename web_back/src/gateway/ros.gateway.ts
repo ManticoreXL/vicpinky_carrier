@@ -333,10 +333,10 @@ export class RosGateway
       this.mapService.loadMapOnly(robotId, targetMap);
       // nav2가 맵을 로드하는 시간을 확보한 뒤 initialpose 전송
       setTimeout(() => {
-        void this.taskManager.setInitialPoseAndLocation(robotId, x, y, yaw, mapId);
+        void this.taskManager.setInitialPoseAndLocation(robotId, x, y, yaw, targetMap);
       }, 800);
     } else {
-      void this.taskManager.setInitialPoseAndLocation(robotId, x, y, yaw, mapId);
+      void this.taskManager.setInitialPoseAndLocation(robotId, x, y, yaw, undefined);
     }
   }
 

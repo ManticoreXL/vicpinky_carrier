@@ -150,6 +150,12 @@ services:
     to_domain: 43
     remap: /run_diagnosis
 
+  /tb3_03/map_server/load_map:
+    type: nav2_msgs/srv/LoadMap
+    from_domain: 49
+    to_domain: 43
+    remap: /map_server/load_map
+
 actions:
 
   # ── DOWNLINK ACTIONS: 관제탑(40)에서 로봇(43)의 nav2 action 호출 ──
