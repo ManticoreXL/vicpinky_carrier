@@ -151,7 +151,6 @@ export default function App() {
 
  <div className={`${sidebarOpen ? 'flex' : 'hidden'} sm:flex flex-none z-10`}>
  <RobotSidebar
- subscribe={subscribe}
  selectedRobot={selectedRobot}
  onSelect={(id) => { setSelectedRobot(id); setSidebarOpen(false); }}
  rosMessages={displayMessages}

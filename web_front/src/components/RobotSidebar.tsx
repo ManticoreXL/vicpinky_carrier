@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from "react";
-import { SubscribeFn } from "../hooks/useRos";
 import type { RosMessage } from "../hooks/useNestSocket";
 import { BACKEND_URL } from "../config";
 import { useThrottled } from "../hooks/useThrottled";
@@ -10,30 +9,6 @@ interface DbRobot {
  ros_domain_id: number;
  status: "IDLE" | "MOVING" | "WORKING" | "ERROR" | "OFFLINE";
  location?: string | null;
-}
-
-interface UrdfInfo {
- modelName: string;
- linkCount: number;
- jointCount: number;
- jointNames: string[];
-}
-
-function parseUrdf(xmlStr: string): UrdfInfo | null {
- try {
- const parser = new DOMParser();
- const doc = parser.parseFromString(xmlStr, "application/xml");
- if (doc.querySelector("parsererror")) return null;
- const robot = doc.querySelector("robot");
- if (!robot) return null;
- const joints = Array.from(doc.querySelectorAll("joint"));
- return {
- modelName: robot.getAttribute("name") ?? "unknown",
- linkCount: doc.querySelectorAll("link").length,
- jointCount: joints.length,
- jointNames: joints.map(j => j.getAttribute("name") ?? "").filter(Boolean).slice(0, 4),
- };
- } catch { return null; }
 }
 
 const STATUS_COLOR: Record<string, string> = {
@@ -53,7 +28,6 @@ const STATUS_DOT: Record<string, string> = {
 };
 
 interface Props {
- subscribe: SubscribeFn;
  selectedRobot: string;
  onSelect: (id: string) => void;
  rosMessages: Record<string, RosMessage>;
@@ -61,7 +35,7 @@ interface Props {
 }
 
 export default function RobotSidebar({
- subscribe, selectedRobot, onSelect, rosMessages, liveStatuses = {},
+ selectedRobot, onSelect, rosMessages, liveStatuses = {},
 }: Props) {
  const [dbRobots, setDbRobots] = useState<DbRobot[]>([]);
 
@@ -77,16 +51,6 @@ export default function RobotSidebar({
  const t = setInterval(() => void fetchRobots(), 10_000);
  return () => clearInterval(t);
  }, [fetchRobots]);
-
- useEffect(() => {
- const subs: (ReturnType<SubscribeFn> | null)[] = [];
- dbRobots.forEach(({ robot_id }) => {
- subs.push(subscribe<{ data: string }>(
- `/${robot_id}/robot_description`, "std_msgs/String", () => {},
- ));
- });
- return () => subs.forEach(s => s?.unsubscribe());
- }, [subscribe, dbRobots]);
 
  const displayMessages = useThrottled(rosMessages, 800);
 
@@ -146,11 +110,6 @@ function RobotItem({
  const odom = p("odom") as { pose?: { pose?: { position?: { x?: number; y?: number } } } } | undefined;
  const pos = odom?.pose?.pose?.position;
 
- const rdRaw = p("robot_description") as { data?: string } | string | undefined;
- const rdStr = typeof rdRaw === "string" ? rdRaw
- : (rdRaw as { data?: string } | undefined)?.data ?? null;
- const urdf = rdStr ? parseUrdf(rdStr) : null;
-
  const displayStatus = (liveStatus ?? robot.status) as string;
 
  return (
@@ -174,10 +133,6 @@ function RobotItem({
  {displayStatus}
  </span>
  </div>
-
- {urdf && (
- <p className="text-[10px] text-white/30 truncate mb-2 pl-3.5">{urdf.modelName}</p>
- )}
 
  {isOnline && batPct !== null && (
  <div className="flex items-center gap-2 pl-3.5">

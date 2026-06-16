@@ -5,8 +5,7 @@ import {
  ActionGoalPayload, ActionFeedback, ActionResult, ActiveGoals,
 } from "../../hooks/useNestSocket";
 import {
- PanelCard, Section, BigStatus,
- GoldButton, BlueButton, DangerButton, NoData,
+ PanelCard, Section, NoData,
 } from "./BigPinkyPanel";
 import { useKeyboardControl } from "../../hooks/useKeyboardControl";
 import ActionPanel from "../ActionPanel";
@@ -60,22 +59,9 @@ export default function TurtlebotPanel({
  emitAction, cancelAction, activeGoals, actionFeedbacks, actionResults,
  callService,
 }: Props) {
- const [mode, setMode] = useState("unknown");
- const [detected, setDetected] = useState(false);
  const [keyboardActive, setKeyboardActive] = useState(false);
  const [diagStatus, setDiagStatus] = useState<DiagStatus>("idle");
  const [diagResult, setDiagResult] = useState<DiagResult | null>(null);
-
- // ── rosMessages에서 mode/yolo 읽기 (NestJS 중계 경로 — 원격 클라이언트 호환) ─
- useEffect(() => {
- const modeMsg = rosMessages[`/${botId}/mode`];
- if (modeMsg) setMode((modeMsg.data as { data: string }).data ?? "unknown");
- }, [rosMessages[`/${botId}/mode`]]);
-
- useEffect(() => {
- const yoloMsg = rosMessages[`/${botId}/yolo/person_detected`];
- if (yoloMsg) setDetected((yoloMsg.data as { data: boolean }).data ?? false);
- }, [rosMessages[`/${botId}/yolo/person_detected`]]);
 
  // ── NestJS rosMessages에서 센서 데이터 추출 ──────────────────────────────
  const p = (topic: string) => rosMessages[`/${botId}/${topic}`]?.data;
@@ -127,27 +113,6 @@ export default function TurtlebotPanel({
  const imuAV = imuData?.angular_velocity;
  const imuLA = imuData?.linear_acceleration;
 
- // joint_states
- const jsData = p("joint_states") as {
- name?: string[];
- position?: number[];
- velocity?: number[];
- } | undefined;
- const jsNames = jsData?.name ?? [];
- const jsLIdx = jsNames.indexOf("wheel_left_joint");
- const jsRIdx = jsNames.indexOf("wheel_right_joint");
- const jsLVel = jsLIdx >= 0 ? jsData?.velocity?.[jsLIdx] ?? null : null;
- const jsRVel = jsRIdx >= 0 ? jsData?.velocity?.[jsRIdx] ?? null : null;
- const jsLPos = jsLIdx >= 0 ? jsData?.position?.[jsLIdx] ?? null : null;
- const jsRPos = jsRIdx >= 0 ? jsData?.position?.[jsRIdx] ?? null : null;
-
- // magnetic_field
- const magData = p("magnetic_field") as { magnetic_field?: { x?: number; y?: number; z?: number } } | undefined;
- const mag = magData?.magnetic_field;
- const magHdg = mag?.x != null && mag?.y != null
- ? ((Math.atan2(mag.y, mag.x) * 180) / Math.PI + 360) % 360
- : null;
-
  // scan — range_min/range_max 기준으로 유효 포인트 필터
  const scanData = p("scan") as {
  angle_min?: number; angle_max?: number; angle_increment?: number;
@@ -161,23 +126,6 @@ export default function TurtlebotPanel({
  const scanNearest = validRanges.length > 0 ? Math.min(...validRanges) : null;
  const scanTotal = rawRanges.length;
  const scanValid = validRanges.length;
-
- // sensor_state — turtlebot3_msgs/SensorState 전체 필드
- const ssData = p("sensor_state") as {
- bumper?: number; // uint8: BUMPER_FORWARD=1, BUMPER_BACKWARD=2
- cliff?: number; // float32: CLIFF=1 when detected
- sonar?: number; // float32 (m)
- illumination?: number; // float32
- led?: number; // uint8
- button?: number; // uint8: BUTTON0=1, BUTTON1=2
- torque?: boolean; // bool
- left_encoder?: number; // int32
- right_encoder?: number; // int32
- battery?: number; // float32 (V)
- } | undefined;
-
- // robot_description
- const rdReceived = p("robot_description") != null;
 
  // ── 키보드 조종 ──────────────────────────────────────────────────────────
  const handleCmdVel = useCallback((payload: CmdVelPayload) => emitCmdVel(payload), [emitCmdVel]);
@@ -209,26 +157,9 @@ export default function TurtlebotPanel({
  );
  }, [botId, callService]);
 
- const modeColor =
- mode === "explore" ? "text-white/90" :
- mode === "deliver" ? "text-white/90" :
- mode === "stop" ? "text-white/90" : "text-white/90/40";
-
  return (
  <div className="max-w-2xl">
  <PanelCard title={BOT_LABELS[botId] ?? botId} icon="🤖" accent="blue" badge={botId}>
-
- {/* ── 모드 제어 ──────────────────────────────────────────────────── */}
- <Section label="현재 모드">
- <div className="flex items-center justify-between gap-4">
- <BigStatus value={mode} color={modeColor} />
- <div className="flex gap-2">
- <BlueButton onClick={() => publish(`/${botId}/cmd`, "std_msgs/String", { data: "explore" })}>탐사</BlueButton>
- <GoldButton onClick={() => publish(`/${botId}/cmd`, "std_msgs/String", { data: "deliver" })}>수송</GoldButton>
- <DangerButton onClick={() => publish(`/${botId}/cmd`, "std_msgs/String", { data: "stop" })}>정지</DangerButton>
- </div>
- </div>
- </Section>
 
  {/* ── 센서 그리드 (2열) ─────────────────────────────────────────── */}
  <div className="grid grid-cols-2 gap-4">
@@ -263,34 +194,6 @@ export default function TurtlebotPanel({
  ) : <NoData />}
  </SensorCard>
 
- {/* Joint States */}
- <SensorCard label="Joint States">
- {jsData ? (
- <table className="w-full text-xs">
- <tbody>
- <TRow label="L vel" value={jsLVel != null ? `${f(jsLVel, 3)} r/s` : "—"} />
- <TRow label="R vel" value={jsRVel != null ? `${f(jsRVel, 3)} r/s` : "—"} />
- <TRow label="L pos" value={jsLPos != null ? `${f(r2d(jsLPos), 1)}°` : "—"} />
- <TRow label="R pos" value={jsRPos != null ? `${f(r2d(jsRPos), 1)}°` : "—"} />
- </tbody>
- </table>
- ) : <NoData />}
- </SensorCard>
-
- {/* Magnetic Field */}
- <SensorCard label="Magnetic Field">
- {mag ? (
- <table className="w-full text-xs">
- <tbody>
- <TRow label="X" value={`${f((mag.x ?? 0) * 1e6, 2)} μT`} />
- <TRow label="Y" value={`${f((mag.y ?? 0) * 1e6, 2)} μT`} />
- <TRow label="Z" value={`${f((mag.z ?? 0) * 1e6, 2)} μT`} />
- <TRow label="Hdg" value={magHdg != null ? `${f(magHdg, 1)}°` : "—"} />
- </tbody>
- </table>
- ) : <NoData />}
- </SensorCard>
-
  {/* LIDAR Scan */}
  <SensorCard label="LIDAR Scan">
  {scanData ? (
@@ -300,29 +203,6 @@ export default function TurtlebotPanel({
  <TRow label="유효점" value={`${scanValid} / ${scanTotal}`} />
  <TRow label="범위 min" value={scanData.range_min != null ? `${f(scanData.range_min)} m` : "—"} />
  <TRow label="범위 max" value={scanData.range_max != null ? `${f(scanData.range_max)} m` : "—"} />
- </tbody>
- </table>
- ) : <NoData />}
- </SensorCard>
-
- {/* Sensor State */}
- <SensorCard label="Sensor State">
- {ssData ? (
- <table className="w-full text-xs">
- <tbody>
- <TRow label="Bumper" value={
- ssData.bumper === 0 ? "○ 없음" :
- ssData.bumper === 1 ? "⚠ 전방" :
- ssData.bumper === 2 ? "⚠ 후방" :
- ssData.bumper === 3 ? "⚠ 전+후" : "○ 없음"
- } highlight={!!ssData.bumper} />
- <TRow label="Cliff" value={ssData.cliff ? "⚠ 감지" : "○ 없음"} highlight={!!ssData.cliff} />
- {ssData.sonar != null && <TRow label="Sonar" value={`${f(ssData.sonar, 2)} m`} />}
- {ssData.button != null && <TRow label="Button" value={ssData.button === 0 ? "—" : `B${ssData.button}`} />}
- {ssData.torque != null && <TRow label="Torque" value={ssData.torque ? "ON" : "OFF"} />}
- <TRow label="L-Enc" value={String(ssData.left_encoder ?? "—")} />
- <TRow label="R-Enc" value={String(ssData.right_encoder ?? "—")} />
- {ssData.battery != null && <TRow label="Batt" value={`${f(ssData.battery, 2)} V`} />}
  </tbody>
  </table>
  ) : <NoData />}
@@ -397,29 +277,6 @@ export default function TurtlebotPanel({
  </>
  )}
  </div>
- </Section>
-
- {/* ── YOLO 감지 ───────────────────────────────────────────────────── */}
- <Section label="YOLO 감지">
- <div className="flex items-center gap-3">
- <div className={`w-2.5 h-2.5 transition-colors ${
- detected ? "bg-red-600 shadow " : "bg-white/5"
- }`} />
- <span className={`text-xs font-semibold tracking-wide ${
- detected ? "text-white/90" : "text-white/30"
- }`}>
- {detected ? "⚠ PERSON DETECTED" : "CLEAR"}
- </span>
- </div>
- </Section>
-
- {/* ── URDF 수신 여부 ──────────────────────────────────────────────── */}
- <Section label="robot_description">
- <span className={`text-xs font-semibold tracking-wide ${
- rdReceived ? "text-green-600" : "text-white/30"
- }`}>
- {rdReceived ? "◉ URDF RECEIVED" : "WAITING…"}
- </span>
  </Section>
 
  {/* ── 자가진단 ─────────────────────────────────────────────────────── */}

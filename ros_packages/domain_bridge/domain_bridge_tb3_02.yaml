@@ -1,7 +1,7 @@
 name: domain_bridge_tb3_02
 topics:
 
-  # ── UPLINK: 로봇(42)의 순정 데이터를 가져와서 관제탑(49)에 꼬리표 달아주기 ──
+  # ── UPLINK: 로봇(42) → 관제탑(49) ──────────────────────────────────────────
   /scan:
     type: sensor_msgs/msg/LaserScan
     from_domain: 42
@@ -26,54 +26,6 @@ topics:
     to_domain: 49
     remap: /tb3_02/imu
 
-  /joint_states:
-    type: sensor_msgs/msg/JointState
-    from_domain: 42
-    to_domain: 49
-    remap: /tb3_02/joint_states
-
-  /magnetic_field:
-    type: sensor_msgs/msg/MagneticField
-    from_domain: 42
-    to_domain: 49
-    remap: /tb3_02/magnetic_field
-
-  /sensor_state:
-    type: turtlebot3_msgs/msg/SensorState
-    from_domain: 42
-    to_domain: 49
-    remap: /tb3_02/sensor_state
-
-  /robot_description:
-    type: std_msgs/msg/String
-    from_domain: 42
-    to_domain: 49
-    remap: /tb3_02/robot_description
-
-  /mode:
-    type: std_msgs/msg/String
-    from_domain: 42
-    to_domain: 49
-    remap: /tb3_02/mode
-
-  /yolo/person_detected:
-    type: std_msgs/msg/Bool
-    from_domain: 42
-    to_domain: 49
-    remap: /tb3_02/yolo/person_detected
-
-  /tf:
-    type: tf2_msgs/msg/TFMessage
-    from_domain: 42
-    to_domain: 49
-    remap: /tb3_02/tf
-
-  /tf_static:
-    type: tf2_msgs/msg/TFMessage
-    from_domain: 42
-    to_domain: 49
-    remap: /tb3_02/tf_static
-
   /amcl_pose:
     type: geometry_msgs/msg/PoseWithCovarianceStamped
     from_domain: 42
@@ -86,7 +38,7 @@ topics:
     to_domain: 49
     remap: /tb3_02/plan
 
-  # ── DOWNLINK: 관제탑(49)의 꼬리표 달린 명령을 로봇(42)에게 순정으로 떼서 주기 ──
+  # ── DOWNLINK: 관제탑(49) → 로봇(42) ────────────────────────────────────────
   /tb3_02/cmd_vel:
     type: geometry_msgs/msg/TwistStamped
     from_domain: 49
