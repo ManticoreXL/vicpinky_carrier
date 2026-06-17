@@ -8,17 +8,17 @@ topics:
     to_domain: 49
     remap: /tb3_01/odom
 
-  /tf: # 로봇의 실시간 부드러운 움직임 표시 (필수)
-    type: tf2_msgs/msg/TFMessage
-    from_domain: 41
-    to_domain: 49
-    remap: /tb3_01/tf
+  # /tf: # 로봇의 실시간 부드러운 움직임 표시 (필수)
+  #   type: tf2_msgs/msg/TFMessage
+  #   from_domain: 41
+  #   to_domain: 49
+  #   remap: /tb3_01/tf
 
-  /tf_static:
-    type: tf2_msgs/msg/TFMessage
-    from_domain: 41
-    to_domain: 49
-    remap: /tb3_01/tf_static
+  # /tf_static:
+  #   type: tf2_msgs/msg/TFMessage
+  #   from_domain: 41
+  #   to_domain: 49
+  #   remap: /tb3_01/tf_static
 
   /amcl_pose: # 지도 위 로봇의 현재 정확한 좌표 (필수)
     type: geometry_msgs/msg/PoseWithCovarianceStamped

@@ -16,17 +16,17 @@ topics:
     to_domain: 49
     remap: /follower_state
 
-  /omx/tf:
-    type: tf2_msgs/msg/TFMessage
-    from_domain: 45
-    to_domain: 49
-    remap: /tf
+  # /omx/tf:
+  #   type: tf2_msgs/msg/TFMessage
+  #   from_domain: 45
+  #   to_domain: 49
+  #   remap: /tf
 
-  /omx/tf_static:
-    type: tf2_msgs/msg/TFMessage
-    from_domain: 45
-    to_domain: 49
-    remap: /tf_static
+  # /omx/tf_static:
+  #   type: tf2_msgs/msg/TFMessage
+  #   from_domain: 45
+  #   to_domain: 49
+  #   remap: /tf_static
 
   # ── DOWNLINK: domain 49 → domain 45 ────────────────────────────────────────
   /joint_commands:
