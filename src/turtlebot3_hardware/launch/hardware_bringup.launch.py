@@ -12,6 +12,12 @@ def generate_launch_description():
         description='ID of the robot (e.g., tb3_01, tb3_02, vicpinky)'
     )
 
+    device_arg = DeclareLaunchArgument(
+        'device',
+        default_value='2',
+        description='Camera device number (e.g., 0, 1, 2, 3)'
+    )
+
     headlight_node = Node(
         package='turtlebot3_hardware',
         executable='headlight_node',
@@ -41,12 +47,14 @@ def generate_launch_description():
         output='screen',
         arguments=[
             '--server', 'http://10.10.14.70:3001',
-            '--bot-id', LaunchConfiguration('bot_id')
+            '--bot-id', LaunchConfiguration('bot_id'),
+            '--device', LaunchConfiguration('device')
         ]
     )
 
     return LaunchDescription([
         bot_id_arg, 
+        device_arg,
         headlight_node,
         voice_node,
         rosbridge_node,

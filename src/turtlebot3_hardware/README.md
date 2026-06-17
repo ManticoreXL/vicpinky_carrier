@@ -59,8 +59,10 @@ sudo pip3 install adafruit-circuitpython-neopixel-spi gTTS SpeechRecognition --b
 # 실행 방법
 ## 통합 런치 파일 실행
 ```bash
-ros2 launch turtlebot3_hardware hardware_bringup.launch.py
+ros2 launch turtlebot3_hardware hardware_bringup.launch.py bot_id:=tb3_01 device:=3
 ```
+- bot_id는 터틀봇 ID에 맞게 수정해서 실행
+- device는 카메라 장치 번호로 가상 카메라인 3번 사용 권장
 
 # headlight_node 사용 방법
 ## 노드 실행
