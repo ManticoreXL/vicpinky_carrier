@@ -10,6 +10,8 @@ import TurtlebotPanel from "./components/panels/TurtlebotPanel";
 import OmxPanel from "./components/panels/OmxPanel";
 import ExploreView from "./views/ExploreView";
 import FmsView from "./views/FmsView";
+import TaskManagerView from "./views/TaskManagerView";
+import FlowView from "./views/FlowView";
 import AdminView from "./views/AdminView";
 import BatteryAlertModal from "./components/BatteryAlertModal";
 import ControlCameraPanel from "./components/ControlCameraPanel";
@@ -18,7 +20,7 @@ import { useThrottled } from "./hooks/useThrottled";
 import AiAssistant from "./components/AiAssistant";
 import MobileRobotControl from "./components/MobileRobotControl";
 
-type AppMode = "control" | "explore" | "fms" | "admin";
+type AppMode = "control" | "explore" | "fms" | "tasks" | "flow" | "admin";
 
 export default function App() {
  const { connected, error, subscribe, publish } = useRos();
@@ -48,6 +50,8 @@ export default function App() {
  const displayMessages = useThrottled(rosMessages, 1000);
  const isExplore = appMode === "explore";
  const isFms     = appMode === "fms";
+ const isTasks   = appMode === "tasks";
+ const isFlow    = appMode === "flow";
  const isAdmin   = appMode === "admin";
 
  return (
@@ -66,7 +70,7 @@ export default function App() {
          </div>
          <div className="hidden sm:block">
            <h1 className="text-sm font-semibold text-white leading-none tracking-tight">
-             {isExplore ? "Disaster Monitoring" : isFms ? "Fleet Dispatch" : isAdmin ? "System Config" : "Robot Control"}
+             {isExplore ? "Disaster Monitoring" : isFms ? "Fleet Dispatch" : isTasks ? "Task Manager" : isFlow ? "Task Workflow" : isAdmin ? "System Config" : "Robot Control"}
            </h1>
            <p className="text-[10px] text-white/30 leading-none mt-1 tracking-widest uppercase">
              Operations Center
@@ -78,6 +82,8 @@ export default function App() {
        <div className="flex bg-black/30 backdrop-blur-xl p-1 rounded-xl border border-white/[0.06] shadow-inner overflow-x-auto">
          <ModeBtn mode="control" active={appMode === "control"} onClick={() => setAppMode("control")}>CTRL</ModeBtn>
          <ModeBtn mode="fms"     active={appMode === "fms"}     onClick={() => setAppMode("fms")}>FLEET</ModeBtn>
+         <ModeBtn mode="tasks"   active={appMode === "tasks"}   onClick={() => setAppMode("tasks")}>TASKS</ModeBtn>
+         <ModeBtn mode="flow"    active={appMode === "flow"}    onClick={() => setAppMode("flow")}>FLOW</ModeBtn>
          <ModeBtn mode="explore" active={appMode === "explore"} onClick={() => setAppMode("explore")}>RECON</ModeBtn>
          <ModeBtn mode="admin"   active={appMode === "admin"}   onClick={() => setAppMode("admin")}>ADMIN</ModeBtn>
        </div>
@@ -113,6 +119,21 @@ export default function App() {
  {isAdmin ? (
  <div className="flex-1 overflow-hidden">
  <AdminView />
+ </div>
+ ) : isFlow ? (
+ <div className="flex-1 overflow-hidden">
+ <FlowView />
+ </div>
+ ) : isTasks ? (
+ <div className="flex-1 overflow-hidden">
+ <TaskManagerView
+ rosMessages={displayMessages}
+ fmsTasks={fmsTasks}
+ socket={socket}
+ emitFmsDispatch={emitFmsDispatch}
+ emitFmsCancel={emitFmsCancel}
+ robotStatuses={robotStatuses}
+ />
  </div>
  ) : isFms ? (
  <div className="flex-1 overflow-hidden">
