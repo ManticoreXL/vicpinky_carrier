@@ -57,7 +57,13 @@ sudo pip3 install adafruit-circuitpython-neopixel-spi gTTS SpeechRecognition --b
 ```
 
 # 실행 방법
-## 통합 런치 파일 실행
+## 터틀봇 통합 런치 파일 실행
+```bash
+ros2 launch turtlebot3_hardware integrated_robot.launch.py
+```
+- bot_id를 bashrc에서 읽어 자동으로 인식함
+
+## 통합 하드웨어 런치 파일 실행
 ```bash
 ros2 launch turtlebot3_hardware hardware_bringup.launch.py bot_id:=tb3_01 device:=3
 ```

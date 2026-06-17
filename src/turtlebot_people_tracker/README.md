@@ -1,4 +1,4 @@
-# 사전 준비 사항
+# 사전 준비
 ## 필수 패키지 설치
 ```bash
 sudo apt-get update
@@ -10,9 +10,9 @@ sudo pip3 install onnxruntime --break-system-packages
 ## 부팅 시 v4l2loopback 자동 적재 설정
 ```bash
 echo "v4l2loopback" | sudo tee /etc/modules-load.d/v4l2loopback.conf
-echo "options v4l2loopback devices=2 video_nr=2,3 exclusive_caps=1" | sudo tee /etc/modprobe.d/v4l2loopback.conf
+echo "options v4l2loopback devices=1 video_nr=2,3 exclusive_caps=1" | sudo tee /etc/modprobe.d/v4l2loopback.conf
 ```
-- 2번
+- 2번, 3번 카메라를 
 
 # 실행 방법
 ## v4l2loopback 모듈 적재
