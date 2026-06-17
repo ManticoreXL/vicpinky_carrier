@@ -19,7 +19,7 @@ ROBOT_IP=$2
 
 echo "[1/5] Updating system packages and installing essential tools"
 sudo apt-get update
-sudo apt-get install -y make gcc unzip wget linux-headers-$(uname -r) v4l2loopback-dkms v4l2loopback-utils ffmpeg
+sudo apt-get install -y make gcc unzip wget linux-headers-raspi v4l2loopback-dkms v4l2loopback-utils ffmpeg
 
 echo "[2/5] Configuring v4l2loopback kernel module and installing ONNX Runtime"
 sudo dpkg-reconfigure -f noninteractive v4l2loopback-dkms
