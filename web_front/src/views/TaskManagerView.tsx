@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { Socket } from "socket.io-client";
-import type { RosMessage, FmsTask, FmsDispatchPayload, TaskType } from "../hooks/useNestSocket";
+import type { RosMessage, FmsTask, FmsDispatchPayload, TaskType, TaskManagerAlert } from "../hooks/useNestSocket";
 import { BACKEND_URL } from "../config";
 
 // ── 상수 ──────────────────────────────────────────────────────────────────────
@@ -77,6 +77,8 @@ interface Props {
   emitFmsDispatch: (p: FmsDispatchPayload) => void;
   emitFmsCancel: (taskId: string) => void;
   robotStatuses: Record<string, string>;
+  tmAlerts: TaskManagerAlert[];
+  ackTmAlert: (alertId: string) => void;
 }
 
 // ── 헬퍼 ──────────────────────────────────────────────────────────────────────
@@ -157,6 +159,8 @@ export default function TaskManagerView({
   emitFmsDispatch,
   emitFmsCancel,
   robotStatuses,
+  tmAlerts,
+  ackTmAlert,
 }: Props) {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -491,6 +495,7 @@ export default function TaskManagerView({
               {onlineCount} / {ROBOTS.length} Online
             </h2>
           </div>
+
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
             {ROBOTS.map(r => (
               <RobotCard
@@ -640,11 +645,44 @@ function TaskCard({ task, onCancel }: { task: FmsTask; onCancel: () => void }) {
   );
 }
 
+function statusDot(online: boolean, status?: string): string {
+  if (!online) return "bg-slate-500";
+  switch (status) {
+    case "IDLE":     return "bg-emerald-400";
+    case "MOVING":
+    case "WORKING":
+    case "CHARGING": return "bg-amber-400 animate-pulse";
+    case "ERROR":    return "bg-rose-400 animate-pulse";
+    case "OFFLINE":  return "bg-slate-500";
+    default:         return "bg-emerald-400";
+  }
+}
+
+function statusLabel(online: boolean, status?: string): string {
+  if (!online) return "OFFLINE";
+  return status ?? "IDLE";
+}
+
+function statusTextColor(online: boolean, status?: string): string {
+  if (!online) return "text-slate-500";
+  switch (status) {
+    case "IDLE":     return "text-emerald-400/70";
+    case "MOVING":
+    case "WORKING":
+    case "CHARGING": return "text-amber-400/70";
+    case "ERROR":    return "text-rose-400/70";
+    default:         return "text-white/20";
+  }
+}
+
 function RobotCard({
   robot, online, status, task, rosMessages,
 }: { robot: (typeof ROBOTS)[number]; online: boolean; status?: string; task?: FmsTask; rosMessages: Record<string, RosMessage> }) {
   const bat    = (rosMessages[`/${robot.id}/battery_state`]?.data as any)?.percentage;
   const batPct = bat != null ? Math.round(bat > 1 ? bat : bat * 100) : null;
+  const dot    = statusDot(online, status);
+  const label  = statusLabel(online, status);
+  const txtCol = statusTextColor(online, status);
 
   return (
     <div className={`rounded-xl border p-3 transition-all duration-500 ${online ? "bg-white/[0.03] border-white/[0.08]" : "bg-transparent border-white/[0.03] opacity-40"}`}>
@@ -653,7 +691,7 @@ function RobotCard({
           <div className="text-xs font-semibold text-white/70 tracking-wide">{robot.label}</div>
           <div className="text-[10px] text-white/20 tracking-widest">DOM {robot.domain}</div>
         </div>
-        <div className={`w-1.5 h-1.5 rounded-full ${online ? "bg-emerald-400" : "bg-white/10"}`} />
+        <div className={`w-2 h-2 rounded-full ${dot}`} />
       </div>
       {online ? (
         <div className="space-y-2">
@@ -670,9 +708,9 @@ function RobotCard({
           )}
           {task
             ? <div className="text-[10px] px-2 py-1 bg-sky-500/10 border border-sky-500/20 rounded-lg text-sky-300">{task.type} → {task.targetNode}</div>
-            : <div className="text-[10px] text-white/15 italic">{status ?? "IDLE"}</div>}
+            : <div className={`text-[10px] italic font-mono ${txtCol}`}>{label}</div>}
         </div>
-      ) : <div className="text-[10px] text-white/10 italic">Offline</div>}
+      ) : <div className="text-[10px] text-slate-500 italic font-mono">OFFLINE</div>}
     </div>
   );
 }

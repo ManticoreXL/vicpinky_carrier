@@ -14,6 +14,7 @@ import TaskManagerView from "./views/TaskManagerView";
 import FlowView from "./views/FlowView";
 import AdminView from "./views/AdminView";
 import BatteryAlertModal from "./components/BatteryAlertModal";
+import FallAlertModal from "./components/FallAlertModal";
 import ControlCameraPanel from "./components/ControlCameraPanel";
 import { useBatteryAlerts } from "./hooks/useBatteryAlerts";
 import { useThrottled } from "./hooks/useThrottled";
@@ -133,6 +134,8 @@ export default function App() {
  emitFmsDispatch={emitFmsDispatch}
  emitFmsCancel={emitFmsCancel}
  robotStatuses={robotStatuses}
+ tmAlerts={tmAlerts}
+ ackTmAlert={ackTmAlert}
  />
  </div>
  ) : isFms ? (
@@ -245,6 +248,7 @@ export default function App() {
  </div>
 
  <BatteryAlertModal notifications={notifications} onConfirm={confirmNotification} />
+ <FallAlertModal alerts={tmAlerts} onConfirm={ackTmAlert} />
  <AiAssistant socket={socket} />
 
  {/* ── Footer ────────────────────────────────────────────────────────── */}
