@@ -1,0 +1,11 @@
+topics:
+  /tf:
+    type: tf2_msgs/msg/TFMessage
+    from_domain: 42
+    to_domain: 40
+    remap: /tb3_02/tf
+  /tf_static:
+    type: tf2_msgs/msg/TFMessage
+    from_domain: 42
+    to_domain: 40
+    remap: /tb3_02/tf_static

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  FastDDS 유니캐스트 디스커버리 프로파일
+  WiFi가 멀티캐스트를 막을 때, 아래 initialPeersList의 IP들로 직접 디스커버리.
+
+  사용법 (PC·모든 로봇에서 동일하게):
+    export ROS_DOMAIN_ID=40
+    export FASTRTPS_DEFAULT_PROFILES_FILE=$HOME/fastdds_unicast.xml
+    # 그 후 rosbridge / 로봇 bringup / slam 을 새로 실행
+
+  중요:
+    - <initialPeersList> 에 통신할 모든 장비 IP를 나열 (PC + 모든 로봇).
+      자기 자신 IP가 들어가도 무해하니, 모든 장비에서 같은 파일을 써도 됩니다.
+    - IP가 바뀌면 이 목록만 갱신.
+-->
+<dds xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <profiles>
+    <participant profile_name="unicast_profile" is_default_profile="true">
+      <rtps>
+        <builtin>
+          <metatrafficUnicastLocatorList>
+            <locator/>
+          </metatrafficUnicastLocatorList>
+          <initialPeersList>
+            <!-- ↓↓↓ 실제 IP로 바꾸고, 장비 수만큼 <locator> 추가 ↓↓↓ -->
+            <locator>
+              <udpv4><address>192.168.100.138</address></udpv4>   <!-- 서버 PC -->
+            </locator>
+            <locator>
+              <udpv4><address>192.168.100.122</address></udpv4>   <!-- 로봇 tb3_01 -->
+            </locator>
+            <locator>
+              <udpv4><address>192.168.0.23</address></udpv4>   <!-- 로봇 tb3_03 -->
+            </locator>
+            <!-- 로봇이 더 있으면 계속 추가 -->
+          </initialPeersList>
+        </builtin>
+      </rtps>
+    </participant>
+  </profiles>
+</dds>
