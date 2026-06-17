@@ -96,7 +96,7 @@ controller_server:
     general_goal_checker:
       stateful: True
       plugin: "nav2_controller::SimpleGoalChecker"
-      xy_goal_tolerance: 0.35
+      xy_goal_tolerance: 0.15
       yaw_goal_tolerance: 3.14
 
     FollowPath:
@@ -104,40 +104,40 @@ controller_server:
       debug_trajectory_details: True
       min_vel_x: 0.0
       min_vel_y: 0.0
-      max_vel_x: 0.22
+      max_vel_x: 0.10
       max_vel_y: 0.0
-      max_vel_theta: 1.0
+      max_vel_theta: 0.8
       min_speed_xy: 0.0
-      max_speed_xy: 0.22
+      max_speed_xy: 0.10
       min_speed_theta: 0.0
 
-      acc_lim_x: 2.5
+      acc_lim_x: 1.0
       acc_lim_y: 0.0
       acc_lim_theta: 3.2
       decel_lim_x: -2.5
       decel_lim_y: 0.0
       decel_lim_theta: -3.2
 
-      vx_samples: 20
+      vx_samples: 30
       vy_samples: 1
-      vtheta_samples: 20
+      vtheta_samples: 40
       sim_time: 1.5
       linear_granularity: 0.05
       angular_granularity: 0.025
-      transform_tolerance: 1.0
-      xy_goal_tolerance: 0.35
+      transform_tolerance: 3.0
+      xy_goal_tolerance: 0.15
       trans_stopped_velocity: 0.01
       short_circuit_trajectory_evaluation: True
       stateful: True
 
       critics: ["RotateToGoal", "Oscillation", "BaseObstacle", "GoalAlign", "PathAlign", "PathDist", "GoalDist"]
-      BaseObstacle.scale: 0.3
-      PathAlign.scale: 32.0
+      BaseObstacle.scale: 0.2
+      PathAlign.scale: 36.0
       PathAlign.forward_point_distance: 0.1
-      PathDist.scale: 32.0
+      PathDist.scale: 38.0
       GoalAlign.scale: 24.0
       GoalAlign.forward_point_distance: 0.1
-      GoalDist.scale: 24.0
+      GoalDist.scale: 20.0
       RotateToGoal.scale: 32.0
       RotateToGoal.slowing_factor: 5.0
       RotateToGoal.lookahead_time: -1.0
@@ -159,8 +159,8 @@ local_costmap:
       plugins: ["voxel_layer", "inflation_layer"]
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 3.0
-        inflation_radius: 0.3
+        cost_scaling_factor: 5.0
+        inflation_radius: 0.12
       voxel_layer:
         plugin: "nav2_costmap_2d::VoxelLayer"
         enabled: True
@@ -217,8 +217,8 @@ global_costmap:
         map_subscribe_transient_local: True
       inflation_layer:
         plugin: "nav2_costmap_2d::InflationLayer"
-        cost_scaling_factor: 8.0
-        inflation_radius: 0.2
+        cost_scaling_factor: 5.0
+        inflation_radius: 0.14
       always_send_full_costmap: True
 
 map_saver:
@@ -295,9 +295,9 @@ velocity_smoother:
     stamp_smoothed_velocity_with_smoothing_time: False
     scale_velocities: False
     feedback: "OPEN_LOOP"
-    max_velocity: [0.5, 0.0, 2.0]
+    max_velocity: [0.10, 0.0, 1.0]
     min_velocity: [-0.5, 0.0, -2.0]
-    max_accel: [2.5, 0.0, 3.2]
+    max_accel: [1.0, 0.0, 3.2]
     max_decel: [-2.5, 0.0, -3.2]
     odom_topic: "/odom"
     odom_duration: 0.1
@@ -312,7 +312,7 @@ collision_monitor:
     cmd_vel_out_topic: "/cmd_vel"
     enable_stamped_cmd_vel: true
     state_topic: "collision_monitor_state"
-    transform_tolerance: 1.0
+    transform_tolerance: 2.0
     source_timeout: 3.0
     base_shift_correction: True
     stop_pub_timeout: 2.0
@@ -321,7 +321,7 @@ collision_monitor:
       type: "polygon"
       action_type: "approach"
       footprint_topic: "/local_costmap/published_footprint"
-      time_before_collision: 1.2
+      time_before_collision: 2.0
       simulation_time_step: 0.1
       min_points: 6
       visualize: False
