@@ -6,20 +6,19 @@ import { BACKEND_URL } from "../config";
 // ── 상수 ──────────────────────────────────────────────────────────────────────
 
 const ROBOTS = [
-  { id: "vicpinky", label: "VIC-PINKY",    domain: 40, type: "carrier" },
-  { id: "tb3_01",  label: "UNIT-ALPHA",   domain: 41, type: "tb3" },
-  { id: "tb3_02",  label: "UNIT-BRAVO",   domain: 42, type: "tb3" },
-  { id: "tb3_03",  label: "UNIT-CHARLIE", domain: 43, type: "tb3" },
-  { id: "tb3_04",  label: "UNIT-DELTA",   domain: 44, type: "tb3" },
-  { id: "omx",    label: "OMX-ARM",      domain: 45, type: "arm" },
+  { id: "vicpinky", label: "VIC-PINKY",     domain: 40, type: "carrier" },
+  { id: "tb3_01",   label: "UNIT-ALPHA",     domain: 41, type: "tb3" },
+  { id: "tb3_02",   label: "UNIT-BRAVO",     domain: 42, type: "tb3" },
+  { id: "tb3_03",   label: "UNIT-CHARLIE",   domain: 43, type: "tb3" },
+  { id: "tb3_04",   label: "UNIT-DELTA",     domain: 44, type: "tb3" },
+  { id: "omx",      label: "OMX-ARM",         domain: 45, type: "arm" },
 ] as const;
 
 const TASK_COLORS: Record<string, string> = {
   SUPPLY:      "bg-sky-500/10 border-sky-500/30 text-sky-300",
   PROCESS:     "bg-violet-500/10 border-violet-500/30 text-violet-300",
-  DISTRIBUTE:  "bg-amber-500/10 border-amber-500/30 text-amber-300",
   CHARGE:      "bg-emerald-500/10 border-emerald-500/30 text-emerald-300",
-  SIMPLE_MOVE: "bg-white/5 border-white/10 text-white/50",
+  MOVE:        "bg-white/5 border-white/10 text-white/50",
 };
 
 const STATUS_DOT: Record<string, string> = {
@@ -37,7 +36,7 @@ const TASK_SYSTEM_PROMPT = `당신은 로봇 플릿 관리 시스템(FMS) AI 어
 운영자의 입력을 분석하여 태스크 명령인지 질문인지 판단하고 JSON으로만 응답하세요.
 
 [태스크 유형]
-SUPPLY=물자공급, PROCESS=공정작업, DISTRIBUTE=배포, CHARGE=충전, SIMPLE_MOVE=단순이동
+SUPPLY=공급, PROCESS=작업, CHARGE=충전, MOVE=이동
 
 태스크 명령인 경우:
 {"isTask":true,"type":"SUPPLY","targetNode":"401_7","preferredRobotId":"tb3_01","priority":5,"explanation":"설명"}

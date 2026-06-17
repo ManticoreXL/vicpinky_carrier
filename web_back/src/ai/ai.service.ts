@@ -102,7 +102,7 @@ print(" ".join([s.text for s in segments]).strip())
 운영자의 입력을 분석하여 태스크 명령인지 질문인지 판단하고 JSON으로만 응답하세요.
 
 [태스크 유형]
-SUPPLY=물자공급, PROCESS=공정작업, DISTRIBUTE=배포, CHARGE=충전, SIMPLE_MOVE=단순이동
+SUPPLY=공급, PROCESS=작업, CHARGE=충전, MOVE=단순이동
 
 [현재 로봇] ${robotList}
 [노드 목록] ${nodeList}
@@ -262,7 +262,7 @@ preferredRobotId는 명시적으로 언급되지 않으면 null. priority는 1(�
 export type TaskAiResult =
   | {
       isTask: true;
-      type: 'SUPPLY' | 'PROCESS' | 'DISTRIBUTE' | 'CHARGE' | 'SIMPLE_MOVE';
+      type: 'SUPPLY' | 'PROCESS' | 'CHARGE' | 'MOVE';
       targetNode: string;
       preferredRobotId: string | null;
       priority: number;

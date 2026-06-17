@@ -5,7 +5,7 @@ export enum TaskType {
   SUPPLY      = 'SUPPLY',
   PROCESS     = 'PROCESS',
   CHARGE      = 'CHARGE',
-  MOVE = 'MOVE',
+  MOVE        = 'MOVE',
 }
 
 export enum TaskStatus {

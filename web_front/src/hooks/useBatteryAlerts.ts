@@ -4,8 +4,8 @@ import type { RosMessage } from "./useNestSocket";
 // ── 상수 ──────────────────────────────────────────────────────────────────────
 
 const LOW_THRESHOLD = 15; // % 이하 → 경고
-const FULL_THRESHOLD = 95; // % 이상 → 완충
-const FULL_RESET_BELOW = 90; // % 미만으로 떨어지면 완충 알림 초기화
+const FULL_THRESHOLD = 85; // % 이상 → 충전완료
+const FULL_RESET_BELOW = 60; // % 미만으로 떨어지면 완충 알림 초기화
 const SNOOZE_MS = 10 * 60 * 1000; // 10분
 
 // vicpinky는 battery 토픽 없음 — TB3만 배터리 모니터링
