@@ -2,19 +2,19 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument } from 'mongoose';
 
 export enum TaskType {
-  SUPPLY     = 'SUPPLY',
-  PROCESS    = 'PROCESS',
-  DISTRIBUTE = 'DISTRIBUTE',
-  CHARGE     = 'CHARGE',
-  SIMPLE_MOVE = 'SIMPLE_MOVE',
+  SUPPLY      = 'SUPPLY',
+  PROCESS     = 'PROCESS',
+  CHARGE      = 'CHARGE',
+  MOVE = 'MOVE',
 }
 
 export enum TaskStatus {
   PENDING   = 'PENDING',
   ASSIGNED  = 'ASSIGNED',
   RUNNING   = 'RUNNING',
+  SUSPENDED = 'SUSPENDED', // 관제 조치 대기 (다이어그램의 AlertTower 상태)
   COMPLETED = 'COMPLETED',
-  FAILED    = 'FAILED',
+  FAILED    = 'FAILED',    // 완전히 복구 불가능한 실패
 }
 
 export type TaskDocument = HydratedDocument<Task>;
@@ -30,6 +30,10 @@ export class Task {
   @Prop({ required: true, enum: TaskStatus, default: TaskStatus.PENDING, index: true })
   status: TaskStatus;
 
+  // 단순 목적지뿐만 아니라, 이 작업이 시작된 위치도 알면 Node Lock 해제 시 유리합니다.
+  @Prop({ type: String, default: null })
+  startNode: string | null;
+
   @Prop({ required: true })
   targetNode: string;
 
@@ -40,22 +44,25 @@ export class Task {
   @Prop()
   waitReason?: string;
 
-  @Prop({
-    type: {
-      robot_id:     { type: String,  default: null  },
-      is_completed: { type: Boolean, default: false },
-    },
-    default: { robot_id: null, is_completed: false },
-  })
-  assignedRobot: { robot_id: string | null; is_completed: boolean };
+  // 객체 형태를 버리고 로봇 ID만 매핑하여 Single Source of Truth 유지
+  @Prop({ type: String, default: null, index: true })
+  assignedRobotId: string | null;
 
   /** 특정 로봇에게 배정 요청 (null = 임의 배정) */
-  @Prop({ type: String, required: false, default: null })
+  @Prop({ type: String, default: null })
   preferredRobotId: string | null;
+
+  /** 공급/가공 시 수량, 작동 시간 등 구체적인 명령 파라미터 */
+  @Prop({ type: Object, default: {} })
+  actionPayload?: Record<string, any>;
 
   /** 경로 탐색으로 생성된 남은 waypoint 목록 */
   @Prop({ type: [String], default: [] })
   pathQueue: string[];
+
+  // 에러 발생 시 원인 파악 및 관제 화면 표시용
+  @Prop({ type: String, default: null })
+  errorMessage: string | null;
 
   @Prop()
   startedAt?: Date;

@@ -30,11 +30,11 @@ export class FmsService {
   // ── TaskManager용: 우선순위 큐에 등록 ────────────────────────────────────
   async createQueued(dto: CreateTaskDto): Promise<TaskDocument> {
     const task = await this.taskModel.create({
-      task_id:          dto.task_id ?? genTaskId(),
-      type:             dto.type,
-      targetNode:       dto.targetNode,
-      priority:         dto.priority ?? 5,
-      status:           TaskStatus.PENDING,
+      task_id:        dto.task_id ?? genTaskId(),
+      type:           dto.type,
+      targetNode:     dto.targetNode,
+      priority:       dto.priority ?? 5,
+      status:         TaskStatus.PENDING,
       preferredRobotId: dto.preferredRobotId ?? null,
     });
     const robotLabel = dto.preferredRobotId ? ` → ${dto.preferredRobotId}` : '';
@@ -85,10 +85,10 @@ export class FmsService {
       { _id: taskId },
       {
         $set: {
-          status:    TaskStatus.ASSIGNED,
+          status:        TaskStatus.ASSIGNED,
           startedAt,
           pathQueue,
-          assignedRobot: { robot_id: robotId, is_completed: false },
+          assignedRobotId: robotId,
         },
         $unset: { waitReason: '' },
       },
@@ -98,7 +98,7 @@ export class FmsService {
       status: TaskStatus.ASSIGNED,
       startedAt,
       pathQueue,
-      assignedRobot: { robot_id: robotId, is_completed: false },
+      assignedRobotId: robotId,
       waitReason: null,
     });
   }
@@ -196,7 +196,7 @@ export class FmsService {
   async list(opts: { status?: string; robot_id?: string; limit?: number } = {}) {
     const filter: Record<string, unknown> = {};
     if (opts.status)   filter.status = opts.status;
-    if (opts.robot_id) filter['assignedRobot.robot_id'] = opts.robot_id;
+    if (opts.robot_id) filter['assignedRobotId'] = opts.robot_id;
     return this.taskModel
       .find(filter)
       .sort({ createdAt: -1 })

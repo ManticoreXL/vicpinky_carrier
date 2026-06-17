@@ -101,7 +101,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     try {
       const inProgress = await this.fmsService.getInProgressTasks();
       for (const task of inProgress) {
-        const robotId = task.assignedRobot?.robot_id;
+        const robotId = task.assignedRobotId;
         const taskId  = (task._id as { toString(): string }).toString();
         if (robotId && !this.activeTasks.has(robotId)) {
           // 태스크는 있는데 서버가 재시작되어 activeTasks 잃음 → FAILED 처리
@@ -154,7 +154,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     if (!task) return;
     if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED) return;
 
-    const robotId = task.assignedRobot?.robot_id;
+    const robotId = task.assignedRobotId;
 
     if (robotId) {
       // 현재 위치를 새 goal로 덮어써서 nav2의 이전 goal을 즉시 무효화
@@ -543,7 +543,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
         await this.fmsService.setStatus(taskId, TaskStatus.COMPLETED, this.server, {
           completedAt: new Date(),
-          assignedRobot: { robot_id: robotId, is_completed: true },
+          assignedRobotId: robotId,
         });
         await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
         this.emit({ type: 'completed', taskId, robotId, message: `${robotId} 태스크 완료 (${task.targetNode})`, requiresAction: false });
@@ -630,6 +630,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
         // MOVING 상태에서 강제 종료 시에도 OFFLINE 처리 (기존 setOfflineIfIdle 대체)
         await this.robotService.setOffline(robotId);
+        await this.robotService.updateLocation(robotId, null); // 오프라인 시 위치 초기화
 
         // 진행 중이던 태스크/nav action 정리
         const activeTaskId = this.activeTasks.get(robotId);

@@ -6,12 +6,15 @@ import { FmsController } from './fms.controller';
 import { TaskManagerService } from './task-manager.service';
 import { RosModule } from '../ros/ros.module';
 import { FleetModule } from '../fleet/fleet.module';
+import { AiModule } from '../ai/ai.module';
+// RagService는 AiModule에서 export됨
 
 @Module({
   imports: [
     MongooseModule.forFeature([{ name: Task.name, schema: TaskSchema }]),
     RosModule,
     FleetModule,
+    AiModule,
   ],
   controllers: [FmsController],
   providers: [FmsService, TaskManagerService],
