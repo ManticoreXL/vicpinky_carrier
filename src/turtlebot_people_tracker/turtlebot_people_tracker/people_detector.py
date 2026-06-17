@@ -11,7 +11,6 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 
-# 🌐 웹 스트리밍용 글로벌 변수
 output_frame = np.zeros((320, 320, 3), dtype=np.uint8)
 lock = threading.Lock()
 
@@ -53,40 +52,39 @@ class PeopleDetectorNode(Node):
     def __init__(self):
         super().__init__('people_detector_node')
         
-        self.cmd_vel_pub = self.create_publisher(TwistStamped, '/tb3_04/cmd_vel', 10)
-        self.person_pos_pub = self.create_publisher(PointStamped, '/tb3_04/detected_person/relative_pos', 10)
+        self.declare_parameter('device', 2)
+        camera_device = self.get_parameter('device').value
         
-        self.get_logger().info("🚑 [tb3_04] 기절/미동(No-Motion) 요구조자 정밀 판정 노드 가동")
+        self.cmd_vel_pub = self.create_publisher(TwistStamped, '/cmd_vel', 10)
+        self.person_pos_pub = self.create_publisher(PointStamped, '/detected_person/relative_pos', 10)
+        
+        self.get_logger().info("[YOLO]: 기절/미동(No-Motion) 요구조자 정밀 판정 노드 가동")
 
-        # 1. ONNX 모델 로드
         current_dir = os.path.dirname(os.path.abspath(__file__))
         onnx_path = os.path.join(current_dir, 'best.onnx')
         try:
             opts = ort.SessionOptions()
             opts.intra_op_num_threads = 2
             self.ort_session = ort.InferenceSession(onnx_path, opts)
-            self.get_logger().info("✅ ONNX 모델 로드 완료")
+            self.get_logger().info(" ONNX 모델 로드 완료")
         except Exception as e:
-            self.get_logger().error(f"❌ ONNX 모델 로드 실패: {e}")
+            self.get_logger().error(f" ONNX 모델 로드 실패: {e}")
             return
 
-        # 2. 1번 USB 웹캠 오픈
-        self.cap = cv2.VideoCapture(1, cv2.CAP_V4L2)
+        # 선언한 파라미터 변수를 장치 번호로 사용
+        self.cap = cv2.VideoCapture(camera_device, cv2.CAP_V4L2)
         if not self.cap.isOpened():
-            self.get_logger().error("❌ 1번 USB 웹캠을 열 수 없습니다!")
+            self.get_logger().error(f" {camera_device}번 USB 웹캠을 열 수 없습니다!")
             return
 
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 320)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 320)
 
-        # 추적 메모리 구조 (미동 감지 시간 저장용)
         self.tracked_people = {}  
         self.next_person_id = 1
         
-        # 0.5초 주기 타이머 실행
         self.timer = self.create_timer(0.5, self.process_rescue_sequence)
 
-        # 스트리밍 웹 서버 구동
         self.server = ThreadedHTTPServer(('0.0.0.0', 5000), StreamingHandler)
         self.server_thread = threading.Thread(target=self.server.serve_forever)
         self.server_thread.daemon = True
@@ -105,7 +103,6 @@ class PeopleDetectorNode(Node):
         if not hasattr(self, 'ort_session') or not self.cap.isOpened():
             return
 
-        # 카메라 잔상 버퍼 날리기
         for _ in range(4):
             self.cap.grab()
             
@@ -155,7 +152,6 @@ class PeopleDetectorNode(Node):
         any_active_braking = False
         current_time = time.time()
 
-        # 🔄 미동(No-Motion) 감지 기반 다중 매칭 논리
         for det in current_frame_detections:
             matched_id = None
             min_dist = 0.35 
@@ -166,19 +162,17 @@ class PeopleDetectorNode(Node):
                     min_dist = dist
                     matched_id = pid
 
-            # [1] 최초 발견 시
             if matched_id is None:
                 matched_id = self.next_person_id
                 self.next_person_id += 1
                 self.tracked_people[matched_id] = {
                     "last_x": det["x"], "last_y": det["y"], 
-                    "first_still_time": current_time,  # 멈춰있기 시작한 시간
+                    "first_still_time": current_time,
                     "last_seen": current_time,
                     "is_moving": False,
                     "sent_to_pc": False, "box": det["box"]
                 }
             else:
-                # [2] 기존 타겟의 미세 움직임 거리 측정
                 move_distance = np.sqrt((det["x"] - self.tracked_people[matched_id]["last_x"])**2 + 
                                        (det["y"] - self.tracked_people[matched_id]["last_y"])**2)
                 
@@ -187,9 +181,7 @@ class PeopleDetectorNode(Node):
                 self.tracked_people[matched_id]["box"] = det["box"]
                 self.tracked_people[matched_id]["last_seen"] = current_time
 
-                # 💡 [핵심 수정] 움직임 임계값 필터 (0.05 = 화면상 아주 미세한 떨림만 허용)
                 if move_distance > 0.05 and not self.tracked_people[matched_id]["sent_to_pc"]:
-                    # 활발하게 움직이고 있다면 -> 기절한 사람이 아니므로 "움직임 시작 시간"을 계속 현재로 리셋!
                     self.tracked_people[matched_id]["first_still_time"] = current_time
                     self.tracked_people[matched_id]["is_moving"] = True
                 else:
@@ -197,18 +189,16 @@ class PeopleDetectorNode(Node):
 
             updated_ids.add(matched_id)
 
-            # ⏱️ 진짜 멈춰있었던(기절해있었던) 시간 계산
             still_duration = current_time - self.tracked_people[matched_id]["first_still_time"]
             bx, by, bw, bh = self.tracked_people[matched_id]["box"]
             
             if self.tracked_people[matched_id]["sent_to_pc"]:
                 p_status = "STILL (UNCONSCIOUS)"
-                box_color = (255, 0, 0) # 최종 기절 요구조자 확정은 파란색
+                box_color = (255, 0, 0)
             elif self.tracked_people[matched_id]["is_moving"]:
                 p_status = "MOVING (PASS)"
-                box_color = (0, 0, 255) # 걸어다니는 정상인은 빨간색 (로봇 안 멈춤)
+                box_color = (0, 0, 255)
             else:
-                # 멈춰있는 대상은 초록색 박스로 타이머 작동하며 터틀봇 제동
                 p_status = f"STILL: {min(5.0, still_duration):.1f}s / 5.0s"
                 box_color = (0, 255, 0)
                 any_active_braking = True
@@ -217,7 +207,6 @@ class PeopleDetectorNode(Node):
             cv2.putText(vis_frame, f"ID_{matched_id} [{p_status}]", (bx, max(by - 5, 15)),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, box_color, 2)
 
-            # 움직임 없이 진짜로 5.0초 동안 가만히 누워/쓰러져 있었을 때만 최종 확정!
             if still_duration >= 5.0 and not self.tracked_people[matched_id]["sent_to_pc"] and not self.tracked_people[matched_id]["is_moving"]:
                 self.tracked_people[matched_id]["sent_to_pc"] = True
                 
@@ -228,15 +217,14 @@ class PeopleDetectorNode(Node):
                 point_msg.point.y = det["y"]
                 point_msg.point.z = det["conf"]
                 self.person_pos_pub.publish(point_msg)
-                self.get_logger().error(f"🎯 [ID {matched_id}] 5초간 미동 없음 확인! 기절한 요구조자로 판단하여 관제 PC 송신!")
+                self.get_logger().error(f" [ID {matched_id}] 5초간 미동 없음 확인! 기절한 요구조자로 판단하여 관제 PC 송신!")
 
-        # 화면 이탈 관리
         all_ids = list(self.tracked_people.keys())
         for pid in all_ids:
             if pid not in updated_ids:
                 if current_time - self.tracked_people[pid]["last_seen"] > 1.0:
                     del self.tracked_people[pid]
-                    self.get_logger().warn(f"🔄 [ID {pid}] 화면 이탈 리셋.")
+                    self.get_logger().warn(f" [ID {pid}] 화면 이탈 리셋.")
                 else:
                     if not self.tracked_people[pid]["sent_to_pc"] and not self.tracked_people[pid]["is_moving"]:
                         any_active_braking = True
