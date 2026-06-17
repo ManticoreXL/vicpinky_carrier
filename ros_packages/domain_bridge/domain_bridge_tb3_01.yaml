@@ -38,6 +38,12 @@ topics:
     to_domain: 49
     remap: /tb3_01/battery_state
 
+  /imu: # 전복 감지 및 자세 표시용
+    type: sensor_msgs/msg/Imu
+    from_domain: 41
+    to_domain: 49
+    remap: /tb3_01/imu
+
   # ── DOWNLINK: 관제탑(49)에서 로봇(41)으로 명령 전송 ──
   /tb3_01/cmd_vel: # 비상 정지 및 조이스틱 수동 제어용
     type: geometry_msgs/msg/TwistStamped
