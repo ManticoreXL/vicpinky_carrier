@@ -73,8 +73,9 @@ export interface FmsTask {
  targetNode: string;
  preferredRobotId?: string | null;
  waitReason?: string;
- assignedRobot: { robot_id: string | null; is_completed: boolean };
+ assignedRobotId: string | null;
  pathQueue: string[];
+ fullPath?: string[];
  createdAt: string;
  startedAt?: string;
  completedAt?: string;

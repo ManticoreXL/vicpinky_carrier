@@ -56,9 +56,13 @@ export class Task {
   @Prop({ type: Object, default: {} })
   actionPayload?: Record<string, any>;
 
-  /** 경로 탐색으로 생성된 남은 waypoint 목록 */
+  /** 경로 탐색으로 생성된 남은 waypoint 목록 (진행하면서 shrink) */
   @Prop({ type: [String], default: [] })
   pathQueue: string[];
+
+  /** 배정 시점에 확정된 전체 경로 (변경 없음, 시각화용) */
+  @Prop({ type: [String], default: [] })
+  fullPath: string[];
 
   // 에러 발생 시 원인 파악 및 관제 화면 표시용
   @Prop({ type: String, default: null })

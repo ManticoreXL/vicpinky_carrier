@@ -88,6 +88,7 @@ export class FmsService {
           status:        TaskStatus.ASSIGNED,
           startedAt,
           pathQueue,
+          fullPath:        pathQueue,
           assignedRobotId: robotId,
         },
         $unset: { waitReason: '' },
@@ -98,6 +99,7 @@ export class FmsService {
       status: TaskStatus.ASSIGNED,
       startedAt,
       pathQueue,
+      fullPath:        pathQueue,
       assignedRobotId: robotId,
       waitReason: null,
     });
@@ -109,9 +111,13 @@ export class FmsService {
   }
 
   // ── TaskManager용: pathQueue 갱신 (waypoint 이동 후) ─────────────────────
-  async updatePathQueue(taskId: string, remaining: string[], server: Server): Promise<void> {
-    await this.taskModel.updateOne({ _id: taskId }, { pathQueue: remaining });
-    server.emit('fms_task_updated', { _id: taskId, pathQueue: remaining });
+  async updatePathQueue(taskId: string, remaining: string[], server: Server, newFullPath?: string[]): Promise<void> {
+    const update: Record<string, unknown> = { pathQueue: remaining };
+    if (newFullPath) update.fullPath = newFullPath;
+    await this.taskModel.updateOne({ _id: taskId }, update);
+    const patch: Record<string, unknown> = { _id: taskId, pathQueue: remaining };
+    if (newFullPath) patch.fullPath = newFullPath;
+    server.emit('fms_task_updated', patch);
   }
 
   // ── ROS 발행: 목표 지점 전송 ──────────────────────────────────────────────

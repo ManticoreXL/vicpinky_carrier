@@ -35,6 +35,7 @@ export interface FEdge {
 export interface ActivePath {
  robotId: string;
  pathQueue: string[]; // 남은 노드들 (pathQueue[0] = 다음 목적지)
+ fullPath?: string[];  // 배정 시 확정된 전체 경로 (시각화용)
  fromNodeId?: string; // 현재 출발 노드 (robot.location)
 }
 

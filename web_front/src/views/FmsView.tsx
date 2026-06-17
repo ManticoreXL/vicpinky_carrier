@@ -71,7 +71,11 @@ export default function FmsView({
  return fmsTasks.filter(t => t.status === filterTab);
  }, [fmsTasks, filterTab]);
 
- const activePaths = useMemo(() => fmsTasks.filter(t => (t.status === "RUNNING" || t.status === "ASSIGNED") && t.assignedRobot?.robot_id && t.pathQueue?.length).map(t => ({ robotId: t.assignedRobot.robot_id!, pathQueue: t.pathQueue ?? [] })), [fmsTasks]);
+ const activePaths = useMemo(() =>
+  fmsTasks
+   .filter(t => (t.status === "RUNNING" || t.status === "ASSIGNED") && t.assignedRobotId && t.pathQueue?.length)
+   .map(t => ({ robotId: t.assignedRobotId!, pathQueue: t.pathQueue ?? [], fullPath: t.fullPath })),
+ [fmsTasks]);
 
  const robotPositions = useMemo(() => {
  const result: Record<string, RobotPos> = {};
@@ -191,7 +195,7 @@ function Stat({ label, value, color }: any) {
 
 function RobotStatusCard({ robot, rosMessages, fmsTasks, mapAssignment }: any) {
  const online = isOnline(rosMessages, robot.id);
- const task = fmsTasks.find((t: any) => t.assignedRobot?.robot_id === robot.id && ["ASSIGNED", "RUNNING"].includes(t.status));
+ const task = fmsTasks.find((t: any) => t.assignedRobotId === robot.id && ["ASSIGNED", "RUNNING"].includes(t.status));
  const bat = (rosMessages[`/${robot.id}/battery_state`]?.data as any)?.percentage;
  const batPct = bat != null ? Math.round(bat > 1 ? bat : bat * 100) : null;
 

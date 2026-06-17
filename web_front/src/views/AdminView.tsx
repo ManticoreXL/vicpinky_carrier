@@ -53,7 +53,7 @@ interface Task {
  priority: number;
  targetNode: string;
  waitReason?: string;
- assignedRobot: { robot_id: string | null; is_completed: boolean };
+ assignedRobotId: string | null;
  createdAt: string;
 }
 

@@ -558,103 +558,189 @@ export default function NavMapCanvas({
  });
  }
 
- // ── 예상 주행 경로 오버레이 (토폴로지 위에 렌더) ─────────────────────
- for (const { robotId, pathQueue } of filteredApaths) {
+ // ── 경로 오버레이: 전체 경로(fullPath) + 현재 goal(pathQueue[0]) 시각화 ──
+ for (const { robotId, pathQueue, fullPath } of filteredApaths) {
   const color = robotColorMap[robotId];
   if (!color || pathQueue.length === 0) continue;
 
+  // 로봇 현재 위치 (AMCL)
   const amclMsg = rosMessages[`/${robotId}/amcl_pose`]?.data as any;
   const amclPos = amclMsg?.pose?.pose?.position;
-  const pts: { cx: number; cy: number }[] = [];
-  if (amclPos?.x != null) {
-   pts.push(worldToCanvas(amclPos.x as number, (amclPos.y as number) ?? 0, info, scale));
-  }
-  for (const nodeId of pathQueue) {
+  const robotPt = amclPos?.x != null ? worldToCanvas(amclPos.x, amclPos.y, info, scale) : null;
+
+  type WPt = { cx: number; cy: number; nodeId: string; yaw: number };
+  const toWPt = (nodeId: string): WPt | null => {
    const node = topoNodesRef.current.find(n => n.node_id === nodeId);
-   if (node) pts.push(worldToCanvas(node.x, node.y, info, scale));
-  }
-  if (pts.length < 1) continue;
+   return node ? { ...worldToCanvas(node.x, node.y, info, scale), nodeId, yaw: node.yaw ?? 0 } : null;
+  };
+
+  // 전체 계획 경로 (fullPath 우선, 없으면 pathQueue로 대체)
+  const planIds = (fullPath && fullPath.length > 0) ? fullPath : pathQueue;
+  const planPts = planIds.map(toWPt).filter((p): p is WPt => p !== null);
+  if (planPts.length === 0) continue;
+
+  // 남은 경로 (pathQueue)
+  const remPts = pathQueue.map(toWPt).filter((p): p is WPt => p !== null);
+
+  // 이미 통과한 노드들 (fullPath에는 있지만 pathQueue에 없는 노드)
+  const remainSet = new Set(pathQueue);
+  const visitedIds = planIds.filter(id => !remainSet.has(id));
+  const visitedPts = visitedIds.map(toWPt).filter((p): p is WPt => p !== null);
+
+  const goalPt  = remPts[0];   // 현재 goal_pose 대상
+  const finalPt = planPts[planPts.length - 1];
+  const isSingle = planPts.length === 1;
 
   ctx.save();
 
-  if (pts.length >= 2) {
-   // glow outline
-   ctx.beginPath();
-   ctx.moveTo(pts[0].cx, pts[0].cy);
-   for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].cx, pts[i].cy);
-   ctx.strokeStyle = color;
-   ctx.lineWidth = 10;
-   ctx.globalAlpha = 0.25;
-   ctx.shadowColor = color;
-   ctx.shadowBlur = 16;
-   ctx.stroke();
-
-   // main dashed line
-   ctx.beginPath();
-   ctx.moveTo(pts[0].cx, pts[0].cy);
-   for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].cx, pts[i].cy);
-   ctx.strokeStyle = color;
-   ctx.lineWidth = 4;
-   ctx.globalAlpha = 0.95;
-   ctx.shadowColor = color;
-   ctx.shadowBlur = 8;
-   ctx.setLineDash([14, 5]);
-   ctx.stroke();
-   ctx.setLineDash([]);
-   ctx.shadowBlur = 0;
-
-   // directional arrows between segments
-   ctx.globalAlpha = 1;
-   for (let i = 0; i < pts.length - 1; i++) {
-    const ax = (pts[i].cx + pts[i + 1].cx) / 2;
-    const ay = (pts[i].cy + pts[i + 1].cy) / 2;
-    const angle = Math.atan2(pts[i + 1].cy - pts[i].cy, pts[i + 1].cx - pts[i].cx);
-    const al = 10;
+  // ── 1. 이미 지나온 경로 (방문 완료 구간) ─ 매우 희미하게 ──────────────
+  if (visitedPts.length > 0) {
+   const visitedLine: WPt[] = [];
+   if (robotPt) visitedLine.push({ cx: robotPt.cx, cy: robotPt.cy, nodeId: "", yaw: 0 });
+   visitedLine.push(...visitedPts);
+   if (goalPt) visitedLine.push(goalPt);
+   if (visitedLine.length >= 2) {
     ctx.beginPath();
-    ctx.moveTo(ax + al * Math.cos(angle), ay + al * Math.sin(angle));
-    ctx.lineTo(ax - al * Math.cos(angle - 0.45), ay - al * Math.sin(angle - 0.45));
-    ctx.lineTo(ax - al * Math.cos(angle + 0.45), ay - al * Math.sin(angle + 0.45));
-    ctx.closePath();
-    ctx.fillStyle = color;
-    ctx.fill();
+    ctx.moveTo(visitedLine[0].cx, visitedLine[0].cy);
+    for (let i = 1; i < visitedLine.length; i++) ctx.lineTo(visitedLine[i].cx, visitedLine[i].cy);
+    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.globalAlpha = 0.2;
+    ctx.setLineDash([4, 8]); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
    }
   }
 
-  // waypoint index circles (skip first = current pos)
-  ctx.globalAlpha = 1;
-  const startIdx = amclPos?.x != null ? 1 : 0;
-  for (let i = startIdx; i < pts.length; i++) {
-   const { cx: wx, cy: wy } = pts[i];
-   const isDest = i === pts.length - 1;
-   const r = isDest ? 11 : 7;
+  // ── 2. 전체 계획 경로 배경 glow ──────────────────────────────────────
+  {
+   const glowPts = robotPt ? [{ cx: robotPt.cx, cy: robotPt.cy, nodeId: "", yaw: 0 }, ...planPts] : planPts;
    ctx.beginPath();
-   ctx.arc(wx, wy, r + 2, 0, Math.PI * 2);
-   ctx.fillStyle = "rgba(0,0,0,0.55)";
-   ctx.fill();
-   ctx.beginPath();
-   ctx.arc(wx, wy, r, 0, Math.PI * 2);
-   ctx.fillStyle = isDest ? color : color + "bb";
-   ctx.fill();
-   const label = isDest ? "★" : String(i - startIdx + 1);
-   ctx.font = isDest ? `bold 10px monospace` : `bold 9px monospace`;
-   ctx.fillStyle = "#fff";
-   ctx.textAlign = "center";
-   ctx.textBaseline = "middle";
-   ctx.fillText(label, wx, wy);
+   ctx.moveTo(glowPts[0].cx, glowPts[0].cy);
+   for (let i = 1; i < glowPts.length; i++) ctx.lineTo(glowPts[i].cx, glowPts[i].cy);
+   ctx.strokeStyle = color; ctx.lineWidth = 12; ctx.globalAlpha = 0.08;
+   ctx.shadowColor = color; ctx.shadowBlur = 20; ctx.stroke();
+   ctx.shadowBlur = 0; ctx.globalAlpha = 1;
   }
 
-  // destination label
-  if (pts.length >= 1) {
-   const dest = pts[pts.length - 1];
-   const destNodeId = pathQueue[pathQueue.length - 1];
-   ctx.font = "bold 11px monospace";
-   ctx.textAlign = "center";
-   ctx.textBaseline = "bottom";
-   ctx.lineWidth = 3;
-   ctx.strokeStyle = "rgba(0,0,0,0.85)";
-   ctx.strokeText(`→ ${destNodeId}`, dest.cx, dest.cy - 14);
-   ctx.fillStyle = color;
-   ctx.fillText(`→ ${destNodeId}`, dest.cx, dest.cy - 14);
+  // ── 3. 로봇 → 현재 GOAL : solid 선 + glow ────────────────────────────
+  if (robotPt && goalPt) {
+   ctx.beginPath();
+   ctx.moveTo(robotPt.cx, robotPt.cy); ctx.lineTo(goalPt.cx, goalPt.cy);
+   ctx.strokeStyle = color; ctx.lineWidth = 3.5; ctx.globalAlpha = 1;
+   ctx.shadowColor = color; ctx.shadowBlur = 10; ctx.stroke(); ctx.shadowBlur = 0;
+  }
+
+  // ── 4. GOAL 이후 전체 계획 경로 : dashed ─────────────────────────────
+  if (planPts.length > 1) {
+   const startIdx = goalPt ? planPts.findIndex(p => p.nodeId === goalPt.nodeId) : 0;
+   if (startIdx >= 0 && startIdx < planPts.length - 1) {
+    ctx.beginPath();
+    ctx.moveTo(planPts[startIdx].cx, planPts[startIdx].cy);
+    for (let i = startIdx + 1; i < planPts.length; i++) ctx.lineTo(planPts[i].cx, planPts[i].cy);
+    ctx.strokeStyle = color; ctx.lineWidth = 2.5; ctx.globalAlpha = 0.5;
+    ctx.setLineDash([10, 6]); ctx.stroke(); ctx.setLineDash([]); ctx.globalAlpha = 1;
+   }
+  }
+
+  // ── 5. 방향 화살표 ────────────────────────────────────────────────────
+  {
+   const arPts = robotPt ? [{ cx: robotPt.cx, cy: robotPt.cy, nodeId: "", yaw: 0 }, ...planPts] : planPts;
+   for (let i = 0; i < arPts.length - 1; i++) {
+    const mx = (arPts[i].cx + arPts[i + 1].cx) / 2;
+    const my = (arPts[i].cy + arPts[i + 1].cy) / 2;
+    const ang = Math.atan2(arPts[i + 1].cy - arPts[i].cy, arPts[i + 1].cx - arPts[i].cx);
+    const isActive = goalPt && arPts[i + 1].nodeId === goalPt.nodeId;
+    ctx.globalAlpha = isActive ? 1 : 0.4;
+    ctx.beginPath();
+    const al = 8;
+    ctx.moveTo(mx + al * Math.cos(ang), my + al * Math.sin(ang));
+    ctx.lineTo(mx - al * Math.cos(ang - 0.45), my - al * Math.sin(ang - 0.45));
+    ctx.lineTo(mx - al * Math.cos(ang + 0.45), my - al * Math.sin(ang + 0.45));
+    ctx.closePath(); ctx.fillStyle = color; ctx.fill();
+   }
+   ctx.globalAlpha = 1;
+  }
+
+  // ── 6. 경유지 번호 원 (전체 계획 경로, goal 및 final 제외) ──────────────
+  planPts.forEach((pt, i) => {
+   if (i === 0) return; // 첫 번째 노드 (출발 직후 첫 goal 포함)
+   const isGoal  = goalPt && pt.nodeId === goalPt.nodeId;
+   const isFinal = i === planPts.length - 1;
+   if (isGoal || isFinal) return; // goal·final 은 별도로 그림
+   const isVisited = !remainSet.has(pt.nodeId);
+   const r = 7;
+   ctx.globalAlpha = isVisited ? 0.2 : 0.65;
+   ctx.beginPath(); ctx.arc(pt.cx, pt.cy, r + 2, 0, Math.PI * 2);
+   ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fill();
+   ctx.beginPath(); ctx.arc(pt.cx, pt.cy, r, 0, Math.PI * 2);
+   ctx.fillStyle = color + "99"; ctx.fill();
+   ctx.font = "bold 9px monospace"; ctx.fillStyle = "#fff";
+   ctx.textAlign = "center"; ctx.textBaseline = "middle";
+   ctx.fillText(String(i), pt.cx, pt.cy);
+   ctx.globalAlpha = 1;
+  });
+
+  // ── 7. 최종 목적지 마커 ★ ─────────────────────────────────────────────
+  if (!isSingle) {
+   const r = 11;
+   ctx.globalAlpha = 0.9;
+   ctx.beginPath(); ctx.arc(finalPt.cx, finalPt.cy, r + 2, 0, Math.PI * 2);
+   ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fill();
+   ctx.beginPath(); ctx.arc(finalPt.cx, finalPt.cy, r, 0, Math.PI * 2);
+   ctx.fillStyle = color; ctx.fill();
+   ctx.font = "bold 10px monospace"; ctx.fillStyle = "#fff";
+   ctx.textAlign = "center"; ctx.textBaseline = "middle";
+   ctx.fillText("★", finalPt.cx, finalPt.cy);
+   ctx.globalAlpha = 1;
+   // 목적지 라벨
+   ctx.font = "bold 11px monospace"; ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+   ctx.lineWidth = 3; ctx.strokeStyle = "rgba(0,0,0,0.85)";
+   ctx.strokeText(`→ ${finalPt.nodeId}`, finalPt.cx, finalPt.cy - 17);
+   ctx.fillStyle = color; ctx.fillText(`→ ${finalPt.nodeId}`, finalPt.cx, finalPt.cy - 17);
+  }
+
+  // ── 8. 현재 GOAL 강조 마커 ─ 동심원 + crosshair + yaw 화살표 ──────────
+  if (goalPt) {
+   const { cx: gcx, cy: gcy, nodeId: gId, yaw: gYaw } = goalPt;
+
+   // 동심원 (targeting 효과)
+   ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.15;
+   ctx.beginPath(); ctx.arc(gcx, gcy, 24, 0, Math.PI * 2); ctx.stroke();
+   ctx.globalAlpha = 0.3;
+   ctx.beginPath(); ctx.arc(gcx, gcy, 17, 0, Math.PI * 2); ctx.stroke();
+   ctx.lineWidth = 2; ctx.globalAlpha = 0.65;
+   ctx.beginPath(); ctx.arc(gcx, gcy, 11, 0, Math.PI * 2); ctx.stroke();
+   ctx.globalAlpha = 1;
+
+   // 내부 채움
+   ctx.beginPath(); ctx.arc(gcx, gcy, 9, 0, Math.PI * 2);
+   ctx.fillStyle = color + "33"; ctx.fill();
+   ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.stroke();
+
+   // crosshair
+   const chLen = 20;
+   ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.globalAlpha = 0.55;
+   ctx.beginPath(); ctx.moveTo(gcx - chLen, gcy); ctx.lineTo(gcx + chLen, gcy); ctx.stroke();
+   ctx.beginPath(); ctx.moveTo(gcx, gcy - chLen); ctx.lineTo(gcx, gcy + chLen); ctx.stroke();
+   ctx.globalAlpha = 1;
+
+   // goal yaw 방향 화살표 + 화살촉
+   const arLen = 26;
+   const arX = gcx + Math.cos(-gYaw) * arLen;
+   const arY = gcy + Math.sin(-gYaw) * arLen;
+   ctx.beginPath(); ctx.moveTo(gcx, gcy); ctx.lineTo(arX, arY);
+   ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+   ctx.shadowColor = color; ctx.shadowBlur = 8; ctx.stroke(); ctx.shadowBlur = 0;
+   const arAng = Math.atan2(arY - gcy, arX - gcx);
+   const ah = 9;
+   ctx.beginPath();
+   ctx.moveTo(arX, arY);
+   ctx.lineTo(arX - ah * Math.cos(arAng - 0.4), arY - ah * Math.sin(arAng - 0.4));
+   ctx.lineTo(arX - ah * Math.cos(arAng + 0.4), arY - ah * Math.sin(arAng + 0.4));
+   ctx.closePath(); ctx.fillStyle = color; ctx.fill();
+
+   // GOAL 라벨
+   ctx.textAlign = "center"; ctx.textBaseline = "bottom"; ctx.font = "bold 10px monospace";
+   ctx.lineWidth = 3; ctx.strokeStyle = "rgba(0,0,0,0.9)";
+   ctx.strokeText(`◎ ${gId}`, gcx, gcy - 28);
+   ctx.fillStyle = color; ctx.fillText(`◎ ${gId}`, gcx, gcy - 28);
   }
 
   ctx.globalAlpha = 1;

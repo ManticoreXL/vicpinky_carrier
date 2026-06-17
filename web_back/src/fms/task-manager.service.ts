@@ -298,7 +298,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       }
 
       const newQueue = newRaw.slice(1); // startId는 현재 위치이므로 제외
-      await this.fmsService.updatePathQueue(taskId, newQueue, this.server);
+      await this.fmsService.updatePathQueue(taskId, newQueue, this.server, newQueue);
 
       // 새 첫 노드로 goal_pose 재전송 (이전 goal은 새 goal이 덮어씀)
       await this.sendNodeActionGoal(robotId, newQueue[0]);

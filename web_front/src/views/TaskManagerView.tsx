@@ -502,7 +502,7 @@ export default function TaskManagerView({
                 key={r.id} robot={r}
                 online={isOnline(rosMessages, r.id)}
                 status={robotStatuses[r.id]}
-                task={fmsTasks.find(t => t.assignedRobot?.robot_id === r.id && ["ASSIGNED", "RUNNING"].includes(t.status))}
+                task={fmsTasks.find(t => t.assignedRobotId === r.id && ["ASSIGNED", "RUNNING"].includes(t.status))}
                 rosMessages={rosMessages}
               />
             ))}
@@ -632,7 +632,7 @@ function TaskCard({ task, onCancel }: { task: FmsTask; onCancel: () => void }) {
             task.status === "ASSIGNED" ? "text-sky-400" :
             task.status === "FAILED" ? "text-rose-400" : "text-amber-400"
           }`}>{task.status}</span>
-          {task.assignedRobot?.robot_id && <span className="text-white/30">@ {task.assignedRobot.robot_id}</span>}
+          {task.assignedRobotId && <span className="text-white/30">@ {task.assignedRobotId}</span>}
         </div>
         <div className="flex items-center gap-3">
           {elapsed !== null && <span className="font-mono">{elapsed}s</span>}
