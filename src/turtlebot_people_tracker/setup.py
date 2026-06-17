@@ -1,3 +1,5 @@
+import os
+from glob import glob
 from setuptools import find_packages, setup
 
 package_name = 'turtlebot_people_tracker'
@@ -10,6 +12,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        (os.path.join('lib', 'python3.12', 'site-packages', package_name), glob(os.path.join(package_name, '*.onnx'))),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
