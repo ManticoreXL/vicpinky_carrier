@@ -4,6 +4,7 @@ import { Model } from 'mongoose';
 import { Server } from 'socket.io';
 import { Task, TaskDocument, TaskStatus, TaskType } from './task.schema';
 import { RosService } from '../ros/ros.service';
+import { DomainBridgeService } from '../ros/domain-bridge.service';
 
 export interface CreateTaskDto {
   task_id?: string;
@@ -25,7 +26,27 @@ export class FmsService {
   constructor(
     @InjectModel(Task.name) private readonly taskModel: Model<TaskDocument>,
     private readonly rosService: RosService,
+    private readonly domainBridgeService: DomainBridgeService,
   ) {}
+
+  // ── cmd_vel 발행 대상 결정 (domain_bridge 참조) ──────────────────────────
+  //
+  // domain_bridge가 tb3/omx의 cmd_vel을 TwistStamped로 중계하므로,
+  // 타입/토픽을 브리지 설정에서 가져와야 정지 명령이 실제로 로봇에 도달한다.
+  // 브리지에 없는 로봇(vicpinky 등)은 기존 기본값(/{id}/cmd_vel, Twist)으로 폴백.
+  private cmdVelTarget(robotId: string): { topic: string; stamped: boolean } {
+    const caps = this.domainBridgeService.getCapabilities(robotId);
+    if (caps && !Array.isArray(caps)) {
+      const entry = caps.commands.find(
+        (c) =>
+          c.hubTopic === `/${robotId}/cmd_vel` ||
+          c.hubTopic === '/cmd_vel' ||
+          c.robotTopic === '/cmd_vel',
+      );
+      if (entry) return { topic: entry.hubTopic, stamped: /TwistStamped/.test(entry.type) };
+    }
+    return { topic: `/${robotId}/cmd_vel`, stamped: false };
+  }
 
   // ── TaskManager용: 우선순위 큐에 등록 ────────────────────────────────────
   async createQueued(dto: CreateTaskDto): Promise<TaskDocument> {
@@ -137,14 +158,16 @@ export class FmsService {
   }
 
   // ── ROS 발행: 즉시 정지 (cmd_vel zero) ────────────────────────────────────
+  // 토픽/타입은 domain_bridge 설정 기준 (tb3/omx=TwistStamped, vicpinky=Twist)
   publishStop(robotId: string): void {
+    const { topic, stamped } = this.cmdVelTarget(robotId);
+    const zero = { linear: { x: 0, y: 0, z: 0 }, angular: { x: 0, y: 0, z: 0 } };
     this.rosService.publish({
-      topicName:   `/${robotId}/cmd_vel`,
-      messageType: 'geometry_msgs/Twist',
-      message: {
-        linear:  { x: 0, y: 0, z: 0 },
-        angular: { x: 0, y: 0, z: 0 },
-      },
+      topicName:   topic,
+      messageType: stamped ? 'geometry_msgs/TwistStamped' : 'geometry_msgs/Twist',
+      message: stamped
+        ? { header: { stamp: { sec: 0, nanosec: 0 }, frame_id: '' }, twist: zero }
+        : zero,
     });
   }
 

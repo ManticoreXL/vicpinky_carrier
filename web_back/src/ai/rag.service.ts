@@ -6,6 +6,17 @@ import { Robot, RobotDocument } from '../fleet/robot.schema';
 import { Node, NodeDocument } from '../fleet/node.schema';
 import { Log, LogDocument } from '../logs/log.schema';
 
+function nearestNodeId(x: number, y: number, nodes: NodeDocument[]): string | null {
+  if (!nodes.length) return null;
+  let best = nodes[0];
+  let bestDist = Math.hypot(best.x - x, best.y - y);
+  for (let i = 1; i < nodes.length; i++) {
+    const d = Math.hypot(nodes[i].x - x, nodes[i].y - y);
+    if (d < bestDist) { bestDist = d; best = nodes[i]; }
+  }
+  return best.node_id;
+}
+
 @Injectable()
 export class RagService {
   private readonly logger = new Logger(RagService.name);
@@ -53,8 +64,16 @@ export class RagService {
         lines.push('  (등록된 로봇 없음)');
       } else {
         for (const r of robots) {
-          const loc = r.location ? ` @ ${r.location}` : '';
-          lines.push(`  - ${r.robot_id}: ${r.status}${loc} (IP: ${r.ip}, Domain: ${r.ros_domain_id})`);
+          const loc  = r.location ? ` @ ${r.location}` : '';
+          const bat  = (r as any).battery != null ? ` 배터리 ${Math.round((r as any).battery)}%` : '';
+          const px = (r as any).pose_x, py = (r as any).pose_y ?? 0;
+          const nodeLabel = px != null
+            ? (() => {
+                const nid = nearestNodeId(px, py, nodes);
+                return ` 위치(${px.toFixed(2)}, ${py.toFixed(2)})${nid ? ` [근접노드: ${nid}]` : ''}`;
+              })()
+            : '';
+          lines.push(`  - ${r.robot_id}: ${r.status}${loc}${bat}${nodeLabel} (IP: ${r.ip})`);
         }
       }
 

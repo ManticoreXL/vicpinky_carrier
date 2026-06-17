@@ -8,9 +8,12 @@ import { Task, TaskSchema } from '../fms/task.schema';
 import { RobotService } from './robot.service';
 import { FleetMapService } from './fleet-map.service';
 import { TopologyService } from './topology.service';
+import { TelemetryService } from './telemetry.service';
+import { CollisionAvoidanceService } from './collision-avoidance.service';
 import { RobotController } from './robot.controller';
 import { FleetMapController } from './fleet-map.controller';
 import { TopologyController } from './topology.controller';
+import { RosModule } from '../ros/ros.module';
 
 @Module({
   imports: [
@@ -21,9 +24,22 @@ import { TopologyController } from './topology.controller';
       { name: Edge.name,     schema: EdgeSchema     },
       { name: Task.name,     schema: TaskSchema     },
     ]),
+    RosModule, // TelemetryService가 ROS 토픽 구독
   ],
-  providers: [RobotService, FleetMapService, TopologyService],
+  providers: [
+    RobotService,
+    FleetMapService,
+    TopologyService,
+    TelemetryService,
+    CollisionAvoidanceService,
+  ],
   controllers: [RobotController, FleetMapController, TopologyController],
-  exports: [RobotService, FleetMapService, TopologyService],
+  exports: [
+    RobotService,
+    FleetMapService,
+    TopologyService,
+    TelemetryService,
+    CollisionAvoidanceService,
+  ],
 })
 export class FleetModule {}

@@ -18,6 +18,8 @@ import { FmsService } from '../fms/fms.service';
 import type { CreateTaskDto } from '../fms/fms.service';
 import { TaskManagerService } from '../fms/task-manager.service';
 import { AiService } from '../ai/ai.service';
+import { TelemetryService } from '../fleet/telemetry.service';
+import { RobotService } from '../fleet/robot.service';
 import type {
   ServiceCallPayload,
   TopicPublishPayload,
@@ -52,6 +54,8 @@ export class RosGateway
     private readonly fmsService: FmsService,
     private readonly taskManager: TaskManagerService,
     private readonly aiService: AiService,
+    private readonly telemetryService: TelemetryService,
+    private readonly robotService: RobotService,
   ) {}
 
   // ── 모듈 초기화 시 ROS 메시지 → 프론트 브로드캐스트 등록 ───────────────
@@ -74,11 +78,31 @@ export class RosGateway
 
   afterInit() {
     this.taskManager.setServer(this.server);
+    this.telemetryService.setServer(this.server);
   }
 
-  handleConnection(client: Socket) {
-    // 연결 즉시 rosbridge 상태 전송 (로그 없음 — 노이즈 방지)
+  async handleConnection(client: Socket) {
     client.emit('ros_status', { connected: this.rosService.isConnected });
+
+    // 연결 즉시 로봇 목록 전송 — DB 조회 + 실시간 텔레메트리 병합
+    try {
+      const robots = await this.robotService.findAll();
+      const telMap = new Map(this.telemetryService.getAll().map(t => [t.robotId, t]));
+      const payload = robots.map(r => {
+        const tel = telMap.get(r.robot_id);
+        const obj = r.toObject ? r.toObject() : { ...r };
+        return {
+          ...obj,
+          pose_x:   obj.pose_x   ?? tel?.posX   ?? null,
+          pose_y:   obj.pose_y   ?? tel?.posY   ?? null,
+          yaw:      obj.yaw      ?? tel?.yaw     ?? null,
+          battery:  obj.battery  ?? tel?.battery ?? null,
+        };
+      });
+      client.emit('robots_init', payload);
+    } catch {
+      client.emit('robots_init', []);
+    }
   }
 
   handleDisconnect(client: Socket) {

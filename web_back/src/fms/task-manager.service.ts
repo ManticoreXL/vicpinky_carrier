@@ -5,15 +5,18 @@ import { TaskStatus } from './task.schema';
 import { RosService } from '../ros/ros.service';
 import { RobotService } from '../fleet/robot.service';
 import { TopologyService } from '../fleet/topology.service';
+import { TelemetryService } from '../fleet/telemetry.service';
+import { CollisionAvoidanceService } from '../fleet/collision-avoidance.service';
 import { RobotDocument, RobotStatus } from '../fleet/robot.schema';
 import type { RosMessage } from '../ros/ros.types';
 
 // ── 상수 ─────────────────────────────────────────────────────────────────────
 
 const LOOP_MS          = 2_000;
-const ONLINE_MS        = 5_000;
-const OFFLINE_AFTER_MS = 20_000; // 느린 로봇 / WiFi 혼잡 대비 20s
-const AMCL_TIMEOUT_MS  = 20_000; // nav2 재시작 감지 — amcl_pose 없을 때
+const ONLINE_MS          = 5_000;
+const OFFLINE_AFTER_MS   = 20_000;  // 느린 로봇 / WiFi 혼잡 대비 20s
+const AMCL_TIMEOUT_MS    = 60_000;  // nav2 TF 초기화 여유 — 60s 대기 후 판단
+const AMCL_RESUME_MS     = 30_000;  // AMCL 복구 후 이 시간 내 AMCL 수신 시 재시도 판단 기준
 const FALL_THRESH_RAD  = Math.PI / 4; // 45° 이상 기울면 전복 판정
 
 // 위치 감지 반경 (노드 위주 경로)
@@ -33,12 +36,13 @@ export interface TaskManagerAlert {
 }
 
 interface RobotCache {
-  lastSeen:    number;
-  batteryPct:  number | null;
-  posX:        number | null;
-  posY:        number | null;
-  yaw:         number | null;
-  lastAmclMs:  number | null; // amcl_pose 마지막 수신 시각
+  lastSeen:       number;
+  batteryPct:     number | null;
+  posX:           number | null;
+  posY:           number | null;
+  yaw:            number | null;
+  lastAmclMs:     number | null; // amcl_pose 마지막 수신 시각
+  amclSuspended?: boolean;       // AMCL 타임아웃으로 태스크 일시정지 중
 }
 
 // ── 서비스 ────────────────────────────────────────────────────────────────────
@@ -60,8 +64,9 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   private readonly lastFallAlert    = new Map<string, number>();
   // robotId → 온라인 여부 (undefined = 미확인)
   private readonly robotOnlineState = new Map<string, boolean>();
-  // robotId → 점유 로봇 때문에 정지 중인 2-ahead 노드 ID
-  private readonly stoppedForNode   = new Map<string, string>();
+  // 충돌 회피 정지/재출발 상태는 CollisionAvoidanceService가 소유 (collisionService)
+  // AMCL 타임아웃으로 일시정지된 태스크 (복구 시 자동 재개)
+  private readonly suspendedTasks   = new Map<string, string>();
 
   // robotId → 코너 회전 상태
   private readonly rotatingState = new Map<string, {
@@ -81,10 +86,12 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   private static readonly CORNER_SAFETY_MS   = 8_000;     // 회전 최대 허용 시간
 
   constructor(
-    private readonly fmsService:      FmsService,
-    private readonly rosService:      RosService,
-    private readonly robotService:    RobotService,
-    private readonly topologyService: TopologyService,
+    private readonly fmsService:       FmsService,
+    private readonly rosService:       RosService,
+    private readonly robotService:     RobotService,
+    private readonly topologyService:  TopologyService,
+    private readonly telemetryService: TelemetryService,
+    private readonly collisionService: CollisionAvoidanceService,
   ) {}
 
   // ── 라이프사이클 ─────────────────────────────────────────────────────────
@@ -143,6 +150,34 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
   ackAlert(_alertId: string) { /* 클라이언트 UI용 */ }
 
+  // ── 긴급 정지 (EXAONE 에이전트 / 관제) ────────────────────────────────────
+  //
+  // 활성 태스크가 있으면 취소(=정지+IDLE), 없으면 단순 cmd_vel 정지.
+
+  async stopRobot(robotId: string): Promise<{ ok: boolean; message: string }> {
+    const taskId = this.activeTasks.get(robotId);
+    if (taskId) {
+      await this.cancelTask(taskId);
+      return { ok: true, message: `${robotId} 태스크 취소 및 정지 완료` };
+    }
+    for (let i = 0; i < 3; i++) this.fmsService.publishStop(robotId);
+    this.collisionService.clear(robotId);
+    await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
+    this.server?.emit('robot_status_changed', { robot_id: robotId, status: 'IDLE' });
+    return { ok: true, message: `${robotId} 정지 완료 (진행 중 태스크 없음)` };
+  }
+
+  // ── 홈 복귀 (EXAONE 에이전트 / 관제) ──────────────────────────────────────
+
+  returnHomeNow(robotId: string): { ok: boolean; message: string } {
+    const home = this.homePositions.get(robotId);
+    if (!home) {
+      return { ok: false, message: `${robotId} 홈 위치가 등록되지 않음 — 맵에서 홈을 먼저 지정하세요` };
+    }
+    this.returnHome(robotId);
+    return { ok: true, message: `${robotId} 홈 복귀 시작 (${home.x.toFixed(2)}, ${home.y.toFixed(2)})` };
+  }
+
   // ── 태스크 취소 + 로봇 즉시 정지 ────────────────────────────────────────
   //
   // fmsService.cancel()은 상태만 변경하므로, 로봇 정지는 여기서 처리한다.
@@ -170,7 +205,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       this.activeTasks.delete(robotId);
       const rot = this.rotatingState.get(robotId);
       if (rot) { clearTimeout(rot.timer); this.rotatingState.delete(robotId); }
-      this.stoppedForNode.delete(robotId);
+      this.collisionService.clear(robotId);
 
       // 3. 로봇 상태 IDLE 복귀
       await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
@@ -216,7 +251,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
     const rotM = this.rotatingState.get(robotId);
     if (rotM) { clearTimeout(rotM.timer); this.rotatingState.delete(robotId); }
-    this.stoppedForNode.delete(robotId);
+    this.collisionService.clear(robotId);
 
     // 진행 중인 nav2 주행 중단 (맵 변경으로 이전 goal_pose 무효)
     this.fmsService.publishStop(robotId);
@@ -357,6 +392,12 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
           return; // 회전 중에는 checkWaypointArrival 스킵
         }
 
+        // AMCL 복구 감지: 일시정지 태스크 자동 재개
+        if (this.robotCache.get(id)?.amclSuspended) {
+          void this.checkAmclResume(id, pos.x, pos.y ?? 0, yaw);
+          return;
+        }
+
         void this.checkWaypointArrival(id, pos.x, pos.y ?? 0, yaw);
       }
     }
@@ -405,10 +446,11 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
   // ── 경유 노드 통과 감지 (위치 추적 전용) ────────────────────────────────
 
-  // ── AMCL 타임아웃 감지 (nav2 재시작) ────────────────────────────────────
+  // ── AMCL 타임아웃 감지 (nav2 TF 초기화 / 재시작) ─────────────────────────
   //
-  // amcl_pose가 AMCL_TIMEOUT_MS 이상 안 오면 nav2가 꺼진 것으로 판단.
-  // 활성 태스크를 FAILED 처리하고 로봇을 IDLE로 복귀.
+  // amcl_pose가 AMCL_TIMEOUT_MS(60s) 이상 안 오면 nav2 초기화 중으로 판단.
+  // 태스크를 SUSPENDED로 보류하고 activeTasks에서만 제거 (FAILED 아님).
+  // AMCL이 복구되면 자동으로 goal_pose 재전송하고 태스크 재개.
 
   private async checkAmclTimeout() {
     if (!this.server) return;
@@ -416,95 +458,131 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
     for (const [robotId, taskId] of this.activeTasks) {
       const cache = this.robotCache.get(robotId);
-      if (!cache || cache.lastAmclMs == null) continue; // 한 번도 amcl 못 받은 로봇은 스킵
-
+      if (!cache || cache.lastAmclMs == null) continue;
       if (now - cache.lastAmclMs < AMCL_TIMEOUT_MS) continue;
+      if (cache.amclSuspended) continue; // 이미 처리됨
 
-      this.logger.warn(`[AMCL타임아웃] ${robotId} — ${AMCL_TIMEOUT_MS / 1000}s간 amcl_pose 없음 → nav2 재시작 추정, 태스크 FAILED`);
+      this.logger.warn(`[AMCL타임아웃] ${robotId} — ${AMCL_TIMEOUT_MS / 1000}s간 amcl_pose 없음 → nav2 초기화 추정, 태스크 일시정지`);
 
+      // activeTasks에서 제거 (중복 goal 방지)
       this.activeTasks.delete(robotId);
       const rotA = this.rotatingState.get(robotId);
       if (rotA) { clearTimeout(rotA.timer); this.rotatingState.delete(robotId); }
-      this.stoppedForNode.delete(robotId);
+      this.collisionService.clear(robotId);
 
+      // 태스크는 SUSPENDED (FAILED 아님) — 복구 후 재개 가능
       const task = await this.fmsService.getTask(taskId);
       if (task && task.status !== TaskStatus.COMPLETED && task.status !== TaskStatus.FAILED) {
-        await this.fmsService.setStatus(taskId, TaskStatus.FAILED, this.server, { completedAt: new Date() });
+        await this.fmsService.setWaitReason(taskId, 'Nav2 초기화 중 — AMCL 복구 대기');
+        await this.fmsService.setStatus(taskId, TaskStatus.SUSPENDED, this.server);
       }
-      await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
+
+      // amclSuspended 플래그 + 대기 중인 taskId 기록
+      this.robotCache.set(robotId, { ...cache, amclSuspended: true });
+      this.suspendedTasks.set(robotId, taskId);
 
       this.emit({
         type: 'info', taskId, robotId,
-        message: `${robotId} nav2 재시작 감지 — 태스크 취소, 재포징 후 재시작 필요`,
-        requiresAction: true,
+        message: `${robotId} Nav2 초기화 감지 — AMCL 복구 시 자동 재개`,
+        requiresAction: false,
       });
       this.server.emit('robot_status_changed', { robot_id: robotId, status: 'IDLE' });
     }
   }
 
-  // ── 2-ahead 노드 충돌 감지 ──────────────────────────────────────────────
+  // ── AMCL 복구 감지 → 일시정지 태스크 자동 재개 ────────────────────────────
+
+  private async checkAmclResume(robotId: string, x: number, y: number, yaw: number) {
+    const cache = this.robotCache.get(robotId);
+    if (!cache?.amclSuspended) return;
+
+    const taskId = this.suspendedTasks.get(robotId);
+    if (!taskId) { cache.amclSuspended = false; return; }
+
+    const task = await this.fmsService.getTask(taskId);
+    if (!task || task.status !== TaskStatus.SUSPENDED) {
+      this.suspendedTasks.delete(robotId);
+      this.robotCache.set(robotId, { ...cache, amclSuspended: false });
+      return;
+    }
+
+    this.logger.log(`[AMCL복구] ${robotId} — AMCL 재수신, 태스크 ${taskId} 재개`);
+
+    // 초기 위치 재설정 (AMCL 안정화 지원)
+    this.fmsService.publishInitialPose(robotId, x, y, yaw);
+
+    // 잠깐 대기 후 goal_pose 재전송
+    await new Promise(r => setTimeout(r, 2000));
+
+    const freshTask = await this.fmsService.getTask(taskId);
+    if (!freshTask || freshTask.status !== TaskStatus.SUSPENDED) return;
+
+    const nextNodeId = (freshTask.pathQueue ?? [])[0] ?? freshTask.targetNode;
+    const nextNode   = await this.topologyService.findNodeById(nextNodeId);
+    if (!nextNode) {
+      this.logger.warn(`[AMCL복구] ${robotId} 다음 노드 "${nextNodeId}" 없음 — FAILED`);
+      await this.fmsService.setStatus(taskId, TaskStatus.FAILED, this.server!, { completedAt: new Date() });
+      this.suspendedTasks.delete(robotId);
+      this.robotCache.set(robotId, { ...cache, amclSuspended: false });
+      return;
+    }
+
+    // 태스크 RUNNING 복귀 + activeTasks 재등록
+    await this.fmsService.setStatus(taskId, TaskStatus.RUNNING, this.server!);
+    this.activeTasks.set(robotId, taskId);
+    this.suspendedTasks.delete(robotId);
+    this.robotCache.set(robotId, { ...cache, amclSuspended: false });
+
+    await this.sendNodeActionGoal(robotId, nextNodeId);
+    this.emit({
+      type: 'info', taskId, robotId,
+      message: `${robotId} AMCL 복구 — 태스크 재개: ${nextNodeId}`,
+      requiresAction: false,
+    });
+  }
+
+  // ── 2-ahead 노드 충돌 감지 (CollisionAvoidanceService 위임) ──────────────
   //
-  // 매 tick마다 실행. 활성 로봇의 pathQueue[1](2노드 앞)에 다른 로봇이 있으면
-  // 해당 로봇을 정지시키고, 비워지면 재출발.
+  // 매 tick마다 실행. 충돌 판정 로직은 CollisionAvoidanceService가 담당하고,
+  // 여기서는 활성 로봇의 현재 상태를 모아 넘긴 뒤, 반환된 결정(정지/재출발)에 따라
+  // 실제 cmd_vel 정지 / goal_pose 재전송 부수효과만 수행한다.
 
   private async checkNodeConflicts() {
     if (!this.server) return;
 
+    // 1. 활성 로봇의 경로 + 현재 위치 수집
+    const states: { robotId: string; pathQueue: string[]; posX: number | null; posY: number | null }[] = [];
     for (const [robotId, taskId] of this.activeTasks) {
       const task = await this.fmsService.getTask(taskId);
       if (!task || task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED) continue;
+      const cache = this.robotCache.get(robotId);
+      states.push({
+        robotId,
+        pathQueue: task.pathQueue ?? [],
+        posX: cache?.posX ?? null,
+        posY: cache?.posY ?? null,
+      });
+    }
+    if (states.length === 0) return;
 
-      const pathQueue = task.pathQueue ?? [];
-      const myCache   = this.robotCache.get(robotId);
-      const myPos     = myCache?.posX != null ? `(${myCache.posX.toFixed(2)},${(myCache.posY ?? 0).toFixed(2)})` : 'N/A';
+    // 2. 충돌 평가 → 결정 목록
+    const decisions = await this.collisionService.evaluate(states);
 
-      if (pathQueue.length < 2) {
-        if (this.stoppedForNode.has(robotId)) {
-          this.logger.log(`[충돌체크] ${robotId} pathQueue<2, 대기 해제 → 재출발 queue=[${pathQueue.join(',')}]`);
-          this.stoppedForNode.delete(robotId);
-          if (pathQueue.length > 0) await this.sendNodeActionGoal(robotId, pathQueue[0]);
-        }
-        continue;
-      }
-
-      const twoAheadId   = pathQueue[1];
-      const twoAheadNode = await this.topologyService.findNodeById(twoAheadId);
-
-      // 다른 활성 로봇 중 twoAheadId를 실제로 점유 중인 로봇 탐색
-      let blockerId: string | null = null;
-      const distLogs: string[] = [];
-      if (twoAheadNode) {
-        for (const [otherId] of this.activeTasks) {
-          if (otherId === robotId) continue;
-          const otherCache = this.robotCache.get(otherId);
-          if (!otherCache?.posX) {
-            distLogs.push(`${otherId}=noAMCL`);
-            continue;
-          }
-          const dist = Math.hypot(otherCache.posX - twoAheadNode.x, (otherCache.posY ?? 0) - twoAheadNode.y);
-          distLogs.push(`${otherId}=${dist.toFixed(2)}m`);
-          if (dist < NODE_PASS_M) { blockerId = otherId; break; }
-        }
+    // 3. 결정 적용
+    for (const d of decisions) {
+      if (d.action === 'stop') {
+        this.fmsService.publishStop(d.robotId);
+        this.emit({
+          type: 'info', robotId: d.robotId,
+          message: `${d.robotId} 정지 — ${d.conflictNode} 점유 중 (${d.blockerId})`,
+          requiresAction: false,
+        });
       } else {
-        distLogs.push(`twoAheadNode="${twoAheadId}" DB없음`);
-      }
-
-      this.logger.log(
-        `[충돌체크] ${robotId} pos=${myPos} queue=[${pathQueue.join(',')}] 2ahead=${twoAheadId}` +
-        ` | ${distLogs.join(', ')}` +
-        (this.stoppedForNode.has(robotId) ? ` | 현재정지중(${this.stoppedForNode.get(robotId)})` : ''),
-      );
-
-      if (blockerId) {
-        if (!this.stoppedForNode.has(robotId)) {
-          this.logger.log(`[대기] ${robotId} 정지 — ${twoAheadId} 점유 중 (${blockerId})`);
-          this.fmsService.publishStop(robotId);
-          this.stoppedForNode.set(robotId, twoAheadId);
+        // resume — 현재 남은 경로의 첫 노드로 재출발
+        const st = states.find(s => s.robotId === d.robotId);
+        if (st && st.pathQueue.length > 0) {
+          await this.sendNodeActionGoal(d.robotId, st.pathQueue[0]);
         }
-      } else if (this.stoppedForNode.get(robotId) === twoAheadId) {
-        this.logger.log(`[재출발] ${robotId} — ${twoAheadId} 비워짐, 경로 재개`);
-        this.stoppedForNode.delete(robotId);
-        await this.sendNodeActionGoal(robotId, pathQueue[0]);
       }
     }
   }
@@ -515,8 +593,8 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       this.logger.log(`[웨이포인트] ${robotId} 스킵 — 코너 회전 중 (phase=${this.rotatingState.get(robotId)?.phase})`);
       return;
     }
-    if (this.stoppedForNode.has(robotId)) {
-      this.logger.log(`[웨이포인트] ${robotId} 스킵 — 충돌 대기 중 (node=${this.stoppedForNode.get(robotId)})`);
+    if (this.collisionService.isWaiting(robotId)) {
+      this.logger.log(`[웨이포인트] ${robotId} 스킵 — 충돌 대기 중 (node=${this.collisionService.getBlockedNode(robotId)})`);
       return;
     }
     this.waypointProcessing.add(robotId);
@@ -634,17 +712,23 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       if (isNowOnline && wasOnline !== true) {
         this.robotOnlineState.set(robotId, true);
         await this.robotService.bringOnlineIfOffline(robotId);
-        // 실제 DB 상태를 읽어서 emit (hardcode IDLE 방지 → MOVING 중이면 MOVING 유지)
         const actualRobot = await this.robotService.findById(robotId);
         const actualStatus = actualRobot?.status ?? 'IDLE';
         this.server?.emit('robot_status_changed', { robot_id: robotId, status: actualStatus });
+        // 신규 또는 복귀 로봇 전체 정보 브로드캐스트 (사이드바 즉시 반영)
+        if (actualRobot) {
+          this.server?.emit('robot_registered', actualRobot.toObject ? actualRobot.toObject() : { ...actualRobot });
+        }
 
       } else if (!isNowOnline && wasOnline !== false) {
         this.robotOnlineState.set(robotId, false);
 
         // MOVING 상태에서 강제 종료 시에도 OFFLINE 처리 (기존 setOfflineIfIdle 대체)
         await this.robotService.setOffline(robotId);
-        await this.robotService.updateLocation(robotId, null); // 오프라인 시 위치 초기화
+        this.telemetryService.clearTelemetry(robotId);
+        
+        // 캐시 초기화 (배터리 및 위치 정보 날림)
+        this.robotCache.set(robotId, { ...cache, batteryPct: null, posX: null, posY: null, yaw: null });
 
         // 진행 중이던 태스크/nav action 정리
         const activeTaskId = this.activeTasks.get(robotId);
@@ -711,8 +795,10 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       const taskId = (task._id as { toString(): string }).toString();
 
       // 지정 로봇이 있으면 그 로봇만 사용, 없으면 임의 배정
+      // 💡 LLM 이나 프론트에서 실수로 "null" 문자열을 보낼 수 있으므로 체크
       let robot: RobotDocument;
-      const preferredId = task.preferredRobotId;
+      const preferredId = (task.preferredRobotId === 'null') ? null : task.preferredRobotId;
+
       if (preferredId) {
         const idx = freeRobots.findIndex((r) => r.robot_id === preferredId);
         if (idx === -1) {

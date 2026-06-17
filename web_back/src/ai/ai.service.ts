@@ -11,7 +11,7 @@ const execAsync = promisify(exec);
 export class AiService implements OnModuleInit {
   private readonly logger = new Logger(AiService.name);
   private readonly ollamaUrl = process.env.OLLAMA_URL ?? 'http://127.0.0.1:11434';
-  private readonly model = process.env.OLLAMA_NL_MODEL ?? 'exaone3';
+  private readonly model = process.env.OLLAMA_NL_MODEL ?? 'exaone3.5:latest';
 
   async onModuleInit() {
     // Check if python and faster-whisper are available

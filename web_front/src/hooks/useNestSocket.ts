@@ -60,6 +60,20 @@ export type MapTimestamps = Record<string, number>;
 // botId → 맵 메타데이터
 export type MapInfos = Record<string, MapInfo>;
 
+// ── 로봇 정보 (DB + 실시간 텔레메트리 병합) ──────────────────────────────────
+export interface RobotInfo {
+  robot_id: string;
+  ip: string;
+  ros_domain_id: number;
+  status: string;
+  location?: string | null;
+  pose_x?: number | null;
+  pose_y?: number | null;
+  yaw?: number | null;
+  battery?: number | null;
+  lastSeenAt?: string | null;
+}
+
 // ── FMS 타입 ─────────────────────────────────────────────────────────────────
 export type TaskStatus = 'PENDING' | 'ASSIGNED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
 export type TaskType = 'SUPPLY' | 'PROCESS' | 'CHARGE' | 'MOVE';
@@ -120,8 +134,10 @@ export function useNestSocket() {
  const [fmsTasks, setFmsTasks] = useState<FmsTask[]>([]);
  // Task Manager 알림 (최근 50개 유지)
  const [tmAlerts, setTmAlerts] = useState<TaskManagerAlert[]>([]);
- // 로봇별 실시간 상태 (robot_id → status)
+ // 로봇별 실시간 상태 (robot_id → status) — 하위 호환 유지
  const [robotStatuses, setRobotStatuses] = useState<Record<string, string>>({});
+ // 로봇 목록 (DB + 텔레메트리 통합, 소켓 이벤트로 실시간 갱신)
+ const [robots, setRobots] = useState<RobotInfo[]>([]);
  // 잠긴 노드 집합 (node_id)
  const [lockedNodes, setLockedNodes] = useState<Set<string>>(new Set());
 
@@ -217,9 +233,48 @@ export function useNestSocket() {
  setTmAlerts((prev) => [alert, ...prev].slice(0, 50));
  });
 
+ // ── 로봇 목록 초기 전송 (연결 즉시) ────────────────────────────────────
+ socket.on("robots_init", (list: RobotInfo[]) => {
+ setRobots(list);
+ // robotStatuses 동기화 (기존 코드 하위 호환)
+ const statusMap: Record<string, string> = {};
+ list.forEach(r => { statusMap[r.robot_id] = r.status; });
+ setRobotStatuses(prev => ({ ...prev, ...statusMap }));
+ });
+
+ // ── 신규/복귀 로봇 (upsert) ─────────────────────────────────────────────
+ socket.on("robot_registered", (robot: RobotInfo) => {
+ setRobots(prev => {
+  const idx = prev.findIndex(r => r.robot_id === robot.robot_id);
+  if (idx >= 0) {
+  const next = [...prev];
+  next[idx] = { ...next[idx], ...robot };
+  return next;
+  }
+  return [...prev, robot];
+ });
+ setRobotStatuses(prev => ({ ...prev, [robot.robot_id]: robot.status }));
+ });
+
  // ── 로봇 상태 자동 변경 알림 ────────────────────────────────────────────
  socket.on("robot_status_changed", (payload: { robot_id: string; status: string }) => {
- setRobotStatuses((prev) => ({ ...prev, [payload.robot_id]: payload.status }));
+ setRobotStatuses(prev => ({ ...prev, [payload.robot_id]: payload.status }));
+ setRobots(prev =>
+  prev.map(r => r.robot_id === payload.robot_id ? { ...r, status: payload.status } : r)
+ );
+ });
+
+ // ── 실시간 텔레메트리 (배터리·위치 즉시 반영) ────────────────────────────
+ socket.on("robot_telemetry", (tel: {
+  robotId: string; posX: number | null; posY: number | null;
+  yaw: number | null; battery: number | null; lastSeen: number;
+ }) => {
+ setRobots(prev =>
+  prev.map(r => r.robot_id === tel.robotId
+  ? { ...r, pose_x: tel.posX, pose_y: tel.posY, yaw: tel.yaw, battery: tel.battery }
+  : r
+  )
+ );
  });
 
  // ── 노드 잠금 초기 상태 (연결 시 서버 DB 기준으로 동기화) ──────────────
@@ -299,6 +354,6 @@ export function useNestSocket() {
  activeGoals, actionFeedbacks, actionResults,
  mapTimestamps, mapInfos,
  fmsTasks, tmAlerts,
- robotStatuses, lockedNodes,
+ robots, robotStatuses, lockedNodes,
  };
 }

@@ -2,13 +2,15 @@ import { Controller, Post, UseInterceptors, UploadedFile, Body, Res } from '@nes
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { AiService } from './ai.service';
+import { AgentService } from './agent.service';
 import { RagService } from './rag.service';
 
 @Controller('ai')
 export class AiController {
   constructor(
-    private readonly aiService: AiService,
-    private readonly ragService: RagService,
+    private readonly aiService:    AiService,
+    private readonly agentService: AgentService,
+    private readonly ragService:   RagService,
   ) {}
 
   @Post('stt')
@@ -58,12 +60,24 @@ export class AiController {
 - 노드(위치)를 언급할 때는 아래 RAG 컨텍스트의 node_id 필드로 식별한다 (예: "N01", "station_A")
 - 로봇을 언급할 때는 robot_id 필드로 식별한다 (예: "tb3_01", "tb3_02")
 - 경로(엣지)를 언급할 때는 edge_id 필드로 식별한다 (예: "E01", "E02")
-- 사용자가 "1번 로봇", "A 노드", "첫번째 엣지" 등 자연어로 말할 경우 RAG 컨텍스트에서 해당 node_id / robot_id / edge_id를 찾아 답변에 사용한다`;
+- 사용자가 "1번 로봇", "A 노드", "첫번째 엣지" 등 자연어로 말할 경우 RAG 컨텍스트에서 해당 node_id / robot_id / edge_id를 찾아 답변에 사용한다
+- 사용자가 로봇의 위치를 이야기 할 경우 오프라인의 경우 오프라인상태로 대답하고 온라인상태인 경우 마지막 발견된 위치와 맵 정보를 노드에서 찾아 node_id로 사용한다.`;
 
+    const languageRule = `[언어 규칙 — 최우선 적용]\n반드시 한국어로만 답변하세요. 영어·중국어·일본어 등 다른 언어는 절대 사용하지 마세요.`;
     const basePrompt = body.systemPrompt ?? '';
-    const enrichedSystemPrompt = [basePrompt, workflowKnowledge, ragContext]
+    const enrichedSystemPrompt = [languageRule, basePrompt, workflowKnowledge, ragContext]
       .filter(Boolean).join('\n\n');
 
     await this.aiService.pipeStreamToResponse(body.prompt, enrichedSystemPrompt, res);
+  }
+
+  /**
+   * EXAONE 에이전트: 자연어 명령 → 툴 호출 → 자율 실행
+   * Body: { text: string }
+   * Returns: { reply: string, actions: AgentAction[] }
+   */
+  @Post('agent')
+  async agent(@Body('text') text: string) {
+    return this.agentService.run(text);
   }
 }

@@ -60,6 +60,20 @@ export class FmsController {
       body.message,
       ragContext,
     );
+
+    // 💡 자율 제어 모드: 태스크로 판단되면 즉시 큐에 등록하여 실행
+    if (result.isTask) {
+      const task = await this.taskManager.enqueue({
+        type: result.type as any,
+        targetNode: result.targetNode,
+        preferredRobotId: result.preferredRobotId ?? undefined,
+        priority: result.priority ?? 5,
+      });
+      // 결과에 실행된 태스크 ID 포함 (프론트 통지용)
+      (result as any).taskId = (task as any)._id?.toString();
+      (result as any).executed = true;
+    }
+
     return result;
   }
 }

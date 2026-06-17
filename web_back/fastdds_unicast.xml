@@ -27,7 +27,19 @@
               <udpv4><address>10.10.14.70</address></udpv4>   <!-- 서버 PC -->
             </locator>
             <locator>
-              <udpv4><address>192.168.100.122</address></udpv4>   <!-- 로봇 tb3_01 -->
+              <udpv4><address>10.10.14.117</address></udpv4>   <!-- 로봇 vicpinky -->
+            </locator>
+            <locator>
+              <udpv4><address>10.10.14.158</address></udpv4>   <!-- 로봇 tb3_01 -->
+            </locator>
+            <locator>
+              <udpv4><address>10.10.14.19</address></udpv4>   <!-- 로봇 tb3_02 -->
+            </locator>
+            <locator>
+              <udpv4><address>10.10.14.23</address></udpv4>   <!-- 로봇 tb3_03 -->
+            </locator>
+            <locator>
+              <udpv4><address>10.10.14.16</address></udpv4>   <!-- 로봇 tb3_04 -->
             </locator>
             <!-- 로봇이 더 있으면 계속 추가 -->
           </initialPeersList>

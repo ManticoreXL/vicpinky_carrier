@@ -33,7 +33,7 @@ export default function App() {
  activeGoals, actionFeedbacks, actionResults,
  mapTimestamps, mapInfos,
  fmsTasks, tmAlerts, ackTmAlert, setRobotHome,
- robotStatuses, lockedNodes,
+ robots, robotStatuses, lockedNodes,
  } = useNestSocket();
 
  // publish를 socket.io 경유로 라우팅 (원격 클라이언트에서도 동작)
@@ -175,10 +175,10 @@ export default function App() {
 
  <div className={`${sidebarOpen ? 'flex' : 'hidden'} sm:flex flex-none z-10`}>
  <RobotSidebar
+ robots={robots}
  selectedRobot={selectedRobot}
  onSelect={(id) => { setSelectedRobot(id); setSidebarOpen(false); }}
  rosMessages={displayMessages}
- liveStatuses={robotStatuses}
  />
  </div>
 

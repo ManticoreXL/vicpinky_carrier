@@ -41,6 +41,25 @@ export class RobotService {
     await this.robotModel.updateOne({ robot_id }, { location: node_id });
   }
 
+  /**
+   * ROS 토픽 텔레메트리(위치/배터리/yaw)를 DB에 즉시 반영.
+   * 신규 로봇이면 upsert 등록까지 한 번에 처리한다.
+   * (TelemetryService에서 throttle 후 호출 — 여기선 순수 DB write만 담당)
+   */
+  async updateTelemetry(
+    robot_id: string,
+    patch: Partial<Pick<Robot, 'pose_x' | 'pose_y' | 'yaw' | 'battery' | 'lastSeenAt'>>,
+  ): Promise<void> {
+    await this.robotModel.updateOne(
+      { robot_id },
+      {
+        $set: patch,
+        $setOnInsert: { robot_id, ip: 'auto', ros_domain_id: 0, status: RobotStatus.IDLE },
+      },
+      { upsert: true },
+    );
+  }
+
   /** 온라인 상태(IDLE/MOVING/WORKING)인 로봇 목록 */
   async findOnline(): Promise<RobotDocument[]> {
     return this.robotModel.find({
@@ -94,10 +113,25 @@ export class RobotService {
 
   /**
    * 강제 종료(크래시) 등 비정상 오프라인 처리.
-   * MOVING 포함 모든 상태에서 OFFLINE 으로 전환한다.
+   * MOVING 포함 모든 상태에서 OFFLINE 으로 전환하고 텔레메트리를 초기화한다.
+   * 이때 현재 location이 있으면 lastNode에 백업해둔다.
    */
   async setOffline(robot_id: string): Promise<void> {
-    await this.robotModel.updateOne({ robot_id }, { status: RobotStatus.OFFLINE });
+    const robot = await this.robotModel.findOne({ robot_id }).exec();
+    const lastNode = robot?.location ?? null;
+
+    await this.robotModel.updateOne(
+      { robot_id },
+      { 
+        status: RobotStatus.OFFLINE,
+        location: null,
+        lastNode: lastNode, // 백업
+        battery: null,
+        pose_x: null,
+        pose_y: null,
+        yaw: null
+      }
+    );
   }
 
   /** robot_id 변경 — 연관 태스크 cascade 업데이트 */

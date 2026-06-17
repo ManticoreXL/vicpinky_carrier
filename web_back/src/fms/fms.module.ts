@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
 import { Task, TaskSchema } from './task.schema';
 import { FmsService } from './fms.service';
@@ -14,7 +14,7 @@ import { AiModule } from '../ai/ai.module';
     MongooseModule.forFeature([{ name: Task.name, schema: TaskSchema }]),
     RosModule,
     FleetModule,
-    AiModule,
+    forwardRef(() => AiModule),
   ],
   controllers: [FmsController],
   providers: [FmsService, TaskManagerService],

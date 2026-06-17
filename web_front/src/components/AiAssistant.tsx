@@ -2,347 +2,407 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import type { Socket } from "socket.io-client";
 import { BACKEND_URL } from "../config";
 
-type Phase = "idle" | "listening" | "processing" | "done" | "error";
+// ── 타입 ─────────────────────────────────────────────────────────────────────
+
+interface AgentAction {
+  tool:   string;
+  args:   Record<string, unknown>;
+  result: unknown;
+}
+
+interface ChatMsg {
+  id:       string;
+  role:     "user" | "agent";
+  text:     string;
+  fromMic?: boolean;
+  actions?: AgentAction[];
+  loading?: boolean;
+  error?:   boolean;
+}
 
 interface Props {
   socket?: Socket | null;
 }
 
+// ── 툴 이름 한글 라벨 ─────────────────────────────────────────────────────────
+
+const TOOL_LABELS: Record<string, string> = {
+  dispatch_task:    "태스크 디스패치",
+  cancel_task:      "태스크 취소",
+  get_robots:       "로봇 상태 조회",
+  get_nodes:        "노드 목록 조회",
+  get_active_tasks: "활성 태스크 조회",
+  lock_node:        "노드 잠금",
+};
+
+const uid = () => Math.random().toString(36).slice(2);
+
+// ── 컴포넌트 ──────────────────────────────────────────────────────────────────
+
 export default function AiAssistant({ socket }: Props) {
-  const [isOpen, setIsOpen] = useState(false);
-  const [phase, setPhase] = useState<Phase>("idle");
-  const [finalText, setFinalText] = useState("");
-  const [interimText, setInterimText] = useState("");
-  const [aiResponse, setAiResponse] = useState("");
-  const [errMsg, setErrMsg] = useState("");
+  const [open,      setOpen]      = useState(false);
+  const [messages,  setMessages]  = useState<ChatMsg[]>([]);
+  const [input,     setInput]     = useState("");
+  const [recording, setRecording] = useState(false);
+  const [interim,   setInterim]   = useState("");
 
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const finalTextRef = useRef("");
-  const targetRef = useRef<string | null>(null);
+  const mediaRef    = useRef<MediaRecorder | null>(null);
+  const chunksRef   = useRef<Blob[]>([]);
+  const bottomRef   = useRef<HTMLDivElement>(null);
+  const inputRef    = useRef<HTMLInputElement>(null);
 
-  const isListening = phase === "listening";
-  const isProcessing = phase === "processing";
+  // 스크롤 바닥 유지
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
 
-  // ── Web Speech API 초기화 ──────────────────────────────────────────────────
-  const buildRecognition = useCallback((): SpeechRecognition | null => {
-    const API = window.SpeechRecognition ?? window.webkitSpeechRecognition;
-    if (!API) return null;
+  // ── 에이전트 호출 ────────────────────────────────────────────────────────────
 
-    const rec = new API();
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.lang = "ko-KR";
+  const runAgent = useCallback(async (text: string, fromMic = false) => {
+    if (!text.trim()) return;
 
-    rec.onresult = (e: SpeechRecognitionEvent) => {
-      let interim = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) {
-          finalTextRef.current += t;
-          setFinalText(finalTextRef.current);
-        } else {
-          interim += t;
-        }
-      }
-      setInterimText(interim);
-    };
+    const userMsgId  = uid();
+    const agentMsgId = uid();
 
-    rec.onerror = (e: SpeechRecognitionErrorEvent) => {
-      if (e.error === "aborted") return;
-      setErrMsg(`음성 인식 오류: ${e.error}`);
-      setPhase("error");
-    };
+    setMessages(prev => [
+      ...prev,
+      { id: userMsgId, role: "user", text, fromMic },
+      { id: agentMsgId, role: "agent", text: "", loading: true },
+    ]);
+    setInput("");
 
-    rec.onend = () => {
-      setInterimText("");
-      // recognition이 자동 종료되면(e.g. 침묵) 결과를 처리
-      if (phase === "listening") void processText();
-    };
+    try {
+      const res = await fetch(`${BACKEND_URL}/ai/agent`, {
+        method:  "POST",
+        headers: { "Content-Type": "application/json" },
+        body:    JSON.stringify({ text }),
+      });
 
-    return rec;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+      if (!res.ok) throw new Error(`서버 오류 ${res.status}`);
+
+      const data = (await res.json()) as { reply: string; actions: AgentAction[] };
+
+      setMessages(prev => prev.map(m =>
+        m.id === agentMsgId
+          ? { ...m, text: data.reply, actions: data.actions, loading: false }
+          : m,
+      ));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "에이전트 호출 실패";
+      setMessages(prev => prev.map(m =>
+        m.id === agentMsgId
+          ? { ...m, text: msg, loading: false, error: true }
+          : m,
+      ));
+    }
   }, []);
 
-  // ── EXAONE 응답 요청 (WebSocket 우선, HTTP fallback) ─────────────────────
-  const askExaone = useCallback(async (text: string) => {
-    setPhase("processing");
-    setAiResponse("");
-    setErrMsg("");
+  // ── 마이크 (MediaRecorder → faster-whisper STT) ───────────────────────────
 
-    if (socket?.connected) {
-      // WebSocket 경로
-      socket.once("ai_response", (data: { response?: string; error?: string }) => {
-        if (data.error) { setErrMsg(data.error); setPhase("error"); }
-        else { setAiResponse(data.response ?? ""); setPhase("done"); }
-      });
-      socket.emit("ai_ask", { text });
-      return;
-    }
-
-    // HTTP fallback
+  const startRecording = useCallback(async () => {
     try {
-      const res = await fetch(`${BACKEND_URL}/ai/ask`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      if (!res.ok) throw new Error("AI 서비스 오류");
-      const data = (await res.json()) as { response: string };
-      setAiResponse(data.response);
-      setPhase("done");
-    } catch (err: unknown) {
-      setErrMsg(err instanceof Error ? err.message : "처리 실패");
-      setPhase("error");
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr     = new MediaRecorder(stream, { mimeType: "audio/webm" });
+      chunksRef.current = [];
+
+      mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+
+      mr.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        setInterim("");
+
+        const blob    = new Blob(chunksRef.current, { type: "audio/webm" });
+        const formData = new FormData();
+        formData.append("file", blob, "voice.webm");
+
+        try {
+          const res  = await fetch(`${BACKEND_URL}/ai/stt`, { method: "POST", body: formData });
+          const data = (await res.json()) as { text: string };
+          if (data.text?.trim()) {
+            setInput(data.text);
+            // NlCommandPanel 등 외부 트리거 호환
+            window.dispatchEvent(new CustomEvent("stt-result", {
+              detail: { target: "nl-command", text: data.text },
+            }));
+            // 에이전트로 자동 전송
+            await runAgent(data.text, true);
+          }
+        } catch {
+          setMessages(prev => [...prev, { id: uid(), role: "agent", text: "음성 인식 실패", error: true }]);
+        }
+      };
+
+      mediaRef.current = mr;
+      mr.start();
+      setRecording(true);
+      setInterim("녹음 중…");
+    } catch {
+      setMessages(prev => [...prev, { id: uid(), role: "agent", text: "마이크 접근 권한이 필요합니다", error: true }]);
     }
-  }, [socket]);
+  }, [runAgent]);
 
-  const processText = useCallback(async () => {
-    const text = finalTextRef.current.trim();
-    if (!text) { setPhase("idle"); return; }
+  const stopRecording = useCallback(() => {
+    mediaRef.current?.stop();
+    mediaRef.current = null;
+    setRecording(false);
+  }, []);
 
-    // NlCommandPanel 등 외부 타겟에 텍스트 전달
-    if (targetRef.current) {
-      window.dispatchEvent(new CustomEvent("stt-result", {
-        detail: { target: targetRef.current, text },
-      }));
-      targetRef.current = null;
-    }
+  const toggleMic = useCallback(() => {
+    if (recording) stopRecording();
+    else void startRecording();
+  }, [recording, startRecording, stopRecording]);
 
-    await askExaone(text);
-  }, [askExaone]);
+  // ── 외부 start-stt 이벤트 호환 ────────────────────────────────────────────
 
-  // ── 녹음 시작 ─────────────────────────────────────────────────────────────
-  const startListening = useCallback(() => {
-    const rec = buildRecognition();
-    if (!rec) {
-      setErrMsg("이 브라우저는 음성 인식을 지원하지 않습니다 (Chrome 권장)");
-      setPhase("error");
-      return;
-    }
-    finalTextRef.current = "";
-    setFinalText("");
-    setInterimText("");
-    setAiResponse("");
-    setErrMsg("");
-    setPhase("listening");
-    recognitionRef.current = rec;
-    rec.start();
-  }, [buildRecognition]);
-
-  // ── 녹음 중지 ─────────────────────────────────────────────────────────────
-  const stopListening = useCallback(() => {
-    recognitionRef.current?.stop();
-    recognitionRef.current = null;
-    setInterimText("");
-    void processText();
-  }, [processText]);
-
-  // ── 외부 트리거 (NlCommandPanel → start-stt 이벤트) ──────────────────────
   useEffect(() => {
-    const handler = (e: Event) => {
-      const ce = e as CustomEvent<{ target?: string }>;
-      targetRef.current = ce.detail?.target ?? null;
-      if (!isListening) {
-        setIsOpen(true);
-        startListening();
-      }
-    };
+    const handler = () => void startRecording();
     window.addEventListener("start-stt", handler);
     return () => window.removeEventListener("start-stt", handler);
-  }, [isListening, startListening]);
+  }, [startRecording]);
 
-  const reset = () => {
-    recognitionRef.current?.abort();
-    recognitionRef.current = null;
-    finalTextRef.current = "";
-    setFinalText("");
-    setInterimText("");
-    setAiResponse("");
-    setErrMsg("");
-    setPhase("idle");
+  // ── 전송 ─────────────────────────────────────────────────────────────────
+
+  const send = useCallback(() => {
+    void runAgent(input.trim());
+  }, [input, runAgent]);
+
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
   };
 
-  const toggleMic = () => {
-    if (isListening) stopListening();
-    else startListening();
-  };
-
-  const displayText = finalText + (interimText ? interimText : "");
+  // ── 렌더 ─────────────────────────────────────────────────────────────────
 
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
-      {/* ── 패널 ─────────────────────────────────────────────────────────── */}
-      {isOpen && (
-        <div className="w-80 sm:w-96 glass-panel rounded-2xl overflow-hidden shadow-2xl
-                        shadow-black/40 border-orange-500/10 animate-slide-up">
+    <>
+      {/* 플로팅 토글 버튼 */}
+      <button
+        onClick={() => setOpen(o => !o)}
+        className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full shadow-2xl
+          flex items-center justify-center transition-all duration-300
+          border border-white/10
+          ${open
+            ? "bg-indigo-600 hover:bg-indigo-500 rotate-45"
+            : "bg-indigo-700/80 hover:bg-indigo-600/90 backdrop-blur-xl"}`}
+        title="EXAONE 에이전트"
+      >
+        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          {open
+            ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
+                d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15m-6.75-12c.25.023.501.05.75.082M15 19l-3-3m0 0l-3 3m3-3v7" />
+          }
+        </svg>
+      </button>
 
+      {/* 에이전트 패널 */}
+      {open && (
+        <div className="fixed bottom-24 right-6 z-50 w-96 flex flex-col
+          glass-panel border-white/[0.08] shadow-2xl
+          rounded-2xl overflow-hidden"
+          style={{ maxHeight: "70vh" }}
+        >
           {/* 헤더 */}
-          <div className="flex items-center justify-between px-4 py-3
-                          border-b border-white/[0.05] bg-orange-500/5">
-            <div className="flex items-center gap-2.5">
-              <div className={`w-2 h-2 rounded-full transition-colors ${
-                isListening ? "bg-orange-500 animate-pulse" :
-                isProcessing ? "bg-amber-400 animate-pulse" :
-                phase === "done" ? "bg-emerald-500" :
-                "bg-white/20"
-              }`} />
-              <span className="text-[11px] font-semibold tracking-[0.12em] uppercase text-white/50">
-                EXAONE Voice Assistant
-              </span>
+          <div className="flex-none flex items-center gap-3 px-5 py-4
+            border-b border-white/[0.06] bg-indigo-600/10">
+            <div className="relative flex-none">
+              <div className="w-2.5 h-2.5 rounded-full bg-indigo-400" />
+              <div className="absolute inset-0 rounded-full bg-indigo-400 animate-ping opacity-40" />
+            </div>
+            <div>
+              <span className="text-sm font-semibold text-white/90 tracking-wide">EXAONE AGENT</span>
+              <p className="text-[10px] text-white/30 tracking-widest mt-0.5">AI 자율 실행 에이전트</p>
             </div>
             <button
-              onClick={() => { reset(); setIsOpen(false); }}
-              className="w-6 h-6 flex items-center justify-center rounded text-white/30
-                         hover:text-white/70 hover:bg-white/5 transition-all text-lg leading-none"
+              onClick={() => setMessages([])}
+              className="ml-auto text-xs text-white/20 hover:text-white/50 transition-colors"
             >
-              ×
+              초기화
             </button>
           </div>
 
-          {/* 전사(Transcription) 영역 */}
-          <div className="p-4 min-h-[96px]">
-            {!displayText && !isListening && !isProcessing && !aiResponse && !errMsg && (
-              <p className="text-xs text-white/25 italic text-center mt-4 leading-relaxed">
-                아래 마이크 버튼을 눌러<br />음성 명령을 시작하세요
-              </p>
-            )}
-
-            {isListening && (
-              <div className="flex items-center gap-3 mb-3">
-                {/* 파형 애니메이션 */}
-                <div className="flex items-end gap-[3px] h-6">
-                  {[0.3, 0.6, 1, 0.8, 0.5, 0.9, 0.4].map((delay, i) => (
-                    <div
-                      key={i}
-                      className="wave-bar"
-                      style={{ height: `${8 + i * 3}px`, animationDelay: `${delay * 0.4}s` }}
-                    />
-                  ))}
-                </div>
-                <span className="text-xs text-orange-400 font-medium">듣는 중...</span>
+          {/* 채팅 */}
+          <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
+            {messages.length === 0 && (
+              <div className="text-center py-8 text-white/20 text-xs leading-relaxed">
+                <p className="text-2xl mb-3">🤖</p>
+                <p className="font-semibold text-white/30 mb-1">EXAONE 에이전트</p>
+                <p>명령을 입력하거나 마이크로 말하세요</p>
+                <p className="mt-2 text-white/15">예: "터틀봇 1번 문앞 노드로 이동"</p>
+                <p className="text-white/15">"현재 활성 태스크 알려줘"</p>
               </div>
             )}
-
-            {displayText && (
-              <div className="mb-3">
-                <span className="sub-label">음성 입력</span>
-                <p className="text-sm text-white/90 leading-relaxed">
-                  {finalText}
-                  {interimText && (
-                    <span className="text-white/40">{interimText}</span>
-                  )}
-                </p>
+            {messages.map(msg => (
+              <MsgBubble key={msg.id} msg={msg} />
+            ))}
+            {interim && (
+              <div className="flex justify-end">
+                <span className="text-xs text-rose-400 animate-pulse px-3 py-1.5
+                  bg-rose-500/10 rounded-full border border-rose-500/20">
+                  {interim}
+                </span>
               </div>
             )}
-
-            {isProcessing && (
-              <div className="flex items-center gap-2 py-2 border-t border-white/[0.04] mt-2 pt-3">
-                <div className="flex items-end gap-[2px] h-5">
-                  {[0, 0.2, 0.4].map((d, i) => (
-                    <div
-                      key={i}
-                      className="w-0.5 bg-orange-400/60 rounded-full animate-scale-y"
-                      style={{ height: '16px', animationDelay: `${d}s` }}
-                    />
-                  ))}
-                </div>
-                <span className="text-xs text-orange-400/80 font-medium">EXAONE 처리 중...</span>
-              </div>
-            )}
-
-            {aiResponse && (
-              <div className="border-t border-white/[0.05] pt-3 mt-2 animate-slide-up">
-                <span className="sub-label text-orange-500/60">EXAONE 응답</span>
-                <p className="text-xs text-white/75 leading-relaxed whitespace-pre-wrap mt-1">
-                  {aiResponse}
-                </p>
-              </div>
-            )}
-
-            {errMsg && (
-              <div className="mt-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded-lg">
-                <p className="text-xs text-red-400">{errMsg}</p>
-              </div>
-            )}
+            <div ref={bottomRef} />
           </div>
 
-          {/* 컨트롤 바 */}
-          <div className="flex items-center justify-between px-4 py-3
-                          border-t border-white/[0.05] bg-black/20">
-            <button
-              onClick={reset}
-              className="text-[11px] text-white/25 hover:text-white/55 transition-colors font-medium"
-            >
-              지우기
-            </button>
-
-            {/* 마이크 버튼 */}
-            <div className="relative">
-              {isListening && (
-                <div className="absolute inset-0 rounded-full bg-orange-500/20 animate-ping" />
-              )}
+          {/* 입력 */}
+          <div className="flex-none p-3 border-t border-white/[0.06] bg-black/20">
+            <div className="flex items-center gap-2">
+              {/* 마이크 버튼 */}
               <button
                 onClick={toggleMic}
-                disabled={isProcessing}
-                className={`relative w-12 h-12 rounded-full flex items-center justify-center
-                            shadow-lg transition-all duration-300 disabled:opacity-40 ${
-                  isListening
-                    ? "bg-orange-500 shadow-orange-500/40 scale-110"
-                    : "bg-white/[0.07] hover:bg-white/[0.12] hover:shadow-orange-500/15"
-                }`}
+                className={`flex-none w-10 h-10 rounded-xl border flex items-center justify-center
+                  transition-all active:scale-95
+                  ${recording
+                    ? "bg-rose-500/30 border-rose-500/50 text-rose-300 animate-pulse"
+                    : "bg-white/5 border-white/[0.08] text-white/40 hover:text-white/70 hover:bg-white/10"
+                  }`}
+                title={recording ? "녹음 중지" : "음성 명령"}
               >
-                {isListening ? (
-                  <div className="flex items-end gap-[3px]">
-                    <div className="w-0.5 h-3 bg-white rounded animate-scale-y" />
-                    <div className="w-0.5 h-5 bg-white rounded animate-scale-y [animation-delay:0.15s]" />
-                    <div className="w-0.5 h-2.5 bg-white rounded animate-scale-y [animation-delay:0.3s]" />
-                  </div>
-                ) : (
-                  <MicIcon className="w-5 h-5 text-white/75" />
-                )}
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  {recording
+                    ? <rect x="6" y="6" width="12" height="12" rx="2" strokeWidth={2} fill="currentColor" />
+                    : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
+                        d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
+                  }
+                </svg>
+              </button>
+
+              <input
+                ref={inputRef}
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={onKey}
+                placeholder="명령을 입력하세요…"
+                className="flex-1 bg-white/[0.04] border border-white/[0.07] rounded-xl
+                  px-3 py-2.5 text-sm text-white/90 placeholder:text-white/20
+                  focus:outline-none focus:border-indigo-500/40 focus:bg-indigo-500/5"
+              />
+
+              <button
+                onClick={send}
+                disabled={!input.trim()}
+                className="flex-none w-10 h-10 rounded-xl bg-indigo-600/80 hover:bg-indigo-500
+                  border border-indigo-500/30 text-white
+                  flex items-center justify-center transition-all active:scale-95
+                  disabled:opacity-20 disabled:cursor-not-allowed"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+                </svg>
               </button>
             </div>
-
-            <span className="text-[11px] text-white/25 font-medium w-10 text-right">
-              {isListening ? "탭하여 완료" : "탭하여 시작"}
-            </span>
           </div>
         </div>
       )}
+    </>
+  );
+}
 
-      {/* ── 토글 버튼 ────────────────────────────────────────────────────── */}
-      <div className="relative">
-        {isListening && (
-          <div className="absolute inset-0 rounded-2xl bg-orange-500/20 animate-ping" />
+// ── 메시지 버블 ───────────────────────────────────────────────────────────────
+
+function MsgBubble({ msg }: { msg: ChatMsg }) {
+  const isUser = msg.role === "user";
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className={`flex ${isUser ? "justify-end" : "justify-start"}`}>
+      <div className={`max-w-[85%] ${isUser ? "items-end" : "items-start"} flex flex-col gap-1`}>
+        {/* 역할 라벨 */}
+        {!isUser && (
+          <span className="text-[10px] text-indigo-400 font-semibold tracking-widest px-1">
+            EXAONE {msg.fromMic && "🎙"}
+          </span>
         )}
-        <button
-          onClick={() => {
-            if (!isOpen) setIsOpen(true);
-            else if (!isListening && !isProcessing) setIsOpen(false);
-          }}
-          title="EXAONE 음성 어시스턴트"
-          className={`relative w-14 h-14 rounded-2xl flex items-center justify-center
-                      shadow-2xl transition-all duration-300 ${
-            isOpen || isListening
-              ? "bg-orange-500 shadow-orange-500/35"
-              : "glass-panel hover:bg-white/[0.08] hover:border-orange-500/20"
+        {isUser && msg.fromMic && (
+          <span className="text-[10px] text-white/30 text-right px-1">🎙 음성</span>
+        )}
+
+        {/* 메시지 본문 */}
+        <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed
+          ${isUser
+            ? "bg-indigo-600/30 border border-indigo-500/20 text-white/90 rounded-tr-sm"
+            : msg.error
+              ? "bg-rose-500/15 border border-rose-500/20 text-rose-300 rounded-tl-sm"
+              : "bg-white/[0.06] border border-white/[0.06] text-white/80 rounded-tl-sm"
           }`}
         >
-          <MicIcon className="w-6 h-6 text-white" />
-          {(isListening || isProcessing) && (
-            <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-orange-400 animate-pulse" />
-          )}
-        </button>
+          {msg.loading
+            ? <span className="flex items-center gap-2 text-white/40">
+                <span className="flex gap-0.5">
+                  {[0,1,2].map(i => (
+                    <span key={i} className="w-1 h-1 rounded-full bg-indigo-400 animate-bounce"
+                      style={{ animationDelay: `${i * 0.15}s` }} />
+                  ))}
+                </span>
+                처리 중…
+              </span>
+            : <span className="whitespace-pre-wrap">{msg.text}</span>
+          }
+        </div>
+
+        {/* 실행된 툴 목록 */}
+        {msg.actions && msg.actions.length > 0 && (
+          <div className="w-full space-y-1">
+            <button
+              onClick={() => setExpanded(e => !e)}
+              className="text-[10px] text-indigo-400/70 hover:text-indigo-400
+                flex items-center gap-1 px-1 transition-colors"
+            >
+              <span>{expanded ? "▾" : "▸"}</span>
+              {msg.actions.length}개 액션 실행됨
+            </button>
+            {expanded && msg.actions.map((a, i) => (
+              <ActionCard key={i} action={a} />
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
-function MicIcon({ className }: { className?: string }) {
+// ── 실행 결과 카드 ────────────────────────────────────────────────────────────
+
+function ActionCard({ action }: { action: AgentAction }) {
+  const label  = TOOL_LABELS[action.tool] ?? action.tool;
+  const result = action.result as any;
+  const ok     = result?.ok !== false && !result?.error;
+
   return (
-    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
-        d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />
-    </svg>
+    <div className={`rounded-xl px-3 py-2.5 border text-xs
+      ${ok
+        ? "bg-emerald-500/8 border-emerald-500/20"
+        : "bg-rose-500/8 border-rose-500/20"
+      }`}
+    >
+      <div className="flex items-center gap-2 mb-1.5">
+        <span className={ok ? "text-emerald-400" : "text-rose-400"}>
+          {ok ? "✓" : "✗"}
+        </span>
+        <span className={`font-semibold tracking-wide ${ok ? "text-emerald-300" : "text-rose-300"}`}>
+          {label}
+        </span>
+      </div>
+      {/* 인자 */}
+      <div className="text-white/30 mb-1 font-mono">
+        {Object.entries(action.args).map(([k, v]) => (
+          <span key={k} className="mr-2">
+            <span className="text-white/20">{k}:</span>{" "}
+            <span className="text-white/50">{String(v)}</span>
+          </span>
+        ))}
+      </div>
+      {/* 결과 메시지 */}
+      {result?.message && (
+        <p className={`mt-1 ${ok ? "text-emerald-300/70" : "text-rose-300/70"}`}>
+          {result.message}
+        </p>
+      )}
+      {result?.error && (
+        <p className="mt-1 text-rose-400">{result.error}</p>
+      )}
+    </div>
   );
 }

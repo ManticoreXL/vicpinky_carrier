@@ -6,9 +6,10 @@ import { CommandModule } from '../command/command.module';
 import { LogsModule } from '../logs/logs.module';
 import { FmsModule } from '../fms/fms.module';
 import { AiModule } from '../ai/ai.module';
+import { FleetModule } from '../fleet/fleet.module';
 
 @Module({
-  imports: [RosModule, MapModule, CommandModule, LogsModule, FmsModule, AiModule],
+  imports: [RosModule, MapModule, CommandModule, LogsModule, FmsModule, AiModule, FleetModule],
   providers: [RosGateway],
 })
 export class GatewayModule {}
