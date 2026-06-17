@@ -461,24 +461,100 @@ export default function NavMapCanvas({
  ctx.fillText(n.node_id, cx + r + 2, cy);
  });
 
- // 로봇 실제 위치 점 — amcl_pose 마커가 없는 로봇만 표시 (tb3는 amcl 마커로 렌더)
+ // 비-TB3 로봇 위치 — amcl_pose 우선(맵 프레임), odom 폴백(근사/점선)
  const tb3IdSet = new Set<string>(TB3_ROBOTS.map(r => r.id));
- Object.entries(robPos).forEach(([robotId, pos], i) => {
- if (tb3IdSet.has(robotId)) return;
- const color = robotColorMap[robotId] ?? ROBOT_COLORS[i % ROBOT_COLORS.length];
- const { cx, cy } = worldToCanvas(pos.x, pos.y, info, scale);
- ctx.beginPath();
- ctx.arc(cx, cy, 6, 0, Math.PI * 2);
- ctx.fillStyle = color;
- ctx.fill();
- ctx.strokeStyle = "#fff";
- ctx.lineWidth = 1.5;
- ctx.stroke();
- ctx.font = "bold 9px monospace";
- ctx.fillStyle = color;
- ctx.textAlign = "center";
- ctx.textBaseline = "bottom";
- ctx.fillText(robotId, cx, cy - 8);
+ const KNOWN_NON_TB3 = ["vicpinky", "omx"];
+ const nonTb3Ids = [...new Set([
+  ...KNOWN_NON_TB3,
+  ...Object.keys(robPos).filter(id => !tb3IdSet.has(id)),
+ ])];
+ nonTb3Ids.forEach((robotId, i) => {
+  const color = ROBOT_COLORS[i % ROBOT_COLORS.length];
+
+  // 1) AMCL (맵 프레임 — 정확)
+  const amcl = rosMessages[`/${robotId}/amcl_pose`]?.data as any;
+  const amclPos = amcl?.pose?.pose?.position;
+  const amclOri = amcl?.pose?.pose?.orientation;
+
+  // 2) odom 폴백 (odom 프레임 — TF 없이 근사)
+  const odomData = rosMessages[`/${robotId}/odom`]?.data as any;
+  const odomPos  = odomData?.pose?.pose?.position;
+  const odomOri  = odomData?.pose?.pose?.orientation;
+
+  let posX: number, posY: number, yaw: number, isApprox: boolean;
+  if (amclPos?.x != null) {
+   posX = amclPos.x; posY = amclPos.y;
+   yaw = amclOri ? quatToYaw(amclOri) : 0;
+   isApprox = false;
+  } else if (robPos[robotId]) {
+   posX = robPos[robotId].x; posY = robPos[robotId].y;
+   yaw = odomOri ? quatToYaw(odomOri) : 0;
+   isApprox = true;
+  } else if (odomPos?.x != null) {
+   posX = odomPos.x; posY = odomPos.y;
+   yaw = odomOri ? quatToYaw(odomOri) : 0;
+   isApprox = true;
+  } else {
+   return; // 데이터 없음
+  }
+
+  const { cx, cy } = worldToCanvas(posX, posY, info, scale);
+  const pad = 30;
+  if (cx < -pad || cy < -pad || cx > canvas.width + pad || cy > canvas.height + pad) return;
+
+  const r = 7;
+  ctx.save();
+
+  // glow
+  ctx.beginPath();
+  ctx.arc(cx, cy, r + 5, 0, Math.PI * 2);
+  ctx.fillStyle = color + "22";
+  ctx.fill();
+
+  // 본체
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = color + (isApprox ? "55" : "99");
+  ctx.fill();
+
+  // 외곽선 (odom이면 점선)
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  if (isApprox) ctx.setLineDash([3, 3]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // yaw 방향 화살표
+  const arrowLen = r + 10;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy);
+  ctx.lineTo(cx + Math.cos(-yaw) * arrowLen, cy + Math.sin(-yaw) * arrowLen);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = isApprox ? 1.5 : 2;
+  ctx.stroke();
+
+  // 라벨 (검정 외곽선으로 SLAM 맵 배경에서 가독성 확보)
+  ctx.textAlign = "center";
+  ctx.textBaseline = "bottom";
+  ctx.font = "bold 10px monospace";
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = "rgba(0,0,0,0.85)";
+  ctx.strokeText(robotId, cx, cy - r - 4);
+  ctx.fillStyle = color;
+  ctx.fillText(robotId, cx, cy - r - 4);
+
+  // odom 근사 표시
+  if (isApprox) {
+   ctx.font = "8px monospace";
+   ctx.textBaseline = "top";
+   ctx.fillStyle = color + "88";
+   ctx.strokeStyle = "rgba(0,0,0,0.7)";
+   ctx.lineWidth = 2;
+   ctx.strokeText("~odom", cx, cy + r + 3);
+   ctx.fillText("~odom", cx, cy + r + 3);
+  }
+
+  ctx.restore();
  });
  }
 

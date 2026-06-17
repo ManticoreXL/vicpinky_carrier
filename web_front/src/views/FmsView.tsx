@@ -76,8 +76,14 @@ export default function FmsView({
  const robotPositions = useMemo(() => {
  const result: Record<string, RobotPos> = {};
  ROBOTS.forEach(r => {
- const odom = rosMessages[`/${r.id}/odom`]?.data as any;
- if (odom?.pose?.pose?.position?.x != null) result[r.id] = { x: odom.pose.pose.position.x, y: odom.pose.pose.position.y };
+  // AMCL 우선 (맵 프레임 — 좌표계 일치)
+  const amcl = rosMessages[`/${r.id}/amcl_pose`]?.data as any;
+  const amclPos = amcl?.pose?.pose?.position;
+  if (amclPos?.x != null) { result[r.id] = { x: amclPos.x, y: amclPos.y }; return; }
+  // odom 폴백 (odom 프레임 — 근사치, TF 없이도 동작)
+  const odom = rosMessages[`/${r.id}/odom`]?.data as any;
+  const odomPos = odom?.pose?.pose?.position;
+  if (odomPos?.x != null) result[r.id] = { x: odomPos.x, y: odomPos.y };
  });
  return result;
  }, [rosMessages]);
