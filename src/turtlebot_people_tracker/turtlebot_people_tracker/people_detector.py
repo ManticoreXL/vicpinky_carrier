@@ -52,13 +52,18 @@ class PeopleDetectorNode(Node):
     def __init__(self):
         super().__init__('people_detector_node')
         
-        self.declare_parameter('device', 2)
+        # 외부에서 로봇 ID와 카메라 디바이스 번호를 받을 수 있도록 파라미터 선언
+        self.declare_parameter('bot_id', 'tb3_01')
+        self.bot_id = self.get_parameter('bot_id').value
+
+        self.declare_parameter('device', 1)
         camera_device = self.get_parameter('device').value
         
-        self.cmd_vel_pub = self.create_publisher(TwistStamped, '/cmd_vel', 10)
-        self.person_pos_pub = self.create_publisher(PointStamped, '/detected_person/relative_pos', 10)
+        # 하드코딩된 tb3_04 대신 self.bot_id 변수 주입
+        self.cmd_vel_pub = self.create_publisher(TwistStamped, f'/{self.bot_id}/cmd_vel', 10)
+        self.person_pos_pub = self.create_publisher(PointStamped, f'/{self.bot_id}/detected_person/relative_pos', 10)
         
-        self.get_logger().info("[YOLO]: 기절/미동(No-Motion) 요구조자 정밀 판정 노드 가동")
+        self.get_logger().info(f" [{self.bot_id}] 기절/미동(No-Motion) 요구조자 정밀 판정 노드 가동")
 
         current_dir = os.path.dirname(os.path.abspath(__file__))
         onnx_path = os.path.join(current_dir, 'best.onnx')
@@ -71,7 +76,6 @@ class PeopleDetectorNode(Node):
             self.get_logger().error(f" ONNX 모델 로드 실패: {e}")
             return
 
-        # 선언한 파라미터 변수를 장치 번호로 사용
         self.cap = cv2.VideoCapture(camera_device, cv2.CAP_V4L2)
         if not self.cap.isOpened():
             self.get_logger().error(f" {camera_device}번 USB 웹캠을 열 수 없습니다!")
@@ -93,7 +97,8 @@ class PeopleDetectorNode(Node):
     def send_stop_signal(self):
         twist_msg = TwistStamped()
         twist_msg.header.stamp = self.get_clock().now().to_msg()
-        twist_msg.header.frame_id = 'tb3_04/base_link'
+        # 하드코딩된 tb3_04 대신 self.bot_id 변수 주입
+        twist_msg.header.frame_id = f'{self.bot_id}/base_link'
         twist_msg.twist.linear.x = 0.0
         twist_msg.twist.angular.z = 0.0
         self.cmd_vel_pub.publish(twist_msg)
@@ -212,7 +217,8 @@ class PeopleDetectorNode(Node):
                 
                 point_msg = PointStamped()
                 point_msg.header.stamp = self.get_clock().now().to_msg()
-                point_msg.header.frame_id = f"tb3_04/person_{matched_id}" 
+                # 하드코딩된 tb3_04 대신 self.bot_id 변수 주입
+                point_msg.header.frame_id = f"{self.bot_id}/person_{matched_id}" 
                 point_msg.point.x = det["x"]
                 point_msg.point.y = det["y"]
                 point_msg.point.z = det["conf"]
