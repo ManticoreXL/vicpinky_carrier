@@ -71,7 +71,7 @@ export default function App() {
          </div>
          <div className="hidden sm:block">
            <h1 className="text-sm font-semibold text-white leading-none tracking-tight">
-             {isExplore ? "Disaster Monitoring" : isFms ? "Fleet Dispatch" : isTasks ? "Task Manager" : isFlow ? "Task Workflow" : isAdmin ? "System Config" : "Robot Control"}
+             {isExplore ? "Disaster Monitoring" : isTasks ? "Task Manager" : isFms ? "Fleet Dispatch" : isFlow ? "Task Workflow" : isAdmin ? "System Config" : "Robot Control"}
            </h1>
            <p className="text-[10px] text-white/30 leading-none mt-1 tracking-widest uppercase">
              Operations Center
@@ -82,8 +82,8 @@ export default function App() {
        {/* 모드 전환 — 중앙 */}
        <div className="flex bg-black/30 backdrop-blur-xl p-1 rounded-xl border border-white/[0.06] shadow-inner overflow-x-auto">
          <ModeBtn mode="control" active={appMode === "control"} onClick={() => setAppMode("control")}>CTRL</ModeBtn>
-         <ModeBtn mode="fms"     active={appMode === "fms"}     onClick={() => setAppMode("fms")}>FLEET</ModeBtn>
          <ModeBtn mode="tasks"   active={appMode === "tasks"}   onClick={() => setAppMode("tasks")}>TASKS</ModeBtn>
+         <ModeBtn mode="fms"     active={appMode === "fms"}     onClick={() => setAppMode("fms")}>FLEET</ModeBtn>
          <ModeBtn mode="flow"    active={appMode === "flow"}    onClick={() => setAppMode("flow")}>FLOW</ModeBtn>
          <ModeBtn mode="explore" active={appMode === "explore"} onClick={() => setAppMode("explore")}>RECON</ModeBtn>
          <ModeBtn mode="admin"   active={appMode === "admin"}   onClick={() => setAppMode("admin")}>ADMIN</ModeBtn>
@@ -136,6 +136,11 @@ export default function App() {
  robotStatuses={robotStatuses}
  tmAlerts={tmAlerts}
  ackTmAlert={ackTmAlert}
+ robots={robots}
+ onSelectRobotInFleet={(robotId) => {
+   setSelectedRobot(robotId);
+   setAppMode("fms");
+ }}
  />
  </div>
  ) : isFms ? (
@@ -151,6 +156,7 @@ export default function App() {
  ackTmAlert={ackTmAlert}
  setRobotHome={setRobotHome}
  lockedNodes={lockedNodes}
+ focusRobotId={selectedRobot}
  />
  </div>
  ) : isExplore ? (

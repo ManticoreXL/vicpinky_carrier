@@ -159,13 +159,12 @@ export class TopologyService {
       const w    = Math.max(edge.weight ?? 1, 0.01);
       const cost = 1 / w;
 
+      // 모든 엣지를 양방향으로 처리 (direction 필드 무시)
       if (!adj.has(edge.startNode)) adj.set(edge.startNode, []);
       adj.get(edge.startNode)!.push({ to: edge.endNode, cost });
 
-      if (edge.direction === EdgeDirection.BOTH_WAY) {
-        if (!adj.has(edge.endNode)) adj.set(edge.endNode, []);
-        adj.get(edge.endNode)!.push({ to: edge.startNode, cost });
-      }
+      if (!adj.has(edge.endNode)) adj.set(edge.endNode, []);
+      adj.get(edge.endNode)!.push({ to: edge.startNode, cost });
     }
 
     if (!adj.has(startNodeId)) {

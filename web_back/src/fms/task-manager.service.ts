@@ -614,14 +614,22 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
       const nextId = remaining[0];
       const node = await this.topologyService.findNodeById(nextId);
-      if (!node) return;
+      if (!node) {
+        this.logger.warn(`[웨이포인트] ${robotId} 다음 노드 "${nextId}" DB에 없음 — 큐에서 제거 후 재시도`);
+        remaining.shift();
+        await this.fmsService.updatePathQueue(taskId, remaining, this.server);
+        if (remaining.length > 0) {
+          await this.sendNodeActionGoal(robotId, remaining[0]);
+        }
+        return;
+      }
 
       const isFinal   = remaining.length === 1;
       const threshold = isFinal ? NODE_ARRIVE_M : NODE_PASS_M;
       const dist      = Math.hypot(x - node.x, y - node.y);
 
       this.logger.log(
-        `[웨이포인트] ${robotId} pos=(${x.toFixed(2)},${y.toFixed(2)}) → next=${nextId}` +
+        `[웨이포인트] ${robotId} pos=(${x.toFixed(2)},${y.toFixed(2)}) → next=${nextId}(${node.type})` +
         ` dist=${dist.toFixed(2)}m threshold=${threshold}m${isFinal ? ' [최종]' : ''}` +
         ` queue=[${remaining.join(',')}]`,
       );
@@ -844,25 +852,30 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
       // 출발 노드 결정: robot.location이 현재 맵의 실제 노드인지 검증
       let startNodeId: string | null = null;
+      let startFromLocation = false;
 
       if (robot.location && robot.location !== task.targetNode) {
         const locNode = await this.topologyService.findNodeById(robot.location);
         if (locNode && locNode.map_id === myMapId) {
-          // robot.location이 같은 맵의 유효한 노드
           startNodeId = robot.location;
+          startFromLocation = true;
         }
       }
 
       // AMCL 캐시로 최근접 노드 탐색 (robot.location 무효 또는 null인 경우)
-      if (!startNodeId) {
+      const getAmclNode = async (): Promise<string | null> => {
         const cache2 = this.robotCache.get(robotId);
         if (cache2?.posX != null && cache2.posY != null) {
-          startNodeId = await this.topologyService.findNearestNodeToPosition(
-            cache2.posX, cache2.posY, myMapId,
-          );
-          if (startNodeId) {
-            await this.robotService.updateLocation(robotId, startNodeId);
-          }
+          return this.topologyService.findNearestNodeToPosition(cache2.posX, cache2.posY, myMapId);
+        }
+        return null;
+      };
+
+      if (!startNodeId) {
+        const amclNode = await getAmclNode();
+        if (amclNode) {
+          startNodeId = amclNode;
+          await this.robotService.updateLocation(robotId, amclNode);
         }
       }
 
@@ -871,7 +884,23 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
         this.logger.log(`[dispatch] ${robotId} startNode=${startNodeId ?? 'null'} — 목적지 직행 [${task.targetNode}]`);
         pathQueue = [task.targetNode];
       } else {
-        const rawPath = await this.topologyService.findPath(startNodeId, task.targetNode, myMapId);
+        let rawPath = await this.topologyService.findPath(startNodeId, task.targetNode, myMapId);
+
+        // location 노드로 경로 탐색 실패 시 AMCL 위치 기반으로 재시도
+        if (rawPath.length === 0 && startFromLocation) {
+          this.logger.warn(`[dispatch] location 노드 "${startNodeId}" 경로 없음 (엣지 없음?) — AMCL 위치 기반 재탐색`);
+          const amclNode = await getAmclNode();
+          if (amclNode && amclNode !== startNodeId) {
+            const retryPath = await this.topologyService.findPath(amclNode, task.targetNode, myMapId);
+            if (retryPath.length > 0) {
+              this.logger.log(`[dispatch] AMCL 재탐색 성공: ${amclNode} → ${task.targetNode}`);
+              startNodeId = amclNode;
+              rawPath = retryPath;
+              await this.robotService.updateLocation(robotId, amclNode);
+            }
+          }
+        }
+
         if (rawPath.length === 0) {
           this.logger.warn(`[dispatch] 경로 없음: ${startNodeId} → ${task.targetNode} (${robotId})`);
           await this.fmsService.setWaitReason(taskId, `경로 없음: ${startNodeId} → ${task.targetNode}`);
@@ -880,7 +909,11 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
           continue;
         }
         pathQueue = rawPath.slice(1);
-        this.logger.log(`[dispatch] ${robotId} 경로 확정: ${startNodeId} → ${task.targetNode} = [${pathQueue.join('→')}]`);
+        // 각 노드 타입 확인 (station 중간 경유 진단용)
+        const nodeTypes = await Promise.all(
+          rawPath.map(id => this.topologyService.findNodeById(id).then(n => n ? `${id}(${n.type})` : `${id}(?)`)),
+        );
+        this.logger.log(`[dispatch] ${robotId} 경로 확정: [${nodeTypes.join('→')}] queue=[${pathQueue.join('→')}]`);
       }
 
       this.activeTasks.set(robotId, taskId);

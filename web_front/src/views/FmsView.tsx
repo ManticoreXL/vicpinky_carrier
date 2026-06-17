@@ -6,12 +6,12 @@ import { type RobotPos } from "../components/TopologyMapView";
 import { BACKEND_URL } from "../config";
 
 const ROBOTS = [
- { id: "vicpinky", label: "VIC-PINKY", domain: 40, type: "carrier" },
- { id: "tb3_01", label: "UNIT-ALPHA", domain: 41, type: "tb3" },
- { id: "tb3_02", label: "UNIT-BRAVO", domain: 42, type: "tb3" },
- { id: "tb3_03", label: "UNIT-CHARLIE", domain: 43, type: "tb3" },
- { id: "tb3_04", label: "UNIT-DELTA", domain: 44, type: "tb3" },
- { id: "omx", label: "OMX-ARM", domain: 45, type: "arm" },
+ { id: "vicpinky", domain: 40, type: "carrier" },
+ { id: "tb3_01",   domain: 41, type: "tb3" },
+ { id: "tb3_02",   domain: 42, type: "tb3" },
+ { id: "tb3_03",   domain: 43, type: "tb3" },
+ { id: "tb3_04",   domain: 44, type: "tb3" },
+ { id: "omx",      domain: 45, type: "arm" },
 ] as const;
 
 const TASK_LABELS: Record<TaskType, string> = {
@@ -31,6 +31,7 @@ interface Props {
  ackTmAlert: (alertId: string) => void;
  setRobotHome: (robotId: string, x: number, y: number, yaw: number) => void;
  lockedNodes?: Set<string>;
+ focusRobotId?: string;
 }
 
 function isOnline(rosMessages: Record<string, RosMessage>, robotId: string): boolean {
@@ -45,11 +46,17 @@ export default function FmsView({
  emitNavInitialPose,
  ackTmAlert, setRobotHome,
  lockedNodes = new Set(),
+ focusRobotId,
 }: Props) {
  const [filterTab, setFilterTab] = useState<string>("all");
  const [contentTab, setContentTab] = useState<"fleet" | "map">("map");
  const [mapAssignments, setMapAssignments] = useState<Record<string, string>>({});
- const [form, setForm] = useState({ type: "SUPPLY" as TaskType, targetNode: "", priority: 5, preferredRobotId: "" });
+ const [form, setForm] = useState({ type: "SUPPLY" as TaskType, targetNode: "", priority: 5, preferredRobotId: focusRobotId ?? "" });
+
+ // TaskManager에서 로봇 선택 시 dispatch form 동기화
+ useEffect(() => {
+  if (focusRobotId) setForm(f => ({ ...f, preferredRobotId: focusRobotId }));
+ }, [focusRobotId]);
 
  // rosMessages가 안 바뀌어도 isOnline() 재계산을 위해 주기적 리렌더
  const [, setTick] = useState(0);
@@ -102,9 +109,23 @@ export default function FmsView({
  <Stat label="Tasks Running" value={String(activeCount)} color="text-white/90" />
  {tmAlerts.length > 0 && <Stat label="Pending Alerts" value={String(tmAlerts.length)} color="text-white/90 " />}
  </div>
- <div className="flex bg-white/5 p-1 rounded-xl border border-white/[0.05]">
- <button onClick={() => setContentTab("map")} className={`px-5 py-1.5 text-xs font-semibold tracking-wide rounded-lg transition-all ${contentTab === 'map' ? 'bg-white/10 text-white shadow-lg' : 'text-white/20 hover:text-white/40'}`}>TOPOLOGY</button>
- <button onClick={() => setContentTab("fleet")} className={`px-5 py-1.5 text-xs font-semibold tracking-wide rounded-lg transition-all ${contentTab === 'fleet' ? 'bg-white/10 text-white shadow-lg' : 'text-white/20 hover:text-white/40'}`}>ASSET LIST</button>
+ <div className="flex items-center gap-3">
+  {/* 포커스 로봇 드롭다운 */}
+  <div className="flex items-center gap-2">
+   <span className="text-[9px] text-white/20 font-bold tracking-widest uppercase">Focus</span>
+   <select
+    value={form.preferredRobotId}
+    onChange={e => setForm(f => ({ ...f, preferredRobotId: e.target.value }))}
+    className="bg-black/40 border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-white/60 appearance-none focus:outline-none focus:border-white/20"
+   >
+    <option value="">ALL ASSETS</option>
+    {ROBOTS.map(r => <option key={r.id} value={r.id}>{r.id}</option>)}
+   </select>
+  </div>
+  <div className="bg-white/5 p-1 rounded-xl border border-white/[0.05] flex">
+   <button onClick={() => setContentTab("map")} className={`px-5 py-1.5 text-xs font-semibold tracking-wide rounded-lg transition-all ${contentTab === 'map' ? 'bg-white/10 text-white shadow-lg' : 'text-white/20 hover:text-white/40'}`}>TOPOLOGY</button>
+   <button onClick={() => setContentTab("fleet")} className={`px-5 py-1.5 text-xs font-semibold tracking-wide rounded-lg transition-all ${contentTab === 'fleet' ? 'bg-white/10 text-white shadow-lg' : 'text-white/20 hover:text-white/40'}`}>ASSET LIST</button>
+  </div>
  </div>
  </div>
 
@@ -172,7 +193,7 @@ export default function FmsView({
  <span className="sub-label">Preferred Asset</span>
  <select value={form.preferredRobotId} onChange={e => setForm(f => ({ ...f, preferredRobotId: e.target.value }))} className="w-full bg-black/40 border border-white/[0.05] rounded-xl px-3 py-2 text-sm text-white appearance-none focus:outline-none focus:border-white/[0.05]">
  <option value="">AUTO ASSIGNMENT</option>
- {ROBOTS.map(r => <option key={r.id} value={r.id}>{r.label}</option>)}
+ {ROBOTS.map(r => <option key={r.id} value={r.id}>{r.id}</option>)}
  </select>
  </div>
  <button onClick={() => { if(form.targetNode) emitFmsDispatch(form); setForm(f => ({ ...f, targetNode: "" })) }} className="w-full glass-button !bg-sky-600 hover:!bg-sky-500 !text-xs !font-semibold !tracking-wide !py-2.5 !rounded-xl shadow-xl">AUTHORIZE DISPATCH</button>
@@ -203,7 +224,7 @@ function RobotStatusCard({ robot, rosMessages, fmsTasks, mapAssignment }: any) {
  <div className={`glass-card p-5 transition-all duration-700 ${online ? 'opacity-100 scale-100 shadow-xl' : 'opacity-40 scale-[0.98]'}`}>
  <div className="flex justify-between items-start mb-4">
  <div>
- <h3 className="text-sm font-semibold text-white/90 tracking-wide">{robot.label}</h3>
+ <h3 className="text-sm font-bold text-white/90 tracking-wide font-mono">{robot.id}</h3>
  <span className="text-xs text-white/20 tracking-wide">DOMAIN {robot.domain}</span>
  </div>
  <div className={`w-2 h-2 rounded-full ${online ? 'bg-emerald-500 ' : 'bg-white/5'}`} />
