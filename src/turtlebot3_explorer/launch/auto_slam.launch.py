@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 # =====================================================================
-# bringup_pc_tb3_01.launch.py  (단일 로봇 / 네임스페이스 없는 두뇌 + RViz)
+# auto_slam_launch.py  (단일 로봇 / 네임스페이스 없음 / 도메인 격리)
+#
+# 전제:
+#   - 로봇 bringup 도 이 PC 도 ROS_DOMAIN_ID=41 로 실행 (실행 전 export)
+#       로봇:  export ROS_DOMAIN_ID=41 && ros2 launch turtlebot3_bringup robot.launch.py
+#              (namespace 인자 없음!)
+#   - 네임스페이스 미사용 -> 토픽 /scan, /odom, /cmd_vel / 프레임 map, odom, base_*
+#   - 분리는 도메인이 담당하므로 tb3_NN/* 접두어가 전혀 필요 없음
+#     (그래서 base_scan 다리 같은 보정도 불필요)
 #
 # 기동 순서:
-#   t=0s   slam_toolbox  + RViz (미리 설정된 뷰: 맵/라이다/TF/로봇모델/경로)
-#   t=12s  nav2
-#   t=30s  coordinator
+#   t=0s   slam_toolbox + RViz
+#   t=12s  nav2 (navigation_launch)
+#   t=30s  mission_coordinator
 #
-#   - 두뇌 노드는 네임스페이스 없음 -> critic 에러 없음.
-#   - 프레임/토픽은 파라미터 파일에서 전부 tb3_01/* 로 지정.
-#   - RViz 끄려면:  ros2 launch ... bringup_pc_tb3_01.launch.py rviz:=false
+#   - RViz 끄려면:  ros2 launch turtlebot3_explorer auto_slam_launch.py rviz:=false
 # =====================================================================
 import os
 from launch import LaunchDescription
@@ -21,8 +27,6 @@ from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
-NS = 'tb3_01'   # 파일 이름 규칙용. 노드를 네임스페이스하지는 않는다.
-
 
 def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
@@ -30,9 +34,10 @@ def generate_launch_description():
     use_rviz = LaunchConfiguration('rviz')
 
     pkg_share = FindPackageShare('turtlebot3_explorer')
-    nav2_params = PathJoinSubstitution([pkg_share, 'config', f'nav2_params_{NS}.yaml'])
-    slam_params = PathJoinSubstitution([pkg_share, 'config', f'slam_params_{NS}.yaml'])
-    rviz_config = PathJoinSubstitution([pkg_share, 'config', f'{NS}_view.rviz'])
+    # plain(네임스페이스 없는) 설정 파일
+    nav2_params = PathJoinSubstitution([pkg_share, 'config', 'nav2_params.yaml'])
+    slam_params = PathJoinSubstitution([pkg_share, 'config', 'slam_params.yaml'])
+    rviz_config = PathJoinSubstitution([pkg_share, 'config', 'robot_view.rviz'])
 
     nav2_launch = PathJoinSubstitution([FindPackageShare('nav2_bringup'), 'launch', 'navigation_launch.py'])
     slam_launch = PathJoinSubstitution([FindPackageShare('slam_toolbox'), 'launch', 'online_async_launch.py'])
@@ -46,7 +51,7 @@ def generate_launch_description():
         }.items(),
     )
 
-    # ---- RViz (t=0) : 미리 설정된 뷰 ----
+    # ---- RViz (t=0) : 미리 설정된 뷰 (fixed frame = map) ----
     rviz = Node(
         package='rviz2',
         executable='rviz2',
@@ -71,7 +76,7 @@ def generate_launch_description():
         ],
     )
 
-    # ---- 탐색 코디네이터 (t=30s) ----
+    # ---- 탐색 코디네이터 (t=30s) : 프레임은 plain ----
     coordinator = TimerAction(
         period=30.0,
         actions=[
@@ -83,8 +88,9 @@ def generate_launch_description():
                 parameters=[{
                     'use_sim_time': ParameterValue(use_sim_time, value_type=bool),
                     'map_save_path': map_save_path,
-                    'base_frame': 'tb3_01/base_footprint',
-                    'global_frame': 'tb3_01/map',
+                    'base_frame': 'base_footprint',
+                    'global_frame': 'map',
+                    'finish_topic': '/mission/finish_now',
                 }],
             ),
         ],

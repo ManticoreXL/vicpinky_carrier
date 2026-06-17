@@ -64,7 +64,7 @@ class ExplorationCoordinator(Node):
         self.declare_parameter('localization_lost_timeout', 60.0)  # localization이 이만큼 안 돌아오면 미션 종료(초)
         self.declare_parameter('min_goal_runtime', 2.0)          # 골이 이보다 빨리 중단되면 '즉시 실패'(타이밍 문제)로 보고 블랙리스트 미집계(초)
         # ---- 온디맨드 마무리 ----
-        self.declare_parameter('finish_topic', '/tb3_01/mission/finish_now')  # 이 토픽(std_msgs/Empty) 수신 시 현재 맵 저장 후 복귀
+        self.declare_parameter('finish_topic', '/mission/finish_now')  # 이 토픽(std_msgs/Empty) 수신 시 현재 맵 저장 후 복귀
 
         self.map_save_path = self.get_parameter('map_save_path').value
         self.min_frontier_size = int(self.get_parameter('min_frontier_size').value)
