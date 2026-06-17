@@ -24,7 +24,6 @@ sudo apt-get install -y make gcc unzip wget linux-headers-raspi v4l2loopback-dkm
 echo "[2/6] Configuring v4l2loopback kernel module and installing ONNX Runtime"
 sudo dpkg-reconfigure -f noninteractive v4l2loopback-dkms
 echo "v4l2loopback" | sudo tee /etc/modules-load.d/v4l2loopback.conf
-# 수정됨: 가상 장치 2개 할당에 맞추어 exclusive_caps=1,1 배열 적용
 echo "options v4l2loopback devices=2 video_nr=2,3 exclusive_caps=1,1" | sudo tee /etc/modprobe.d/v4l2loopback.conf
 
 sudo pip3 install onnxruntime --break-system-packages
