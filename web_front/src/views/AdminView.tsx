@@ -114,6 +114,8 @@ function RobotSection({ liveStatuses }: { liveStatuses: Record<string, string> }
  const [addDraft, setAddDraft] = useState({ robot_id: "", ip: "", ros_domain_id: 0 });
  const [err, setErr] = useState("");
  const [delConfirm, setDelConfirm] = useState<string | null>(null);
+ const [renameId, setRenameId] = useState<string | null>(null);
+ const [renameValue, setRenameValue] = useState("");
 
  const load = useCallback(async () => {
  setLoading(true);
@@ -150,6 +152,15 @@ function RobotSection({ liveStatuses }: { liveStatuses: Record<string, string> }
  } catch (e) { setErr(String(e)); }
  }
 
+ async function rename(oldId: string) {
+ if (!renameValue.trim() || renameValue === oldId) { setRenameId(null); return; }
+ try {
+ await api(`/api/fleet/robots/${oldId}/rename`, { method: "PATCH", body: JSON.stringify({ new_id: renameValue }) });
+ setRenameId(null);
+ void load();
+ } catch (e) { setErr(String(e)); }
+ }
+
  return (
  <div>
  <SectionHeader title="로봇 등록부" count={robots.length} onAdd={() => { setAdding(true); setErr(""); }} onRefresh={load} loading={loading} />
@@ -180,9 +191,18 @@ function RobotSection({ liveStatuses }: { liveStatuses: Record<string, string> }
  )}
  {robots.map(r => {
  const isEdit = editId === r.robot_id;
+ const isRename = renameId === r.robot_id;
  return (
  <tr key={r.robot_id} className="border-b border-white/[0.05] hover:bg-white/10 transition-colors">
- <td className={TD}>{r.robot_id}</td>
+ <td className={TD}>
+ {isRename ? (
+ <div className="flex items-center gap-1">
+ <input className={`${INP} w-28`} value={renameValue} onChange={e => setRenameValue(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void rename(r.robot_id); if (e.key === "Escape") setRenameId(null); }} autoFocus />
+ <button className={BTN("bg-green-900/40 text-white/70 border-white/[0.05]")} onClick={() => void rename(r.robot_id)}>확인</button>
+ <button className={BTN("bg-white/5 text-white/50 border-white/[0.05]")} onClick={() => setRenameId(null)}>취소</button>
+ </div>
+ ) : r.robot_id}
+ </td>
  <td className={TD}>
  {isEdit
  ? <input className={INP} value={editDraft.ip ?? r.ip} onChange={e => setEditDraft(d => ({ ...d, ip: e.target.value }))} />
@@ -233,6 +253,7 @@ function RobotSection({ liveStatuses }: { liveStatuses: Record<string, string> }
  ) : (
  <div className="flex gap-1">
  <button className={BTN("bg-white/5 text-white/60 border-white/[0.05] hover:text-white/90")} onClick={() => { setEditId(r.robot_id); setEditDraft({ ip: r.ip, ros_domain_id: r.ros_domain_id, status: r.status }); setErr(""); }}>수정</button>
+ <button className={BTN("bg-indigo-900/40 text-indigo-300 border-white/[0.05] hover:bg-indigo-800/50")} onClick={() => { setRenameId(r.robot_id); setRenameValue(r.robot_id); setErr(""); }}>ID변경</button>
  <button className={BTN("bg-white/5 text-red-800 border-white/[0.05] hover:text-white/90")} onClick={() => setDelConfirm(r.robot_id)}>삭제</button>
  </div>
  )}
@@ -460,6 +481,8 @@ function NodeSection() {
  const [addDraft, setAddDraft] = useState<Partial<FleetNode>>({ type: "WAYPOINT", x: 0, y: 0, yaw: 0 });
  const [delConfirm, setDelConfirm] = useState<string | null>(null);
  const [err, setErr] = useState("");
+ const [renameId, setRenameId] = useState<string | null>(null);
+ const [renameValue, setRenameValue] = useState("");
 
  // 맵 목록 별도 fetch (노드가 없어도 선택 가능)
  useEffect(() => {
@@ -512,6 +535,15 @@ function NodeSection() {
  method: "PATCH",
  body: JSON.stringify({ isLocked: !node.isLocked }),
  });
+ void load();
+ } catch (e) { setErr(String(e)); }
+ }
+
+ async function renameNode(oldId: string) {
+ if (!renameValue.trim() || renameValue === oldId) { setRenameId(null); return; }
+ try {
+ await api(`/api/fleet/topology/nodes/${oldId}/rename`, { method: "PATCH", body: JSON.stringify({ new_id: renameValue }) });
+ setRenameId(null);
  void load();
  } catch (e) { setErr(String(e)); }
  }
@@ -571,10 +603,19 @@ function NodeSection() {
  )}
  {displayed.map(n => {
  const isEdit = editId === n.node_id;
+ const isRename = renameId === n.node_id;
  const d = editDraft;
  return (
  <tr key={n.node_id} className={`border-b border-white/[0.05] hover:bg-white/10 transition-colors ${n.isLocked ? "bg-red-950/10" : ""}`}>
- <td className={TD}>{n.node_id}</td>
+ <td className={TD}>
+ {isRename ? (
+ <div className="flex items-center gap-1">
+ <input className={`${INP} w-24`} value={renameValue} onChange={e => setRenameValue(e.target.value)} onKeyDown={e => { if (e.key === "Enter") void renameNode(n.node_id); if (e.key === "Escape") setRenameId(null); }} autoFocus />
+ <button className={BTN("bg-green-900/40 text-white/70 border-white/[0.05]")} onClick={() => void renameNode(n.node_id)}>확인</button>
+ <button className={BTN("bg-white/5 text-white/50 border-white/[0.05]")} onClick={() => setRenameId(null)}>취소</button>
+ </div>
+ ) : n.node_id}
+ </td>
  <td className={TD}>{isEdit ? <input className={INP} value={d.map_id ?? n.map_id} onChange={e => setEditDraft(p => ({ ...p, map_id: e.target.value }))} /> : n.map_id}</td>
  <td className={TD}>{isEdit
  ? <select className={SEL} value={d.type ?? n.type} onChange={e => setEditDraft(p => ({ ...p, type: e.target.value as NodeType }))}>{(["WAYPOINT","STATION","CHARGER"] as NodeType[]).map(t => <option key={t}>{t}</option>)}</select>
@@ -609,6 +650,7 @@ function NodeSection() {
  ) : (
  <div className="flex gap-1">
  <button className={BTN("bg-white/5 text-white/60 border-white/[0.05] hover:text-white/90")} onClick={() => { setEditId(n.node_id); setEditDraft({ map_id: n.map_id, type: n.type, x: n.x, y: n.y, yaw: n.yaw }); setErr(""); }}>수정</button>
+ <button className={BTN("bg-indigo-900/40 text-indigo-300 border-white/[0.05] hover:bg-indigo-800/50")} onClick={() => { setRenameId(n.node_id); setRenameValue(n.node_id); setErr(""); }}>ID변경</button>
  <button className={BTN("bg-white/5 text-red-800 border-white/[0.05] hover:text-white/90")} onClick={() => setDelConfirm(n.node_id)}>삭제</button>
  </div>
  )}
@@ -644,6 +686,8 @@ function EdgeSection() {
  const [addDraft, setAddDraft] = useState<Partial<FleetEdge>>({ direction: "BOTH_WAY", isLocked: false });
  const [delConfirm, setDelConfirm] = useState<string | null>(null);
  const [err, setErr] = useState("");
+ const [renameId, setRenameId] = useState<string | null>(null);
+ const [renameValue, setRenameValue] = useState("");
 
  // 전체 노드 로드 (엣지 등록 시 노드 목록 제공용)
  const loadNodes = useCallback(() => {
@@ -703,6 +747,15 @@ function EdgeSection() {
  method: "PATCH",
  body: JSON.stringify({ isLocked: !edge.isLocked }),
  });
+ void load();
+ } catch (e) { setErr(String(e)); }
+ }
+
+ async function renameEdge(oldId: string) {
+ if (!renameValue.trim() || renameValue === oldId) { setRenameId(null); return; }
+ try {
+ await api(`/api/fleet/topology/edges/${oldId}/rename`, { method: "PATCH", body: JSON.stringify({ new_id: renameValue }) });
+ setRenameId(null);
  void load();
  } catch (e) { setErr(String(e)); }
  }
@@ -781,11 +834,20 @@ function EdgeSection() {
  )}
  {displayed.map(e => {
  const isEdit = editId === e.edge_id;
+ const isRename = renameId === e.edge_id;
  const d = editDraft;
  const editMapId = d.map_id ?? e.map_id;
  return (
  <tr key={e.edge_id} className="border-b border-white/[0.05] hover:bg-white/10 transition-colors">
- <td className={TD}>{e.edge_id}</td>
+ <td className={TD}>
+ {isRename ? (
+ <div className="flex items-center gap-1">
+ <input className={`${INP} w-24`} value={renameValue} onChange={ev => setRenameValue(ev.target.value)} onKeyDown={ev => { if (ev.key === "Enter") void renameEdge(e.edge_id); if (ev.key === "Escape") setRenameId(null); }} autoFocus />
+ <button className={BTN("bg-green-900/40 text-white/70 border-white/[0.05]")} onClick={() => void renameEdge(e.edge_id)}>확인</button>
+ <button className={BTN("bg-white/5 text-white/50 border-white/[0.05]")} onClick={() => setRenameId(null)}>취소</button>
+ </div>
+ ) : e.edge_id}
+ </td>
  <td className={TD}>{e.map_id}</td>
  <td className={TD}>
  {isEdit ? (
@@ -839,6 +901,7 @@ function EdgeSection() {
  ) : (
  <div className="flex gap-1">
  <button className={BTN("bg-white/5 text-white/60 border-white/[0.05] hover:text-white/90")} onClick={() => { setEditId(e.edge_id); setEditDraft({ map_id: e.map_id, startNode: e.startNode, endNode: e.endNode, direction: e.direction }); setErr(""); }}>수정</button>
+ <button className={BTN("bg-indigo-900/40 text-indigo-300 border-white/[0.05] hover:bg-indigo-800/50")} onClick={() => { setRenameId(e.edge_id); setRenameValue(e.edge_id); setErr(""); }}>ID변경</button>
  <button className={BTN("bg-white/5 text-red-800 border-white/[0.05] hover:text-white/90")} onClick={() => setDelConfirm(e.edge_id)}>삭제</button>
  </div>
  )}
@@ -972,7 +1035,7 @@ function TaskSection() {
  <td className={TD}><span className={`font-bold text-xs ${TASK_STATUS_COLOR[t.status]}`}>{t.status}</span></td>
  <td className={TD}><span className="text-white/60">P{t.priority}</span></td>
  <td className={TD}>{t.targetNode}</td>
- <td className={TD}>{t.assignedRobot.robot_id ?? <span className="text-white/40">—</span>}</td>
+ <td className={TD}>{(t as any).assignedRobotId ?? <span className="text-white/40">—</span>}</td>
  <td className={`${TD} text-white/50 text-xs`}>{new Date(t.createdAt).toLocaleString("ko-KR", { month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" })}</td>
  <td className={TD}>
  {delConfirm === t._id ? (

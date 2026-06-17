@@ -14,7 +14,7 @@ const LOOP_MS          = 2_000;
 const ONLINE_MS        = 5_000;
 const OFFLINE_AFTER_MS = 20_000; // 느린 로봇 / WiFi 혼잡 대비 20s
 const AMCL_TIMEOUT_MS  = 20_000; // nav2 재시작 감지 — amcl_pose 없을 때
-const FALL_THRESH_RAD  = 0.5;    // ~28.6° 이상 기울면 전복 판정
+const FALL_THRESH_RAD  = Math.PI / 4; // 45° 이상 기울면 전복 판정
 
 // 위치 감지 반경 (노드 위주 경로)
 const NODE_PASS_M   = 1.5;  // 중간 노드 통과 감지
@@ -375,12 +375,26 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
           const last = this.lastFallAlert.get(id) ?? 0;
           if (now - last > 30_000) {
             this.lastFallAlert.set(id, now);
+
+            // 상태 ERROR 전환 + DB 저장 + 프론트 브로드캐스트
+            void this.robotService.updateStatus(id, RobotStatus.ERROR);
+            this.server?.emit('robot_status_changed', { robot_id: id, status: RobotStatus.ERROR });
+
             this.emit({
               type: 'fall', robotId: id,
-              message: `${id} 전복 감지 — roll ${(roll * 180 / Math.PI).toFixed(0)}° / pitch ${(pitch * 180 / Math.PI).toFixed(0)}°`,
+              message: `${id} 전복 감지 — roll ${(roll * 180 / Math.PI).toFixed(0)}° / pitch ${(pitch * 180 / Math.PI).toFixed(0)}° → 상태 ERROR`,
               requiresAction: true,
             });
           }
+        } else {
+          // 자세 정상 복귀 시 ERROR → IDLE 자동 해제
+          void this.robotService.findById(id).then(robot => {
+            if (robot?.status === RobotStatus.ERROR) {
+              void this.robotService.updateStatus(id, RobotStatus.IDLE);
+              this.server?.emit('robot_status_changed', { robot_id: id, status: RobotStatus.IDLE });
+              this.lastFallAlert.delete(id);
+            }
+          });
         }
       }
     }

@@ -62,9 +62,19 @@ export class TopologyController {
     return this.topologyService.setNodeLocked(id, isLocked);
   }
 
+  @Patch('nodes/:id/rename')
+  renameNode(@Param('id') id: string, @Body('new_id') new_id: string) {
+    return this.topologyService.renameNodeId(id, new_id);
+  }
+
   @Patch('edges/:id/lock')
   lockEdge(@Param('id') id: string, @Body('isLocked') isLocked: boolean) {
     return this.topologyService.setLocked(id, isLocked);
+  }
+
+  @Patch('edges/:id/rename')
+  renameEdge(@Param('id') id: string, @Body('new_id') new_id: string) {
+    return this.topologyService.renameEdgeId(id, new_id);
   }
 
   // ── 경로 탐색 ──────────────────────────────────────────────────────────────

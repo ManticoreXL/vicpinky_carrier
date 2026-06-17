@@ -2,11 +2,13 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Robot, RobotDocument, RobotStatus } from './robot.schema';
+import { Task, TaskDocument } from '../fms/task.schema';
 
 @Injectable()
 export class RobotService {
   constructor(
     @InjectModel(Robot.name) private readonly robotModel: Model<RobotDocument>,
+    @InjectModel(Task.name)  private readonly taskModel:  Model<TaskDocument>,
   ) {}
 
   async create(dto: Partial<Robot>): Promise<RobotDocument> {
@@ -96,5 +98,20 @@ export class RobotService {
    */
   async setOffline(robot_id: string): Promise<void> {
     await this.robotModel.updateOne({ robot_id }, { status: RobotStatus.OFFLINE });
+  }
+
+  /** robot_id 변경 — 연관 태스크 cascade 업데이트 */
+  async renameRobotId(oldId: string, newId: string): Promise<RobotDocument> {
+    const robot = await this.robotModel.findOneAndUpdate(
+      { robot_id: oldId },
+      { robot_id: newId },
+      { new: true },
+    );
+    if (!robot) throw new NotFoundException(`Robot ${oldId} 없음`);
+    await Promise.all([
+      this.taskModel.updateMany({ assignedRobotId: oldId },  { assignedRobotId: newId }),
+      this.taskModel.updateMany({ preferredRobotId: oldId }, { preferredRobotId: newId }),
+    ]);
+    return robot;
   }
 }

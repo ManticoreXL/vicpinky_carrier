@@ -52,7 +52,13 @@ export class AiController {
 6. 작업 할당 → A* 경로탐색 → goal_pose 전송 → ASSIGNED→MOVING
 7. amcl_pose 위치 추적(2초 tick) → 오프라인 20s→FAILED, 전복감지→알림
 8. 에러 발생 → 관제 조치
-9. 목적지 0.5m 이내 도착 → COMPLETED → 로봇 IDLE → 홈 귀환`;
+9. 목적지 0.5m 이내 도착 → COMPLETED → 로봇 IDLE → 홈 귀환
+
+[엔티티 ID 인식 규칙]
+- 노드(위치)를 언급할 때는 아래 RAG 컨텍스트의 node_id 필드로 식별한다 (예: "N01", "station_A")
+- 로봇을 언급할 때는 robot_id 필드로 식별한다 (예: "tb3_01", "tb3_02")
+- 경로(엣지)를 언급할 때는 edge_id 필드로 식별한다 (예: "E01", "E02")
+- 사용자가 "1번 로봇", "A 노드", "첫번째 엣지" 등 자연어로 말할 경우 RAG 컨텍스트에서 해당 node_id / robot_id / edge_id를 찾아 답변에 사용한다`;
 
     const basePrompt = body.systemPrompt ?? '';
     const enrichedSystemPrompt = [basePrompt, workflowKnowledge, ragContext]

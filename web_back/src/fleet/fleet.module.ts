@@ -4,6 +4,7 @@ import { Robot, RobotSchema } from './robot.schema';
 import { FleetMap, FleetMapSchema } from './fleet-map.schema';
 import { Node, NodeSchema } from './node.schema';
 import { Edge, EdgeSchema } from './edge.schema';
+import { Task, TaskSchema } from '../fms/task.schema';
 import { RobotService } from './robot.service';
 import { FleetMapService } from './fleet-map.service';
 import { TopologyService } from './topology.service';
@@ -18,6 +19,7 @@ import { TopologyController } from './topology.controller';
       { name: FleetMap.name, schema: FleetMapSchema },
       { name: Node.name,     schema: NodeSchema     },
       { name: Edge.name,     schema: EdgeSchema     },
+      { name: Task.name,     schema: TaskSchema     },
     ]),
   ],
   providers: [RobotService, FleetMapService, TopologyService],

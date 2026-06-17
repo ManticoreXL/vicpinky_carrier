@@ -2,11 +2,11 @@ import React from "react";
 
 /* ── 색상 클래스 ─────────────────────────────────────────── */
 const CLS = {
-  start:    "bg-emerald-900/40 border-emerald-500/50 text-emerald-300",
-  process:  "bg-blue-900/40   border-blue-500/50   text-blue-200",
-  decision: "bg-amber-900/40  border-amber-500/50  text-amber-200",
-  warning:  "bg-red-900/40    border-red-500/50    text-red-300",
-  wait:     "bg-slate-800/60  border-slate-500/40  text-slate-300 border-dashed",
+  start:    "bg-emerald-700/70 border-emerald-400/80 text-emerald-100",
+  process:  "bg-blue-700/70   border-blue-400/80   text-blue-100",
+  decision: "bg-amber-600/70  border-amber-400/80  text-amber-100",
+  warning:  "bg-red-700/60    border-red-400/80    text-red-100",
+  wait:     "bg-slate-600/70  border-slate-400/60  text-slate-100 border-dashed",
 };
 
 const IMPL_MAP: Record<string, string> = {
@@ -36,7 +36,7 @@ function Node({
         onMouseLeave={() => setHover(false)}
       >
         {step && (
-          <span className="text-[10px] font-bold text-white/40 mr-1">#{step}</span>
+          <span className="text-[10px] font-bold text-white/70 mr-1">#{step}</span>
         )}
         {label}
       </div>
@@ -67,10 +67,10 @@ function Arrow({ label, dir = "down" }: { label?: string; dir?: "down" | "left" 
   if (dir === "down") {
     return (
       <div className="flex flex-col items-center my-0.5">
-        {label && <span className="text-[10px] text-white/40 mb-0.5">{label}</span>}
-        <div className="w-px h-5 bg-white/20" />
+        {label && <span className="text-[10px] text-white/70 mb-0.5">{label}</span>}
+        <div className="w-px h-5 bg-white/40" />
         <div className="w-0 h-0 border-l-4 border-r-4 border-t-6
-                        border-l-transparent border-r-transparent border-t-white/30" />
+                        border-l-transparent border-r-transparent border-t-white/60" />
       </div>
     );
   }
@@ -80,9 +80,9 @@ function Arrow({ label, dir = "down" }: { label?: string; dir?: "down" | "left" 
 /* ── 점선 귀환 선 표시 ────────────────────────────────────── */
 function DashLoop({ label }: { label: string }) {
   return (
-    <div className="flex items-center gap-1 my-1 px-3 py-1 border border-dashed border-white/15
-                    rounded-lg text-[10px] text-white/30">
-      <span className="text-white/20">↩</span> {label}
+    <div className="flex items-center gap-1 my-1 px-3 py-1 border border-dashed border-white/30
+                    rounded-lg text-[10px] text-white/60">
+      <span className="text-white/40">↩</span> {label}
     </div>
   );
 }
@@ -90,13 +90,13 @@ function DashLoop({ label }: { label: string }) {
 /* ── 메인 뷰 ─────────────────────────────────────────────── */
 export default function FlowView() {
   return (
-    <div className="h-full overflow-auto bg-[#0a0f1e] p-6">
+    <div className="h-full overflow-auto bg-[#0d1422] p-6">
       <div className="max-w-5xl mx-auto">
 
         {/* 헤더 */}
         <div className="mb-6">
           <h1 className="text-lg font-bold text-white">FMS 태스크 처리 워크플로우</h1>
-          <p className="text-xs text-white/40 mt-1">
+          <p className="text-xs text-white/60 mt-1">
             노드에 마우스를 올리면 실제 코드 위치가 표시됩니다
           </p>
         </div>
@@ -196,8 +196,8 @@ export default function FlowView() {
 
           {/* ── 사이드 패널: 코드 매핑 & 구현 현황 ── */}
           <div className="w-72 flex-none space-y-3">
-            <div className="bg-slate-900/60 border border-white/10 rounded-xl p-4">
-              <h3 className="text-xs font-bold text-white/60 uppercase tracking-widest mb-3">구현 현황</h3>
+            <div className="bg-slate-700/50 border border-white/20 rounded-xl p-4">
+              <h3 className="text-xs font-bold text-white/80 uppercase tracking-widest mb-3">구현 현황</h3>
               {[
                 { label: "작업 큐 삽입",      done: true  },
                 { label: "로봇 가용성 확인",   done: true  },
@@ -213,7 +213,7 @@ export default function FlowView() {
                   <span className={`text-xs font-bold ${done ? "text-emerald-400" : "text-amber-400"}`}>
                     {done ? "✓" : "○"}
                   </span>
-                  <span className={`text-xs ${done ? "text-white/70" : "text-amber-300/70"}`}>{label}</span>
+                  <span className={`text-xs ${done ? "text-white/90" : "text-amber-200/90"}`}>{label}</span>
                   {!done && (
                     <span className="ml-auto text-[9px] bg-amber-500/15 text-amber-400 px-1.5 py-0.5 rounded">예정</span>
                   )}
@@ -221,8 +221,8 @@ export default function FlowView() {
               ))}
             </div>
 
-            <div className="bg-slate-900/60 border border-white/10 rounded-xl p-4">
-              <h3 className="text-xs font-bold text-white/60 uppercase tracking-widest mb-3">타임아웃 설정</h3>
+            <div className="bg-slate-700/50 border border-white/20 rounded-xl p-4">
+              <h3 className="text-xs font-bold text-white/80 uppercase tracking-widest mb-3">타임아웃 설정</h3>
               {[
                 ["오프라인 판정",   "20s"],
                 ["AMCL 타임아웃",  "20s"],
@@ -233,14 +233,14 @@ export default function FlowView() {
                 ["목적지 도달 반경","0.5m"],
               ].map(([k, v]) => (
                 <div key={k} className="flex justify-between py-1 border-b border-white/5 last:border-0">
-                  <span className="text-xs text-white/50">{k}</span>
+                  <span className="text-xs text-white/70">{k}</span>
                   <span className="text-xs font-mono text-cyan-400">{v}</span>
                 </div>
               ))}
             </div>
 
-            <div className="bg-slate-900/60 border border-white/10 rounded-xl p-4">
-              <h3 className="text-xs font-bold text-white/60 uppercase tracking-widest mb-3">로봇 상태</h3>
+            <div className="bg-slate-700/50 border border-white/20 rounded-xl p-4">
+              <h3 className="text-xs font-bold text-white/80 uppercase tracking-widest mb-3">로봇 상태</h3>
               {[
                 ["IDLE",    "대기 중 (배정 가능)", "text-emerald-400"],
                 ["MOVING",  "이동 중",             "text-blue-400"],
@@ -250,7 +250,7 @@ export default function FlowView() {
               ].map(([status, desc, color]) => (
                 <div key={status} className="flex items-center gap-2 py-1 border-b border-white/5 last:border-0">
                   <span className={`text-xs font-mono font-bold ${color}`}>{status}</span>
-                  <span className="text-xs text-white/40">{desc}</span>
+                  <span className="text-xs text-white/70">{desc}</span>
                 </div>
               ))}
             </div>

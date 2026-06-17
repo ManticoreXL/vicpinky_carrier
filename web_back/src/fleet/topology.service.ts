@@ -4,6 +4,8 @@ import { Model } from 'mongoose';
 import type { Server } from 'socket.io';
 import { Node, NodeDocument, NodeType } from './node.schema';
 import { Edge, EdgeDocument, EdgeDirection } from './edge.schema';
+import { Robot, RobotDocument } from './robot.schema';
+import { Task, TaskDocument } from '../fms/task.schema';
 
 // 이 임계값 이하인 엣지는 진입 불가 (비메인 도로 차단용)
 const MIN_WEIGHT = 0.1;
@@ -14,8 +16,10 @@ export class TopologyService {
   private server: Server | null = null;
 
   constructor(
-    @InjectModel(Node.name) private readonly nodeModel: Model<NodeDocument>,
-    @InjectModel(Edge.name) private readonly edgeModel: Model<EdgeDocument>,
+    @InjectModel(Node.name)  private readonly nodeModel:  Model<NodeDocument>,
+    @InjectModel(Edge.name)  private readonly edgeModel:  Model<EdgeDocument>,
+    @InjectModel(Robot.name) private readonly robotModel: Model<RobotDocument>,
+    @InjectModel(Task.name)  private readonly taskModel:  Model<TaskDocument>,
   ) {}
 
   setServer(server: Server) { this.server = server; }
@@ -269,5 +273,43 @@ export class TopologyService {
     }
     path.unshift(start);
     return path;
+  }
+
+  // ── ID 변경 (cascade) ─────────────────────────────────────────────────────
+
+  async renameNodeId(oldId: string, newId: string): Promise<NodeDocument> {
+    const node = await this.nodeModel.findOneAndUpdate(
+      { node_id: oldId },
+      { node_id: newId },
+      { new: true },
+    );
+    if (!node) throw new NotFoundException(`Node ${oldId} 없음`);
+
+    await Promise.all([
+      this.edgeModel.updateMany({ startNode: oldId }, { startNode: newId }),
+      this.edgeModel.updateMany({ endNode: oldId },   { endNode: newId }),
+      this.robotModel.updateMany({ location: oldId }, { location: newId }),
+      this.taskModel.updateMany({ targetNode: oldId }, { targetNode: newId }),
+      this.taskModel.updateMany({ startNode: oldId },  { startNode: newId }),
+      this.taskModel.updateMany(
+        { pathQueue: oldId },
+        { $set: { 'pathQueue.$[elem]': newId } },
+        { arrayFilters: [{ elem: { $eq: oldId } }] },
+      ),
+    ]);
+
+    this.logger.log(`Node ID 변경: ${oldId} → ${newId} (cascade 완료)`);
+    return node;
+  }
+
+  async renameEdgeId(oldId: string, newId: string): Promise<EdgeDocument> {
+    const edge = await this.edgeModel.findOneAndUpdate(
+      { edge_id: oldId },
+      { edge_id: newId },
+      { new: true },
+    );
+    if (!edge) throw new NotFoundException(`Edge ${oldId} 없음`);
+    this.logger.log(`Edge ID 변경: ${oldId} → ${newId}`);
+    return edge;
   }
 }

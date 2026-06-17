@@ -30,6 +30,11 @@ export class RobotController {
     return this.robotService.updateLocation(id, node_id);
   }
 
+  @Patch(':id/rename')
+  renameRobot(@Param('id') id: string, @Body('new_id') new_id: string) {
+    return this.robotService.renameRobotId(id, new_id);
+  }
+
   @Delete(':id')
   remove(@Param('id') id: string) { return this.robotService.remove(id); }
 }
