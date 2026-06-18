@@ -16,7 +16,7 @@ export class RobotService {
   }
 
   async findAll(): Promise<RobotDocument[]> {
-    return this.robotModel.find().lean().exec() as unknown as RobotDocument[];
+    return this.robotModel.find().sort({ ros_domain_id: 1 }).lean().exec() as unknown as RobotDocument[];
   }
 
   async findById(robot_id: string): Promise<RobotDocument | null> {
