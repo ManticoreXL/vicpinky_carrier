@@ -6,7 +6,7 @@ const CLS = {
   process:  "bg-blue-700/70   border-blue-400/80   text-blue-100",
   decision: "bg-amber-600/70  border-amber-400/80  text-amber-100",
   warning:  "bg-red-700/60    border-red-400/80    text-red-100",
-  wait:     "bg-slate-600/70  border-slate-400/60  text-slate-100 border-dashed",
+  wait:     "bg-[#521C0D]/15  border-slate-400/60  text-[#521C0D] border-dashed",
 };
 
 const IMPL_MAP: Record<string, string> = {
@@ -36,16 +36,16 @@ function Node({
         onMouseLeave={() => setHover(false)}
       >
         {step && (
-          <span className="text-[10px] font-bold text-white/70 mr-1">#{step}</span>
+          <span className="text-[10px] font-bold text-white/[0.82] mr-1">#{step}</span>
         )}
         {label}
       </div>
       {/* 호버 tooltip — 코드 위치 */}
       {hover && impl && (
-        <div className="absolute top-full mt-2 z-50 bg-slate-900 border border-white/10
-                        rounded-lg px-3 py-2 text-[11px] text-slate-300 whitespace-nowrap
+        <div className="absolute top-full mt-2 z-50 bg-[#FFFDF1] border border-white/[0.12]
+                        rounded-lg px-3 py-2 text-[11px] text-[#521C0D]/70 whitespace-nowrap
                         shadow-2xl pointer-events-none">
-          <span className="text-white/40 mr-1">impl:</span>{impl}
+          <span className="text-white/[0.6] mr-1">impl:</span>{impl}
         </div>
       )}
     </div>
@@ -67,7 +67,7 @@ function Arrow({ label, dir = "down" }: { label?: string; dir?: "down" | "left" 
   if (dir === "down") {
     return (
       <div className="flex flex-col items-center my-0.5">
-        {label && <span className="text-[10px] text-white/70 mb-0.5">{label}</span>}
+        {label && <span className="text-[10px] text-white/[0.82] mb-0.5">{label}</span>}
         <div className="w-px h-5 bg-white/40" />
         <div className="w-0 h-0 border-l-4 border-r-4 border-t-6
                         border-l-transparent border-r-transparent border-t-white/60" />
@@ -81,8 +81,8 @@ function Arrow({ label, dir = "down" }: { label?: string; dir?: "down" | "left" 
 function DashLoop({ label }: { label: string }) {
   return (
     <div className="flex items-center gap-1 my-1 px-3 py-1 border border-dashed border-white/30
-                    rounded-lg text-[10px] text-white/60">
-      <span className="text-white/40">↩</span> {label}
+                    rounded-lg text-[10px] text-white/[0.75]">
+      <span className="text-white/[0.6]">↩</span> {label}
     </div>
   );
 }
@@ -90,13 +90,13 @@ function DashLoop({ label }: { label: string }) {
 /* ── 메인 뷰 ─────────────────────────────────────────────── */
 export default function FlowView() {
   return (
-    <div className="h-full overflow-auto bg-[#0d1422] p-6">
+    <div className="h-full overflow-auto bg-transparent p-6">
       <div className="max-w-5xl mx-auto">
 
         {/* 헤더 */}
         <div className="mb-6">
           <h1 className="text-lg font-bold text-white">FMS 태스크 처리 워크플로우</h1>
-          <p className="text-xs text-white/60 mt-1">
+          <p className="text-xs text-white/[0.75] mt-1">
             노드에 마우스를 올리면 실제 코드 위치가 표시됩니다
           </p>
         </div>
@@ -196,7 +196,7 @@ export default function FlowView() {
 
           {/* ── 사이드 패널: 코드 매핑 & 구현 현황 ── */}
           <div className="w-72 flex-none space-y-3">
-            <div className="bg-slate-700/50 border border-white/20 rounded-xl p-4">
+            <div className="bg-[#FFCE99]/14 border border-white/[0.08] rounded-xl p-4">
               <h3 className="text-xs font-bold text-white/80 uppercase tracking-widest mb-3">구현 현황</h3>
               {[
                 { label: "작업 큐 삽입",      done: true  },
@@ -209,19 +209,19 @@ export default function FlowView() {
                 { label: "전복 감지",          done: true  },
                 { label: "완료 & 홈 복귀",     done: true  },
               ].map(({ label, done }) => (
-                <div key={label} className="flex items-center gap-2 py-1.5 border-b border-white/5 last:border-0">
-                  <span className={`text-xs font-bold ${done ? "text-emerald-400" : "text-amber-400"}`}>
+                <div key={label} className="flex items-center gap-2 py-1.5 border-b border-white/[0.1] last:border-0">
+                  <span className={`text-xs font-bold ${done ? "text-emerald-600" : "text-amber-600"}`}>
                     {done ? "✓" : "○"}
                   </span>
-                  <span className={`text-xs ${done ? "text-white/90" : "text-amber-200/90"}`}>{label}</span>
+                  <span className={`text-xs ${done ? "text-white/90" : "text-amber-800/90"}`}>{label}</span>
                   {!done && (
-                    <span className="ml-auto text-[9px] bg-amber-500/15 text-amber-400 px-1.5 py-0.5 rounded">예정</span>
+                    <span className="ml-auto text-[9px] bg-amber-500/15 text-amber-600 px-1.5 py-0.5 rounded">예정</span>
                   )}
                 </div>
               ))}
             </div>
 
-            <div className="bg-slate-700/50 border border-white/20 rounded-xl p-4">
+            <div className="bg-[#FFCE99]/14 border border-white/[0.08] rounded-xl p-4">
               <h3 className="text-xs font-bold text-white/80 uppercase tracking-widest mb-3">타임아웃 설정</h3>
               {[
                 ["오프라인 판정",   "20s"],
@@ -232,25 +232,25 @@ export default function FlowView() {
                 ["노드 통과 반경",  "1.5m"],
                 ["목적지 도달 반경","0.5m"],
               ].map(([k, v]) => (
-                <div key={k} className="flex justify-between py-1 border-b border-white/5 last:border-0">
-                  <span className="text-xs text-white/70">{k}</span>
-                  <span className="text-xs font-mono text-cyan-400">{v}</span>
+                <div key={k} className="flex justify-between py-1 border-b border-white/[0.1] last:border-0">
+                  <span className="text-xs text-white/[0.82]">{k}</span>
+                  <span className="text-xs font-mono text-cyan-600">{v}</span>
                 </div>
               ))}
             </div>
 
-            <div className="bg-slate-700/50 border border-white/20 rounded-xl p-4">
+            <div className="bg-[#FFCE99]/14 border border-white/[0.08] rounded-xl p-4">
               <h3 className="text-xs font-bold text-white/80 uppercase tracking-widest mb-3">로봇 상태</h3>
               {[
-                ["IDLE",    "대기 중 (배정 가능)", "text-emerald-400"],
-                ["MOVING",  "이동 중",             "text-blue-400"],
-                ["WORKING", "작업 중",             "text-violet-400"],
-                ["ERROR",   "오류 상태",           "text-red-400"],
+                ["IDLE",    "대기 중 (배정 가능)", "text-emerald-600"],
+                ["MOVING",  "이동 중",             "text-blue-600"],
+                ["WORKING", "작업 중",             "text-violet-600"],
+                ["ERROR",   "오류 상태",           "text-red-600"],
                 ["OFFLINE", "연결 끊김",           "text-slate-500"],
               ].map(([status, desc, color]) => (
-                <div key={status} className="flex items-center gap-2 py-1 border-b border-white/5 last:border-0">
+                <div key={status} className="flex items-center gap-2 py-1 border-b border-white/[0.1] last:border-0">
                   <span className={`text-xs font-mono font-bold ${color}`}>{status}</span>
-                  <span className="text-xs text-white/70">{desc}</span>
+                  <span className="text-xs text-white/[0.82]">{desc}</span>
                 </div>
               ))}
             </div>

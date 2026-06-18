@@ -102,7 +102,7 @@ const ACTION_DEFS: Record<ActionKind, ActionDef> = {
 const STATUS_LABELS: Record<number, { label: string; color: string }> = {
  3: { label: "SUCCESS", color: "text-green-600" },
  4: { label: "ABORTED", color: "text-white/90" },
- 5: { label: "CANCELLED", color: "text-white/60" },
+ 5: { label: "CANCELLED", color: "text-white/[0.75]" },
 };
 
 // ── Props ──────────────────────────────────────────────────────────────────
@@ -169,8 +169,8 @@ export default function ActionPanel({
  onClick={() => { setSelectedKind(kind); setFields({}); }}
  className={`px-3 py-1 text-xs font-bold tracking-wide transition-all border ${
  selectedKind === kind
- ? "border-white/[0.05] bg-red-950/30 text-white/90"
- : "border-white/[0.05] bg-transparent text-white/30 hover:text-white/60"
+ ? "border-white/[0.1] bg-red-950/30 text-white/90"
+ : "border-white/[0.1] bg-transparent text-white/[0.55] hover:text-white/[0.75]"
  }`}
  >
  {ACTION_DEFS[kind].label}
@@ -182,15 +182,15 @@ export default function ActionPanel({
  <div className="flex flex-col gap-1.5 mb-3">
  {def.fields.map((f) => (
  <div key={f.key} className="flex items-center gap-2">
- <span className="text-xs text-white/40 tracking-wider w-20 shrink-0">{f.label}</span>
+ <span className="text-xs text-white/[0.6] tracking-wider w-20 shrink-0">{f.label}</span>
  <input
  type={f.type ?? "text"}
  placeholder={f.placeholder}
  value={fields[f.key] ?? ""}
  onChange={(e) => setFields((prev) => ({ ...prev, [f.key]: e.target.value }))}
- className="flex-1 bg-black/20 border border-white/[0.05] px-3 py-1.5 text-xs
+ className="flex-1 bg-[#FFCE99]/32 border border-white/[0.1] px-3 py-1.5 text-xs
  text-white/90 placeholder-[#2a2a2a]
- focus:outline-none focus:border-white/[0.05] disabled:opacity-30"
+ focus:outline-none focus:border-white/[0.1] disabled:opacity-30"
  disabled={isRunning}
  />
  </div>
@@ -209,18 +209,18 @@ export default function ActionPanel({
 
  {/* Feedback */}
  {isRunning && (
- <div className="bg-black/20 border border-white/[0.05] p-3 flex flex-col gap-2">
+ <div className="bg-[#FFCE99]/32 border border-white/[0.1] p-3 flex flex-col gap-2">
  <p className="text-xs font-bold text-red-900/60 tracking-[0.25em] ">◆ FEEDBACK</p>
  {statusText && (
- <p className="text-xs text-white/60 ">{statusText}</p>
+ <p className="text-xs text-white/[0.75] ">{statusText}</p>
  )}
  {progress !== null && (
  <div>
- <div className="flex justify-between text-xs text-white/40 mb-1">
+ <div className="flex justify-between text-xs text-white/[0.6] mb-1">
  <span>PROGRESS</span>
  <span>{Math.round(progress * 100)}%</span>
  </div>
- <div className="h-1 bg-white/5 overflow-hidden border border-white/[0.05]">
+ <div className="h-1 bg-[#FFCE99]/32 overflow-hidden border border-white/[0.1]">
  <div
  className="h-full bg-red-700 transition-all duration-300"
  style={{ width: `${Math.round(progress * 100)}%` }}
@@ -229,7 +229,7 @@ export default function ActionPanel({
  </div>
  )}
  {distRemaining !== null && distRemaining >= 0 && (
- <p className="text-xs text-white/40 ">
+ <p className="text-xs text-white/[0.6] ">
  DIST: <span className="text-white/90">{distRemaining.toFixed(2)} m</span>
  </p>
  )}
@@ -238,16 +238,16 @@ export default function ActionPanel({
 
  {/* Result */}
  {latestResult && !isRunning && statusInfo && (
- <div className="bg-black/20 border border-white/[0.05] p-3 flex flex-col gap-1">
- <p className="text-xs font-bold text-white/40 tracking-[0.25em] ">◆ RESULT</p>
+ <div className="bg-[#FFCE99]/32 border border-white/[0.1] p-3 flex flex-col gap-1">
+ <p className="text-xs font-bold text-white/[0.6] tracking-[0.25em] ">◆ RESULT</p>
  <p className={`text-xs font-semibold tracking-wide ${statusInfo.color}`}>
  {statusInfo.label}
  </p>
  {typeof res?.message === "string" && (
- <p className="text-xs text-white/60 ">{res.message}</p>
+ <p className="text-xs text-white/[0.75] ">{res.message}</p>
  )}
  {typeof res?.elapsed_sec === "number" && (
- <p className="text-xs text-white/30 ">
+ <p className="text-xs text-white/[0.55] ">
  ELAPSED: {(res.elapsed_sec as number).toFixed(1)}s
  </p>
  )}

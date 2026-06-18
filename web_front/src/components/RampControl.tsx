@@ -63,16 +63,16 @@ export default function RampControl({
  }, [cancelAction, activeGoals]);
 
  return (
- <div className="border border-white/[0.05] bg-black/40 backdrop-blur-xl rounded-lg overflow-hidden">
+ <div className="border border-white/[0.1] bg-[#FFCE99]/14 backdrop-blur-xl rounded-lg overflow-hidden">
  {/* 헤더 */}
- <div className="flex items-center justify-between px-3 py-2 border-b border-[#161616]">
- <span className="text-xs font-bold text-pink-400 tracking-wide">
+ <div className="flex items-center justify-between px-3 py-2 border-b border-[#521C0D]/10">
+ <span className="text-xs font-bold text-pink-600 tracking-wide">
  ▤ 램프 제어
  </span>
  <span className={`text-xs ${
  running ? "text-white/90 animate-pulse" :
  result?.success ? "text-white/90" :
- result && !result.success ? "text-white/90" : "text-white/40"
+ result && !result.success ? "text-white/90" : "text-white/[0.6]"
  }`}>
  {running ? "동작 중…" :
  result?.success ? "완료" :
@@ -82,16 +82,16 @@ export default function RampControl({
 
  <div className="p-3 space-y-3">
  {/* 현재 램프 상태 (/vicpinky/ramp_state 토픽) */}
- <div className="flex items-center justify-between border border-white/[0.05] bg-black/20 px-2.5 py-1.5">
- <span className="text-xs text-white/40 tracking-wide">현재 상태</span>
+ <div className="flex items-center justify-between border border-white/[0.1] bg-[#FFCE99]/32 px-2.5 py-1.5">
+ <span className="text-xs text-white/[0.6] tracking-wide">현재 상태</span>
  <div className="flex items-center gap-3 text-xs">
  <span className={
  rampState?.ramp_state === "Open" ? "text-white/90" :
- rampState?.ramp_state === "Closed" ? "text-white/90" : "text-white/60"
+ rampState?.ramp_state === "Closed" ? "text-white/90" : "text-white/[0.75]"
  }>
  {rampState?.ramp_state ?? "—"}
  </span>
- <span className="text-white/40">|</span>
+ <span className="text-white/[0.6]">|</span>
  <span className="text-white/90">
  {rampState?.ramp_angle != null ? `${rampState.ramp_angle}°` : "—"}
  </span>
@@ -105,8 +105,8 @@ export default function RampControl({
  disabled={running}
  className={`py-2.5 text-xs font-bold tracking-wide border transition-all ${
  running
- ? "border-white/[0.05] text-white/30 cursor-not-allowed"
- : "border-white/[0.05] bg-green-950/30 text-white/90 hover:border-green-600 hover:text-white/70"
+ ? "border-white/[0.1] text-white/[0.55] cursor-not-allowed"
+ : "border-white/[0.1] bg-green-950/30 text-white/90 hover:border-green-600 hover:text-white/[0.82]"
  }`}>
  ▲ 열기 (O)
  </button>
@@ -115,8 +115,8 @@ export default function RampControl({
  disabled={running}
  className={`py-2.5 text-xs font-bold tracking-wide border transition-all ${
  running
- ? "border-white/[0.05] text-white/30 cursor-not-allowed"
- : "border-white/[0.05] bg-blue-950/30 text-white/90 hover:border-blue-600 hover:text-white/70"
+ ? "border-white/[0.1] text-white/[0.55] cursor-not-allowed"
+ : "border-white/[0.1] bg-blue-950/30 text-white/90 hover:border-blue-600 hover:text-white/[0.82]"
  }`}>
  ▼ 닫기 (C)
  </button>
@@ -127,16 +127,16 @@ export default function RampControl({
  <button
  onClick={stop}
  className="w-full py-1.5 text-xs font-bold tracking-wide
- border border-white/[0.05] bg-red-950/30 text-white/90
- hover:border-red-600 hover:text-white/70 transition-all">
+ border border-white/[0.1] bg-red-950/30 text-white/90
+ hover:border-red-600 hover:text-white/[0.82] transition-all">
  중단
  </button>
  )}
 
  {/* 보낸 명령 */}
  {lastTarget && (
- <div className="text-xs text-white/60">
- 명령: <span className="text-pink-300">{lastTarget === "O" ? "열기(O)" : "닫기(C)"}</span>
+ <div className="text-xs text-white/[0.75]">
+ 명령: <span className="text-pink-700">{lastTarget === "O" ? "열기(O)" : "닫기(C)"}</span>
  </div>
  )}
 
@@ -151,20 +151,20 @@ export default function RampControl({
  {/* 결과 */}
  {result && (
  <div className={`border rounded p-2 space-y-1 ${
- result.success ? "border-white/[0.05] bg-green-950/20" : "border-white/[0.05] bg-red-950/20"
+ result.success ? "border-white/[0.1] bg-green-950/20" : "border-white/[0.1] bg-red-950/20"
  }`}>
  <div className="flex justify-between text-xs ">
- <span className="text-white/60">성공</span>
+ <span className="text-white/[0.75]">성공</span>
  <span className={result.success ? "text-white/90" : "text-white/90"}>
  {result.success ? "true" : "false"}
  </span>
  </div>
  <div className="flex justify-between text-xs ">
- <span className="text-white/60">최종 상태</span>
+ <span className="text-white/[0.75]">최종 상태</span>
  <span className="text-white/90">{result.final_state ?? "—"}</span>
  </div>
  <div className="flex justify-between text-xs ">
- <span className="text-white/60">최종 각도</span>
+ <span className="text-white/[0.75]">최종 각도</span>
  <span className="text-white/90">{result.final_angle ?? "—"}</span>
  </div>
  </div>
@@ -178,10 +178,10 @@ export default function RampControl({
 function Stat({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
  return (
  <div className={`border px-2 py-1.5 ${
- highlight ? "border-white/[0.05] bg-amber-950/10" : "border-white/[0.05] bg-black/20"
+ highlight ? "border-white/[0.1] bg-amber-950/10" : "border-white/[0.1] bg-[#FFCE99]/32"
  }`}>
- <p className="text-xs text-white/40 ">{label}</p>
- <p className={`text-sm tabular-nums mt-0.5 ${highlight ? "text-white/70" : "text-white/90"}`}>
+ <p className="text-xs text-white/[0.6] ">{label}</p>
+ <p className={`text-sm tabular-nums mt-0.5 ${highlight ? "text-white/[0.82]" : "text-white/90"}`}>
  {value}
  </p>
  </div>

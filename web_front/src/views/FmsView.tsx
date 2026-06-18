@@ -103,7 +103,7 @@ export default function FmsView({
  <div className="flex flex-col h-full bg-transparent overflow-hidden">
  
  {/* ── Status Bar ────────────────────────────────────────────────── */}
- <div className="flex-none flex items-center justify-between px-8 py-4 bg-white/[0.02] backdrop-blur-3xl border-b border-white/[0.05]">
+ <div className="flex-none flex items-center justify-between px-8 py-4 bg-[#FFCE99]/32 backdrop-blur-3xl border-b border-white/[0.1]">
  <div className="flex items-center gap-10">
  <Stat label="Fleet Active" value={`${onlineCount}/${ROBOTS.length}`} color="text-white/90" />
  <Stat label="Tasks Running" value={String(activeCount)} color="text-white/90" />
@@ -112,19 +112,19 @@ export default function FmsView({
  <div className="flex items-center gap-3">
   {/* 포커스 로봇 드롭다운 */}
   <div className="flex items-center gap-2">
-   <span className="text-[9px] text-white/20 font-bold tracking-widest uppercase">Focus</span>
+   <span className="text-[9px] text-white/[0.45] font-bold tracking-widest uppercase">Focus</span>
    <select
     value={form.preferredRobotId}
     onChange={e => setForm(f => ({ ...f, preferredRobotId: e.target.value }))}
-    className="bg-black/40 border border-white/[0.08] rounded-lg px-2 py-1 text-xs text-white/60 appearance-none focus:outline-none focus:border-white/20"
+    className="bg-[#FFCE99]/14 border border-white/[0.1] rounded-lg px-2 py-1 text-xs text-white/[0.75] appearance-none focus:outline-none focus:border-white/[0.08]"
    >
     <option value="">ALL ASSETS</option>
     {ROBOTS.map(r => <option key={r.id} value={r.id}>{r.id}</option>)}
    </select>
   </div>
-  <div className="bg-white/5 p-1 rounded-xl border border-white/[0.05] flex">
-   <button onClick={() => setContentTab("map")} className={`px-5 py-1.5 text-xs font-semibold tracking-wide rounded-lg transition-all ${contentTab === 'map' ? 'bg-white/10 text-white shadow-lg' : 'text-white/20 hover:text-white/40'}`}>TOPOLOGY</button>
-   <button onClick={() => setContentTab("fleet")} className={`px-5 py-1.5 text-xs font-semibold tracking-wide rounded-lg transition-all ${contentTab === 'fleet' ? 'bg-white/10 text-white shadow-lg' : 'text-white/20 hover:text-white/40'}`}>ASSET LIST</button>
+  <div className="bg-[#FFCE99]/32 p-1 rounded-xl border border-white/[0.1] flex">
+   <button onClick={() => setContentTab("map")} className={`px-5 py-1.5 text-xs font-semibold tracking-wide rounded-lg transition-all ${contentTab === 'map' ? 'bg-white/10 text-white shadow-lg' : 'text-white/[0.45] hover:text-white/[0.6]'}`}>TOPOLOGY</button>
+   <button onClick={() => setContentTab("fleet")} className={`px-5 py-1.5 text-xs font-semibold tracking-wide rounded-lg transition-all ${contentTab === 'fleet' ? 'bg-white/10 text-white shadow-lg' : 'text-white/[0.45] hover:text-white/[0.6]'}`}>ASSET LIST</button>
   </div>
  </div>
  </div>
@@ -132,7 +132,7 @@ export default function FmsView({
  <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
  
  {/* ── Main View Area ───────────────────────────────────────────── */}
- <div className="flex-1 flex flex-col overflow-hidden bg-black/10">
+ <div className="flex-1 flex flex-col overflow-hidden bg-[#FFCE99]/32">
  {contentTab === "map" ? (
  <NavMapCanvas
  rosMessages={rosMessages} socket={socket} onSetInitialPose={emitNavInitialPose} onSetHome={setRobotHome}
@@ -151,16 +151,16 @@ export default function FmsView({
  </div>
 
  {/* ── Task Panel ───────────────────────────────────────────────── */}
- <aside className="w-full md:w-80 flex-none flex flex-col bg-white/[0.02] backdrop-blur-3xl border-l border-white/[0.05]">
- <div className="flex-none p-6 border-b border-white/[0.05]">
+ <aside className="w-full md:w-80 flex-none flex flex-col bg-[#FFCE99]/32 backdrop-blur-3xl border-l border-white/[0.1]">
+ <div className="flex-none p-6 border-b border-white/[0.1]">
  <span className="sub-label">Operations Control</span>
  <h2 className="text-lg font-semibold text-white/90 tracking-wide mt-1">DISPATCH</h2>
  </div>
 
  <div className="flex-1 overflow-y-auto">
- <div className="flex bg-white/5 mx-6 mt-4 p-1 rounded-lg border border-white/[0.05]">
+ <div className="flex bg-[#FFCE99]/32 mx-6 mt-4 p-1 rounded-lg border border-white/[0.1]">
  {['all', 'active'].map(t => (
- <button key={t} onClick={() => setFilterTab(t)} className={`flex-1 py-1 text-xs font-semibold tracking-wide rounded transition-all ${filterTab === t ? 'bg-white/10 text-white shadow-md' : 'text-white/20 hover:text-white/40'}`}>{t}</button>
+ <button key={t} onClick={() => setFilterTab(t)} className={`flex-1 py-1 text-xs font-semibold tracking-wide rounded transition-all ${filterTab === t ? 'bg-white/10 text-white shadow-md' : 'text-white/[0.45] hover:text-white/[0.6]'}`}>{t}</button>
  ))}
  </div>
  <div className="p-4 space-y-2">
@@ -169,7 +169,7 @@ export default function FmsView({
  </div>
 
  {/* Create Task Form */}
- <div className="flex-none p-4 bg-white/[0.02] border-t border-white/[0.05]">
+ <div className="flex-none p-4 bg-[#FFCE99]/32 border-t border-white/[0.1]">
  <div className="space-y-3">
  <div>
  <span className="sub-label">Task Type</span>
@@ -178,7 +178,7 @@ export default function FmsView({
  <button
  key={t}
  onClick={() => setForm(f => ({ ...f, type: t }))}
- className={`py-1 text-[10px] font-bold tracking-wide rounded border transition-all ${form.type === t ? 'bg-sky-600/40 text-sky-200 border-sky-500/60' : 'bg-black/30 text-white/30 border-white/[0.05] hover:text-white/60'}`}
+ className={`py-1 text-[10px] font-bold tracking-wide rounded border transition-all ${form.type === t ? 'bg-sky-600/40 text-sky-800 border-sky-500/60' : 'bg-[#FFCE99]/32 text-white/[0.55] border-white/[0.1] hover:text-white/[0.75]'}`}
  >
  {TASK_LABELS[t]}
  </button>
@@ -187,11 +187,11 @@ export default function FmsView({
  </div>
  <div>
  <span className="sub-label">Destination Node</span>
- <input value={form.targetNode} onChange={e => setForm(f => ({ ...f, targetNode: e.target.value }))} className="w-full bg-black/40 border border-white/[0.05] rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/10 focus:outline-none focus:border-white/[0.05]" placeholder="e.g. 401_7" />
+ <input value={form.targetNode} onChange={e => setForm(f => ({ ...f, targetNode: e.target.value }))} className="w-full bg-[#FFCE99]/14 border border-white/[0.1] rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/[0.4] focus:outline-none focus:border-white/[0.1]" placeholder="e.g. 401_7" />
  </div>
  <div>
  <span className="sub-label">Preferred Asset</span>
- <select value={form.preferredRobotId} onChange={e => setForm(f => ({ ...f, preferredRobotId: e.target.value }))} className="w-full bg-black/40 border border-white/[0.05] rounded-xl px-3 py-2 text-sm text-white appearance-none focus:outline-none focus:border-white/[0.05]">
+ <select value={form.preferredRobotId} onChange={e => setForm(f => ({ ...f, preferredRobotId: e.target.value }))} className="w-full bg-[#FFCE99]/14 border border-white/[0.1] rounded-xl px-3 py-2 text-sm text-white appearance-none focus:outline-none focus:border-white/[0.1]">
  <option value="">AUTO ASSIGNMENT</option>
  {ROBOTS.map(r => <option key={r.id} value={r.id}>{r.id}</option>)}
  </select>
@@ -208,7 +208,7 @@ export default function FmsView({
 function Stat({ label, value, color }: any) {
  return (
  <div className="flex flex-col items-center">
- <span className="text-xs text-white/20 font-semibold tracking-wide mb-1">{label}</span>
+ <span className="text-xs text-white/[0.45] font-semibold tracking-wide mb-1">{label}</span>
  <span className={`text-sm font-semibold tabular-nums ${color}`}>{value}</span>
  </div>
  );
@@ -225,9 +225,9 @@ function RobotStatusCard({ robot, rosMessages, fmsTasks, mapAssignment }: any) {
  <div className="flex justify-between items-start mb-4">
  <div>
  <h3 className="text-sm font-bold text-white/90 tracking-wide font-mono">{robot.id}</h3>
- <span className="text-xs text-white/20 tracking-wide">DOMAIN {robot.domain}</span>
+ <span className="text-xs text-white/[0.45] tracking-wide">DOMAIN {robot.domain}</span>
  </div>
- <div className={`w-2 h-2 rounded-full ${online ? 'bg-emerald-500 ' : 'bg-white/5'}`} />
+ <div className={`w-2 h-2 rounded-full ${online ? 'bg-emerald-500 ' : 'bg-[#FFCE99]/32'}`} />
  </div>
  
  {online ? (
@@ -235,31 +235,31 @@ function RobotStatusCard({ robot, rosMessages, fmsTasks, mapAssignment }: any) {
  {batPct !== null && (
  <div className="space-y-1.5">
  <div className="flex justify-between text-xs font-semibold tracking-wide">
- <span className="text-white/20">POWER RESERVE</span>
+ <span className="text-white/[0.45]">POWER RESERVE</span>
  <span className={batPct < 20 ? "text-white/90" : "text-white/90"}>{batPct}%</span>
  </div>
- <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+ <div className="h-1 bg-[#FFCE99]/32 rounded-full overflow-hidden">
  <div className={`h-full rounded-full transition-all duration-1000 ${batPct < 20 ? 'bg-rose-500' : 'bg-emerald-500'}`} style={{ width: `${batPct}%` }} />
  </div>
  </div>
  )}
  {task ? (
- <div className="p-3 bg-white/[0.03] border border-white/[0.05] rounded-xl">
+ <div className="p-3 bg-[#FFCE99]/32 border border-white/[0.1] rounded-xl">
  <span className="sub-label !text-xs !mb-1">Active Mission</span>
  <div className="flex justify-between items-center">
  <span className="text-xs font-bold text-white/90 ">{TASK_LABELS[task.type as TaskType]}</span>
- <span className="text-xs text-white/40 ">→ {task.targetNode}</span>
+ <span className="text-xs text-white/[0.6] ">→ {task.targetNode}</span>
  </div>
  </div>
  ) : (
- <div className="text-center py-2 border border-dashed border-white/[0.05] rounded-xl">
- <span className="text-xs font-semibold text-white/10 tracking-wide ">Standby Mode</span>
+ <div className="text-center py-2 border border-dashed border-white/[0.1] rounded-xl">
+ <span className="text-xs font-semibold text-white/[0.4] tracking-wide ">Standby Mode</span>
  </div>
  )}
  </div>
  ) : (
  <div className="py-8 text-center">
- <span className="text-xs text-white/10 italic">Signal Lost...</span>
+ <span className="text-xs text-white/[0.4] italic">Signal Lost...</span>
  </div>
  )}
  </div>
@@ -268,17 +268,17 @@ function RobotStatusCard({ robot, rosMessages, fmsTasks, mapAssignment }: any) {
 
 function TaskItem({ task, onCancel }: any) {
  return (
- <div className="glass-card !bg-white/[0.02] border-white/[0.05] p-4 hover:border-white/[0.05] transition-colors group">
+ <div className="glass-card !bg-[#FFCE99]/32 border-white/[0.1] p-4 hover:border-white/[0.1] transition-colors group">
  <div className="flex justify-between items-start mb-2">
  <div className="flex items-center gap-2">
  <div className={`w-1.5 h-1.5 rounded-full ${task.status === 'RUNNING' ? 'bg-sky-400 animate-pulse' : 'bg-amber-400'}`} />
  <span className="text-xs font-semibold text-white/80 ">{TASK_LABELS[task.type as TaskType]}</span>
  </div>
- <button onClick={onCancel} className="text-white/10 hover:text-white/90 transition-colors text-sm leading-none opacity-0 group-hover:opacity-100">✕</button>
+ <button onClick={onCancel} className="text-white/[0.4] hover:text-white/90 transition-colors text-sm leading-none opacity-0 group-hover:opacity-100">✕</button>
  </div>
  <div className="flex justify-between items-end">
- <div className="text-xs text-white/30 tracking-wide">Target: {task.targetNode}</div>
- <span className={`text-xs font-semibold px-1.5 py-0.5 rounded border ${task.status === 'RUNNING' ? 'text-white/90 border-white/[0.05] bg-sky-500/5' : 'text-white/90 border-white/[0.05] bg-amber-500/5'}`}>{task.status}</span>
+ <div className="text-xs text-white/[0.55] tracking-wide">Target: {task.targetNode}</div>
+ <span className={`text-xs font-semibold px-1.5 py-0.5 rounded border ${task.status === 'RUNNING' ? 'text-white/90 border-white/[0.1] bg-sky-500/5' : 'text-white/90 border-white/[0.1] bg-amber-500/5'}`}>{task.status}</span>
  </div>
  </div>
  );

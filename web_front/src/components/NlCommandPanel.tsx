@@ -104,25 +104,25 @@ export default function NlCommandPanel({ botId, socket }: Props) {
  phase === "error" ? `오류: ${error ?? ""}` : "";
 
  const statusColor =
- phase === "error" ? "text-red-400" :
- phase === "running" ? "text-orange-400" :
- phase === "parsing" ? "text-amber-400 animate-pulse" :
- phase === "done" ? "text-emerald-400" :
- phase === "stopped" ? "text-white/40" : "text-white/30";
+ phase === "error" ? "text-red-600" :
+ phase === "running" ? "text-orange-600" :
+ phase === "parsing" ? "text-amber-600 animate-pulse" :
+ phase === "done" ? "text-emerald-600" :
+ phase === "stopped" ? "text-white/[0.6]" : "text-white/[0.55]";
 
  return (
  <div className="glass-card mt-3 overflow-visible">
  {/* 헤더 */}
- <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.05] bg-orange-500/5">
+ <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.1] bg-orange-500/5">
  <div className="flex items-center gap-2">
  <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
- <span className="text-xs font-semibold text-white/60 tracking-widest uppercase">
+ <span className="text-xs font-semibold text-white/[0.75] tracking-widest uppercase">
  NL Command — {botId.toUpperCase()}
  </span>
  </div>
  {statusText && (
- <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md bg-black/40
-                   border border-white/[0.05] ${statusColor}`}>
+ <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md bg-[#FFCE99]/14
+                   border border-white/[0.1] ${statusColor}`}>
  {statusText}
  </span>
  )}
@@ -136,8 +136,8 @@ export default function NlCommandPanel({ botId, socket }: Props) {
  }}
  className={`flex-none w-9 h-9 rounded-lg border flex items-center justify-center transition-all ${
  busy
- ? "border-white/[0.04] text-white/15 cursor-not-allowed bg-black/20"
- : "border-orange-500/25 text-orange-400 hover:bg-orange-500/15 active:scale-95"
+ ? "border-white/[0.08] text-white/[0.4] cursor-not-allowed bg-[#FFCE99]/32"
+ : "border-orange-500/25 text-orange-600 hover:bg-orange-500/15 active:scale-95"
  }`}
  disabled={busy}
  title="음성 명령"
@@ -155,14 +155,14 @@ export default function NlCommandPanel({ botId, socket }: Props) {
  onKeyDown={(e) => { if (e.key === "Enter") send(); }}
  placeholder='예: "1미터 전진 후 우회전"'
  disabled={busy}
- className="w-full bg-black/35 border border-white/[0.06] rounded-lg px-3 py-2
- text-sm text-white/90 placeholder:text-white/20
+ className="w-full bg-[#FFCE99]/32 border border-white/[0.1] rounded-lg px-3 py-2
+ text-sm text-white/90 placeholder:text-white/[0.45]
  focus:outline-none focus:border-orange-500/30 focus:ring-1 focus:ring-orange-500/15
  transition-all disabled:opacity-40"
  />
  {busy && (
  <div className="absolute right-3 top-1/2 -translate-y-1/2">
- <div className="w-3.5 h-3.5 border-2 border-white/[0.08] border-t-orange-500 rounded-full animate-spin" />
+ <div className="w-3.5 h-3.5 border-2 border-white/[0.1] border-t-orange-500 rounded-full animate-spin" />
  </div>
  )}
  </div>
@@ -171,7 +171,7 @@ export default function NlCommandPanel({ botId, socket }: Props) {
  <button
  onClick={stop}
  className="px-3.5 py-2 text-xs font-semibold tracking-wide rounded-lg
- border border-red-500/30 bg-red-500/10 text-red-400
+ border border-red-500/30 bg-red-500/10 text-red-600
  hover:bg-red-500/20 transition-all active:scale-95"
  >
  중단
@@ -181,7 +181,7 @@ export default function NlCommandPanel({ botId, socket }: Props) {
  onClick={send}
  disabled={!socket || !text.trim()}
  className="px-3.5 py-2 text-xs font-semibold tracking-wide rounded-lg
- border border-orange-500/30 bg-orange-500/10 text-orange-400
+ border border-orange-500/30 bg-orange-500/10 text-orange-600
  hover:bg-orange-500/20 hover:border-orange-500/50 transition-all active:scale-95
  disabled:opacity-20 disabled:cursor-not-allowed"
  >
@@ -205,20 +205,20 @@ export default function NlCommandPanel({ botId, socket }: Props) {
  active
  ? "border-orange-500/30 bg-orange-500/10 text-white/80"
  : passed
- ? "border-white/[0.04] bg-black/15 text-white/20"
- : "border-white/[0.05] bg-black/30 text-white/55"
+ ? "border-white/[0.08] bg-[#FFCE99]/32 text-white/[0.45]"
+ : "border-white/[0.1] bg-[#FFCE99]/32 text-white/55"
  }`}
  >
  <div className={`w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold flex-none ${
- active ? "bg-orange-500 text-black" : passed ? "bg-white/5 text-white/20" : "bg-white/[0.08] text-white/35"
+ active ? "bg-orange-500 text-black" : passed ? "bg-[#FFCE99]/32 text-white/[0.45]" : "bg-[#FFCE99]/32 text-white/[0.55]"
  }`}>
  {passed ? "✓" : i + 1}
  </div>
  <span className="flex-1 font-medium truncate">{s.desc || `Step ${i+1}`}</span>
  <div className="flex gap-1 text-[10px] opacity-50">
- {s.linear !== 0 && <span className="bg-white/5 px-1 py-0.5 rounded">{s.linear.toFixed(2)}m/s</span>}
- {s.angular !== 0 && <span className="bg-white/5 px-1 py-0.5 rounded">{s.angular.toFixed(2)}r/s</span>}
- {s.duration > 0 && <span className="bg-white/5 px-1 py-0.5 rounded">{s.duration.toFixed(1)}s</span>}
+ {s.linear !== 0 && <span className="bg-[#FFCE99]/32 px-1 py-0.5 rounded">{s.linear.toFixed(2)}m/s</span>}
+ {s.angular !== 0 && <span className="bg-[#FFCE99]/32 px-1 py-0.5 rounded">{s.angular.toFixed(2)}r/s</span>}
+ {s.duration > 0 && <span className="bg-[#FFCE99]/32 px-1 py-0.5 rounded">{s.duration.toFixed(1)}s</span>}
  </div>
  </div>
  );

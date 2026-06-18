@@ -191,7 +191,7 @@ export default function CameraFeed({ botId, label, socket }: Props) {
 
  // ── 렌더 ─────────────────────────────────────────────────────────────────
  return (
- <div className="relative bg-black/40 backdrop-blur-xl border border-white/[0.05] overflow-hidden"
+ <div className="relative bg-[#FFCE99]/14 backdrop-blur-xl border border-white/[0.1] overflow-hidden"
  style={{ aspectRatio: "16/9" }}>
 
  {/* 비디오 스트림 */}
@@ -205,11 +205,11 @@ export default function CameraFeed({ botId, label, socket }: Props) {
 
  {/* 비스트리밍 오버레이 */}
  {status !== "streaming" && (
- <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/40 backdrop-blur-xl/90">
+ <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#FFCE99]/14 backdrop-blur-xl/90">
  <p className={`text-xs font-bold tracking-wide ${
  status === "error" ? "text-white/90" :
  status === "requesting" || status === "connecting" ? "text-white/90 animate-pulse" :
- "text-white/30"
+ "text-white/[0.55]"
  }`}>
  {status === "idle" ? "NO SIGNAL" :
  status === "requesting" ? "CONNECTING..." :
@@ -221,8 +221,8 @@ export default function CameraFeed({ botId, label, socket }: Props) {
  onClick={connect}
  disabled={!socket}
  className="px-3 py-1 text-xs font-bold tracking-wide
- border border-white/[0.05] text-white/50
- hover:border-white/[0.05] hover:text-white/60 transition-all
+ border border-white/[0.1] text-white/[0.68]
+ hover:border-white/[0.1] hover:text-white/[0.75] transition-all
  disabled:opacity-30 disabled:cursor-not-allowed"
  >
  연결
@@ -232,7 +232,7 @@ export default function CameraFeed({ botId, label, socket }: Props) {
  <button
  onClick={cleanup}
  className="px-3 py-1 text-xs font-bold tracking-wide
- border border-white/[0.05] text-white/90
+ border border-white/[0.1] text-white/90
  hover:border-red-700 hover:text-white/90 transition-all"
  >
  재시도
@@ -245,9 +245,9 @@ export default function CameraFeed({ botId, label, socket }: Props) {
  <div className="absolute top-1.5 left-1.5 flex items-center gap-1.5 pointer-events-none">
  <div className={`w-1.5 h-1.5 rounded-full flex-none ${
  status === "streaming" ? "bg-red-500 animate-pulse" :
- status === "error" ? "bg-red-800" : "bg-white/5"
+ status === "error" ? "bg-red-800" : "bg-[#FFCE99]/32"
  }`} />
- <span className="text-xs text-white/50 tracking-wide">{label}</span>
+ <span className="text-xs text-white/[0.68] tracking-wide">{label}</span>
  </div>
 
  {/* 스트리밍 중 우상단 버튼들 (분석 / 해제) */}
@@ -260,8 +260,8 @@ export default function CameraFeed({ botId, label, socket }: Props) {
  className={`px-1.5 h-5 flex items-center justify-center text-xs font-bold
  border transition-all ${
  analyzing
- ? "border-white/[0.05] text-white/90 animate-pulse cursor-wait"
- : "border-white/[0.05] bg-cyan-950/30 text-white/90 hover:border-white/[0.05] hover:text-white/70"
+ ? "border-white/[0.1] text-white/90 animate-pulse cursor-wait"
+ : "border-white/[0.1] bg-cyan-950/30 text-white/90 hover:border-white/[0.1] hover:text-white/[0.82]"
  }`}
  >
  {analyzing ? "분석중…" : "🔍 분석"}
@@ -269,7 +269,7 @@ export default function CameraFeed({ botId, label, socket }: Props) {
  <button
  onClick={cleanup}
  className="w-5 h-5 flex items-center justify-center
- text-xs text-white/30 hover:text-white/60 transition-colors"
+ text-xs text-white/[0.55] hover:text-white/[0.75] transition-colors"
  >
  ✕
  </button>
@@ -279,14 +279,14 @@ export default function CameraFeed({ botId, label, socket }: Props) {
  {/* AI 분석 결과 오버레이 (하단) */}
  {analysisText !== null && (
  <div className="absolute bottom-0 left-0 right-0 max-h-[55%] overflow-y-auto
- bg-black/40 backdrop-blur-xl/95 border-t border-white/[0.05] p-2">
+ bg-[#FFCE99]/14 backdrop-blur-xl/95 border-t border-white/[0.1] p-2">
  <div className="flex items-center justify-between mb-1">
  <span className="text-xs font-bold text-white/90 tracking-wide">
  ◈ AI 분석 — {label}
  </span>
  <button
  onClick={() => setAnalysisText(null)}
- className="text-xs text-white/40 hover:text-white/60 transition-colors leading-none"
+ className="text-xs text-white/[0.6] hover:text-white/[0.75] transition-colors leading-none"
  >
  ✕
  </button>

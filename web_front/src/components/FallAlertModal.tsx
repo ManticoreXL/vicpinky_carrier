@@ -26,16 +26,16 @@ export default function FallAlertModal({ alerts, onConfirm }: Props) {
  return (
   <div className="fixed inset-0 z-[60] flex items-center justify-center">
    {/* 오버레이 */}
-   <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
+   <div className="absolute inset-0 bg-[#521C0D]/30 backdrop-blur-sm" />
 
    {/* 모달 */}
-   <div className="relative z-10 w-80 glass-panel shadow-2xl border-white/[0.05]">
+   <div className="relative z-10 w-80 glass-panel shadow-2xl border-white/[0.1]">
 
     {/* 상단 경보 바 */}
-    <div className="px-5 py-3 flex items-center gap-3 border-b border-white/[0.05] bg-rose-500/15">
+    <div className="px-5 py-3 flex items-center gap-3 border-b border-white/[0.1] bg-rose-500/15">
      <div className="w-2 h-2 rounded-full bg-rose-400 animate-ping absolute" />
      <div className="w-2 h-2 rounded-full bg-rose-500" />
-     <span className="text-xs font-semibold tracking-wide text-rose-200">
+     <span className="text-xs font-semibold tracking-wide text-rose-800">
       ROBOT OVERTURN DETECTED
      </span>
     </div>
@@ -47,7 +47,7 @@ export default function FallAlertModal({ alerts, onConfirm }: Props) {
       <p className="text-lg font-semibold text-white/90 tracking-wide">
        {current.robotId ?? "—"}
       </p>
-      <p className="text-xs text-white/40 mt-1">{robotLabel}</p>
+      <p className="text-xs text-white/[0.6] mt-1">{robotLabel}</p>
      </div>
 
      {/* 경고 메시지 */}
@@ -55,21 +55,21 @@ export default function FallAlertModal({ alerts, onConfirm }: Props) {
       <div className="flex items-start gap-3">
        <span className="text-xl leading-none mt-0.5">⚠️</span>
        <div>
-        <p className="text-xs font-semibold text-rose-200 mb-1">전복 감지</p>
-        <p className="text-xs text-white/50 leading-relaxed">{current.message}</p>
+        <p className="text-xs font-semibold text-rose-800 mb-1">전복 감지</p>
+        <p className="text-xs text-white/[0.68] leading-relaxed">{current.message}</p>
        </div>
       </div>
      </div>
 
      {/* 안내 */}
-     <p className="text-xs text-white/30 leading-relaxed">
+     <p className="text-xs text-white/[0.55] leading-relaxed">
       로봇이 전복되었습니다. 즉시 현장을 확인하고 로봇을 안전하게 복구하세요.
       태스크가 자동으로 중단될 수 있습니다.
      </p>
 
      {pending > 0 && (
-      <div className="py-2 bg-white/5 border border-white/[0.05] rounded-lg">
-       <p className="text-xs text-white/30 text-center tracking-wide">
+      <div className="py-2 bg-[#FFCE99]/32 border border-white/[0.1] rounded-lg">
+       <p className="text-xs text-white/[0.55] text-center tracking-wide">
         + {pending}개 추가 알림 대기 중
        </p>
       </div>
@@ -78,7 +78,7 @@ export default function FallAlertModal({ alerts, onConfirm }: Props) {
      {/* 확인 버튼 */}
      <button
       onClick={() => onConfirm(current.id)}
-      className="w-full py-4 text-xs font-semibold tracking-wide transition-all duration-300 rounded-xl border border-white/[0.05] bg-rose-500/20 text-white/70 hover:bg-rose-500/40 hover:text-white"
+      className="w-full py-4 text-xs font-semibold tracking-wide transition-all duration-300 rounded-xl border border-white/[0.1] bg-rose-500/20 text-white/[0.82] hover:bg-rose-500/40 hover:text-white"
      >
       확인 (Acknowledge)
      </button>

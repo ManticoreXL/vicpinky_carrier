@@ -179,13 +179,13 @@ export default function AiAssistant({ socket }: Props) {
         onClick={() => setOpen(o => !o)}
         className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full shadow-2xl
           flex items-center justify-center transition-all duration-300
-          border border-white/10
+          border border-white/[0.12]
           ${open
             ? "bg-indigo-600 hover:bg-indigo-500 rotate-45"
             : "bg-indigo-700/80 hover:bg-indigo-600/90 backdrop-blur-xl"}`}
         title="EXAONE 에이전트"
       >
-        <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <svg className="w-6 h-6 text-[#FFFDF1]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           {open
             ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75}
@@ -197,24 +197,24 @@ export default function AiAssistant({ socket }: Props) {
       {/* 에이전트 패널 */}
       {open && (
         <div className="fixed bottom-24 right-6 z-50 w-96 flex flex-col
-          glass-panel border-white/[0.08] shadow-2xl
+          glass-panel border-white/[0.1] shadow-2xl
           rounded-2xl overflow-hidden"
           style={{ maxHeight: "70vh" }}
         >
           {/* 헤더 */}
           <div className="flex-none flex items-center gap-3 px-5 py-4
-            border-b border-white/[0.06] bg-indigo-600/10">
+            border-b border-white/[0.1] bg-indigo-600/10">
             <div className="relative flex-none">
               <div className="w-2.5 h-2.5 rounded-full bg-indigo-400" />
               <div className="absolute inset-0 rounded-full bg-indigo-400 animate-ping opacity-40" />
             </div>
             <div>
               <span className="text-sm font-semibold text-white/90 tracking-wide">EXAONE AGENT</span>
-              <p className="text-[10px] text-white/30 tracking-widest mt-0.5">AI 자율 실행 에이전트</p>
+              <p className="text-[10px] text-white/[0.55] tracking-widest mt-0.5">AI 자율 실행 에이전트</p>
             </div>
             <button
               onClick={() => setMessages([])}
-              className="ml-auto text-xs text-white/20 hover:text-white/50 transition-colors"
+              className="ml-auto text-xs text-white/[0.45] hover:text-white/[0.68] transition-colors"
             >
               초기화
             </button>
@@ -223,12 +223,12 @@ export default function AiAssistant({ socket }: Props) {
           {/* 채팅 */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3 min-h-0">
             {messages.length === 0 && (
-              <div className="text-center py-8 text-white/20 text-xs leading-relaxed">
+              <div className="text-center py-8 text-white/[0.45] text-xs leading-relaxed">
                 <p className="text-2xl mb-3">🤖</p>
-                <p className="font-semibold text-white/30 mb-1">EXAONE 에이전트</p>
+                <p className="font-semibold text-white/[0.55] mb-1">EXAONE 에이전트</p>
                 <p>명령을 입력하거나 마이크로 말하세요</p>
-                <p className="mt-2 text-white/15">예: "터틀봇 1번 문앞 노드로 이동"</p>
-                <p className="text-white/15">"현재 활성 태스크 알려줘"</p>
+                <p className="mt-2 text-white/[0.4]">예: "터틀봇 1번 문앞 노드로 이동"</p>
+                <p className="text-white/[0.4]">"현재 활성 태스크 알려줘"</p>
               </div>
             )}
             {messages.map(msg => (
@@ -236,7 +236,7 @@ export default function AiAssistant({ socket }: Props) {
             ))}
             {interim && (
               <div className="flex justify-end">
-                <span className="text-xs text-rose-400 animate-pulse px-3 py-1.5
+                <span className="text-xs text-rose-600 animate-pulse px-3 py-1.5
                   bg-rose-500/10 rounded-full border border-rose-500/20">
                   {interim}
                 </span>
@@ -246,7 +246,7 @@ export default function AiAssistant({ socket }: Props) {
           </div>
 
           {/* 입력 */}
-          <div className="flex-none p-3 border-t border-white/[0.06] bg-black/20">
+          <div className="flex-none p-3 border-t border-white/[0.1] bg-[#FFCE99]/32">
             <div className="flex items-center gap-2">
               {/* 마이크 버튼 */}
               <button
@@ -254,8 +254,8 @@ export default function AiAssistant({ socket }: Props) {
                 className={`flex-none w-10 h-10 rounded-xl border flex items-center justify-center
                   transition-all active:scale-95
                   ${recording
-                    ? "bg-rose-500/30 border-rose-500/50 text-rose-300 animate-pulse"
-                    : "bg-white/5 border-white/[0.08] text-white/40 hover:text-white/70 hover:bg-white/10"
+                    ? "bg-rose-500/30 border-rose-500/50 text-rose-700 animate-pulse"
+                    : "bg-[#FFCE99]/32 border-white/[0.1] text-white/[0.6] hover:text-white/[0.82] hover:bg-white/10"
                   }`}
                 title={recording ? "녹음 중지" : "음성 명령"}
               >
@@ -274,8 +274,8 @@ export default function AiAssistant({ socket }: Props) {
                 onChange={e => setInput(e.target.value)}
                 onKeyDown={onKey}
                 placeholder="명령을 입력하세요…"
-                className="flex-1 bg-white/[0.04] border border-white/[0.07] rounded-xl
-                  px-3 py-2.5 text-sm text-white/90 placeholder:text-white/20
+                className="flex-1 bg-[#FFCE99]/32 border border-white/[0.1] rounded-xl
+                  px-3 py-2.5 text-sm text-white/90 placeholder:text-white/[0.45]
                   focus:outline-none focus:border-indigo-500/40 focus:bg-indigo-500/5"
               />
 
@@ -283,7 +283,7 @@ export default function AiAssistant({ socket }: Props) {
                 onClick={send}
                 disabled={!input.trim()}
                 className="flex-none w-10 h-10 rounded-xl bg-indigo-600/80 hover:bg-indigo-500
-                  border border-indigo-500/30 text-white
+                  border border-indigo-500/30 text-[#FFFDF1]
                   flex items-center justify-center transition-all active:scale-95
                   disabled:opacity-20 disabled:cursor-not-allowed"
               >
@@ -311,12 +311,12 @@ function MsgBubble({ msg }: { msg: ChatMsg }) {
       <div className={`max-w-[85%] ${isUser ? "items-end" : "items-start"} flex flex-col gap-1`}>
         {/* 역할 라벨 */}
         {!isUser && (
-          <span className="text-[10px] text-indigo-400 font-semibold tracking-widest px-1">
+          <span className="text-[10px] text-indigo-600 font-semibold tracking-widest px-1">
             EXAONE {msg.fromMic && "🎙"}
           </span>
         )}
         {isUser && msg.fromMic && (
-          <span className="text-[10px] text-white/30 text-right px-1">🎙 음성</span>
+          <span className="text-[10px] text-white/[0.55] text-right px-1">🎙 음성</span>
         )}
 
         {/* 메시지 본문 */}
@@ -324,12 +324,12 @@ function MsgBubble({ msg }: { msg: ChatMsg }) {
           ${isUser
             ? "bg-indigo-600/30 border border-indigo-500/20 text-white/90 rounded-tr-sm"
             : msg.error
-              ? "bg-rose-500/15 border border-rose-500/20 text-rose-300 rounded-tl-sm"
-              : "bg-white/[0.06] border border-white/[0.06] text-white/80 rounded-tl-sm"
+              ? "bg-rose-500/15 border border-rose-500/20 text-rose-700 rounded-tl-sm"
+              : "bg-[#FFCE99]/32 border border-white/[0.1] text-white/80 rounded-tl-sm"
           }`}
         >
           {msg.loading
-            ? <span className="flex items-center gap-2 text-white/40">
+            ? <span className="flex items-center gap-2 text-white/[0.6]">
                 <span className="flex gap-0.5">
                   {[0,1,2].map(i => (
                     <span key={i} className="w-1 h-1 rounded-full bg-indigo-400 animate-bounce"
@@ -347,7 +347,7 @@ function MsgBubble({ msg }: { msg: ChatMsg }) {
           <div className="w-full space-y-1">
             <button
               onClick={() => setExpanded(e => !e)}
-              className="text-[10px] text-indigo-400/70 hover:text-indigo-400
+              className="text-[10px] text-indigo-600/70 hover:text-indigo-600
                 flex items-center gap-1 px-1 transition-colors"
             >
               <span>{expanded ? "▾" : "▸"}</span>
@@ -378,30 +378,30 @@ function ActionCard({ action }: { action: AgentAction }) {
       }`}
     >
       <div className="flex items-center gap-2 mb-1.5">
-        <span className={ok ? "text-emerald-400" : "text-rose-400"}>
+        <span className={ok ? "text-emerald-600" : "text-rose-600"}>
           {ok ? "✓" : "✗"}
         </span>
-        <span className={`font-semibold tracking-wide ${ok ? "text-emerald-300" : "text-rose-300"}`}>
+        <span className={`font-semibold tracking-wide ${ok ? "text-emerald-700" : "text-rose-700"}`}>
           {label}
         </span>
       </div>
       {/* 인자 */}
-      <div className="text-white/30 mb-1 font-mono">
+      <div className="text-white/[0.55] mb-1 font-mono">
         {Object.entries(action.args).map(([k, v]) => (
           <span key={k} className="mr-2">
-            <span className="text-white/20">{k}:</span>{" "}
-            <span className="text-white/50">{String(v)}</span>
+            <span className="text-white/[0.45]">{k}:</span>{" "}
+            <span className="text-white/[0.68]">{String(v)}</span>
           </span>
         ))}
       </div>
       {/* 결과 메시지 */}
       {result?.message && (
-        <p className={`mt-1 ${ok ? "text-emerald-300/70" : "text-rose-300/70"}`}>
+        <p className={`mt-1 ${ok ? "text-emerald-700/70" : "text-rose-700/70"}`}>
           {result.message}
         </p>
       )}
       {result?.error && (
-        <p className="mt-1 text-rose-400">{result.error}</p>
+        <p className="mt-1 text-rose-600">{result.error}</p>
       )}
     </div>
   );

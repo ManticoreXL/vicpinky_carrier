@@ -227,8 +227,8 @@ export default function VicPinkyPanel({
  onClick={() => setScanTab(tab)}
  className={`px-3 py-1 text-xs font-bold tracking-wide transition-all border ${
  scanTab === tab
- ? "border-white/[0.05] bg-red-950/30 text-white/90"
- : "border-white/[0.05] bg-transparent text-white/30 hover:text-white/60"
+ ? "border-white/[0.1] bg-red-950/30 text-white/90"
+ : "border-white/[0.1] bg-transparent text-white/[0.55] hover:text-white/[0.75]"
  }`}
  >
  {tab === "scan" ? "RAW" : "FILTERED"}
@@ -237,8 +237,8 @@ export default function VicPinkyPanel({
  {nearest !== null && (
  <span className={`ml-auto text-xs font-bold px-2 py-1 border ${
  nearest < 0.3
- ? "text-white/90 border-white/[0.05] bg-red-950/20 "
- : "text-white/60 border-white/[0.05]"
+ ? "text-white/90 border-white/[0.1] bg-red-950/20 "
+ : "text-white/[0.75] border-white/[0.1]"
  }`}>
  최근접 {nearest.toFixed(2)} m
  </span>
@@ -247,13 +247,13 @@ export default function VicPinkyPanel({
 
  <div className="flex gap-4 items-start">
  {/* LiDAR Canvas */}
- <div className="bg-black/40 backdrop-blur-xl border border-white/[0.05] p-1.5 shadow-inner shadow-black/60">
+ <div className="bg-[#FFCE99]/14 backdrop-blur-xl border border-white/[0.1] p-1.5 shadow-inner shadow-black/60">
  <LidarCanvas scanData={activeScan} size={240} />
  </div>
 
  {/* 스캔 요약 */}
  <div className="flex-1 space-y-1.5">
- <p className="text-xs text-white/40 tracking-wide mb-2">
+ <p className="text-xs text-white/[0.6] tracking-wide mb-2">
  {scanTab === "scan" ? "원시 스캔" : "필터 스캔"}
  </p>
  {activeScan ? (
@@ -266,7 +266,7 @@ export default function VicPinkyPanel({
  alert={nearest != null && nearest < 0.3} />
  </>
  ) : (
- <p className="text-xs text-white/30 ">NO DATA</p>
+ <p className="text-xs text-white/[0.55] ">NO DATA</p>
  )}
  </div>
  </div>
@@ -289,8 +289,8 @@ export default function VicPinkyPanel({
  onClick={() => setKeyboardActive(v => !v)}
  className={`w-full py-2.5 text-xs font-semibold tracking-wide transition-all border ${
  keyboardActive
- ? "border-white/[0.05] bg-green-950/30 text-white/90"
- : "border-white/[0.05] bg-transparent text-white/40 hover:border-white/[0.05] hover:text-white/60"
+ ? "border-white/[0.1] bg-green-950/30 text-white/90"
+ : "border-white/[0.1] bg-transparent text-white/[0.6] hover:border-white/[0.1] hover:text-white/[0.75]"
  }`}
  >
  {keyboardActive ? "◉ 조종 활성 — ESC 비활성" : "◎ 키보드 조종 시작"}
@@ -303,7 +303,7 @@ export default function VicPinkyPanel({
  <KeyCap label="S" sub="후진" />
  <KeyCap label="D" sub="우" />
  </div>
- <p className="text-xs text-white/30 text-center tracking-wide">
+ <p className="text-xs text-white/[0.55] text-center tracking-wide">
  linear 0.3 m/s · angular 1.0 rad/s
  </p>
  </>
@@ -315,7 +315,7 @@ export default function VicPinkyPanel({
  <Section label="자가진단">
  <div className="flex items-center justify-between gap-4">
  <div className="flex items-center gap-2">
- {diagStatus === "idle" && <span className="text-xs text-white/30 tracking-wide">대기 중</span>}
+ {diagStatus === "idle" && <span className="text-xs text-white/[0.55] tracking-wide">대기 중</span>}
  {diagStatus === "loading" && <span className="text-xs text-white/90 tracking-wide animate-pulse">진단 중…</span>}
  {diagStatus === "ok" && <span className="text-xs text-white/90 font-semibold tracking-wide">◉ 정상</span>}
  {diagStatus === "error" && <span className="text-xs text-white/90 font-semibold tracking-wide ">⚠ 이상 감지</span>}
@@ -358,8 +358,8 @@ export default function VicPinkyPanel({
 function SensorBox({ label, children }: { label: string; children: React.ReactNode }) {
  return (
  <div className="flex flex-col gap-1">
- <p className="text-xs font-bold text-white/40 tracking-[0.25em]">{label}</p>
- <div className="bg-black/20 p-3 border border-white/[0.05] h-full">{children}</div>
+ <p className="text-xs font-bold text-white/[0.6] tracking-[0.25em]">{label}</p>
+ <div className="bg-[#FFCE99]/32 p-3 border border-white/[0.1] h-full">{children}</div>
  </div>
  );
 }
@@ -367,7 +367,7 @@ function SensorBox({ label, children }: { label: string; children: React.ReactNo
 function TRow({ label, value, alert = false }: { label: string; value: string; alert?: boolean }) {
  return (
  <tr>
- <td className="text-white/40 py-0.5 pr-2 whitespace-nowrap text-xs">{label}</td>
+ <td className="text-white/[0.6] py-0.5 pr-2 whitespace-nowrap text-xs">{label}</td>
  <td className={` text-right text-xs ${
  alert ? "text-white/90 font-semibold " : "text-white/90"
  }`}>{value}</td>
@@ -378,7 +378,7 @@ function TRow({ label, value, alert = false }: { label: string; value: string; a
 function DataRow({ label, value, alert = false }: { label: string; value: string; alert?: boolean }) {
  return (
  <div className="flex justify-between items-center text-xs">
- <span className="text-white/40 ">{label}</span>
+ <span className="text-white/[0.6] ">{label}</span>
  <span className={` ${alert ? "text-white/90 font-semibold" : "text-white/90"}`}>{value}</span>
  </div>
  );
@@ -386,13 +386,13 @@ function DataRow({ label, value, alert = false }: { label: string; value: string
 
 function VelDisplay({ label, value, unit }: { label: string; value: number | null; unit: string }) {
  const v = value ?? 0;
- const color = v > 0.001 ? "text-green-600" : v < -0.001 ? "text-white/90" : "text-white/40";
+ const color = v > 0.001 ? "text-green-600" : v < -0.001 ? "text-white/90" : "text-white/[0.6]";
  return (
- <div className="bg-black/20 border border-white/[0.05] px-3 py-2 flex flex-col gap-0.5">
- <span className="text-xs text-white/30 tracking-wide ">{label}</span>
+ <div className="bg-[#FFCE99]/32 border border-white/[0.1] px-3 py-2 flex flex-col gap-0.5">
+ <span className="text-xs text-white/[0.55] tracking-wide ">{label}</span>
  <span className={`text-lg font-semibold tabular-nums ${color}`}>
  {v >= 0 ? "+" : ""}{v.toFixed(3)}
- <span className="text-xs text-white/30 ml-1">{unit}</span>
+ <span className="text-xs text-white/[0.55] ml-1">{unit}</span>
  </span>
  </div>
  );
@@ -401,11 +401,11 @@ function VelDisplay({ label, value, unit }: { label: string; value: number | nul
 function KeyCap({ label, sub }: { label: string; sub: string }) {
  return (
  <div className="flex flex-col items-center gap-0.5">
- <div className="w-10 h-10 bg-black/20 border border-white/[0.05] flex items-center
+ <div className="w-10 h-10 bg-[#FFCE99]/32 border border-white/[0.1] flex items-center
  justify-center font-semibold text-white/90 text-sm shadow shadow-black/60">
  {label}
  </div>
- <span className="text-white/30 text-xs ">{sub}</span>
+ <span className="text-white/[0.55] text-xs ">{sub}</span>
  </div>
  );
 }
@@ -423,15 +423,15 @@ export function PanelCard({
  children: React.ReactNode;
 }) {
  return (
- <div className="bg-black/20 border border-white/[0.05] rounded-none p-5 flex flex-col gap-4
+ <div className="bg-[#FFCE99]/32 border border-white/[0.1] rounded-none p-5 flex flex-col gap-4
  shadow-2xl shadow-black/80 border-glow-red">
- <div className="flex items-center justify-between border-b border-white/[0.05] pb-3">
+ <div className="flex items-center justify-between border-b border-white/[0.1] pb-3">
  <h2 className="text-sm font-semibold text-white/90 tracking-wide flex items-center gap-2">
  <span className="text-red-600 text-base">{icon}</span>
  {title}
  </h2>
  {badge && (
- <span className="text-xs font-bold px-2 py-0.5 border border-white/[0.05]
+ <span className="text-xs font-bold px-2 py-0.5 border border-white/[0.1]
  bg-red-950/20 text-red-600 tracking-wide ">
  {badge}
  </span>
@@ -447,10 +447,10 @@ export function Section({ label, children }: { label: string; children: React.Re
  <div className="flex flex-col gap-1.5">
  <div className="flex items-center gap-2">
  <span className="text-red-700/60 text-xs">◆</span>
- <p className="text-xs font-bold text-white/40 tracking-[0.25em]">{label}</p>
+ <p className="text-xs font-bold text-white/[0.6] tracking-[0.25em]">{label}</p>
  <div className="flex-1 h-px bg-red-900/20" />
  </div>
- <div className="bg-black/20 p-3 border border-white/[0.05]">{children}</div>
+ <div className="bg-[#FFCE99]/32 p-3 border border-white/[0.1]">{children}</div>
  </div>
  );
 }
@@ -462,11 +462,11 @@ export function BigStatus({ value, color }: { value: string; color: string }) {
 }
 
 export function BatteryBar({ pct }: { pct: number }) {
- const fill = pct < 20 ? "bg-red-700" : pct < 50 ? "bg-[#666666]" : "bg-green-700";
- const text = pct < 20 ? "text-white/90" : pct < 50 ? "text-white/60" : "text-green-600";
+ const fill = pct < 20 ? "bg-red-700" : pct < 50 ? "bg-amber-400" : "bg-green-700";
+ const text = pct < 20 ? "text-white/90" : pct < 50 ? "text-white/[0.75]" : "text-green-600";
  return (
  <div className="flex items-center gap-3">
- <div className="flex-1 h-1.5 bg-white/5 overflow-hidden border border-white/[0.05]">
+ <div className="flex-1 h-1.5 bg-[#FFCE99]/32 overflow-hidden border border-white/[0.1]">
  <div className={`h-full transition-all ${fill}`} style={{ width: `${pct}%` }} />
  </div>
  <span className={`text-xs font-semibold tabular-nums w-10 text-right ${text}`}>{pct}%</span>
@@ -477,9 +477,9 @@ export function BatteryBar({ pct }: { pct: number }) {
 export function GoldButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
  return (
  <button onClick={onClick}
- className="px-4 py-1.5 border border-white/[0.05] bg-red-950/30 hover:bg-red-900/50
+ className="px-4 py-1.5 border border-white/[0.1] bg-red-950/30 hover:bg-red-900/50
  text-white/90 text-xs font-bold tracking-wide transition-all
- hover:border-white/[0.05] hover:text-white/70">
+ hover:border-white/[0.1] hover:text-white/[0.82]">
  {children}
  </button>
  );
@@ -496,8 +496,8 @@ export function BlueButton({ onClick, children, disabled = false }: {
  disabled={disabled}
  className={`px-4 py-1.5 border text-xs font-bold tracking-wide transition-all ${
  disabled
- ? "border-white/[0.05] bg-transparent text-white/30 cursor-not-allowed"
- : "border-white/[0.05] bg-white/5 hover:bg-white/5 text-white/60 hover:border-white/[0.05] hover:text-white/90"
+ ? "border-white/[0.1] bg-transparent text-white/[0.55] cursor-not-allowed"
+ : "border-white/[0.1] bg-[#FFCE99]/32 hover:bg-[#FFCE99]/32 text-white/[0.75] hover:border-white/[0.1] hover:text-white/90"
  }`}
  >
  {children}
@@ -508,14 +508,14 @@ export function BlueButton({ onClick, children, disabled = false }: {
 export function DangerButton({ onClick, children }: { onClick: () => void; children: React.ReactNode }) {
  return (
  <button onClick={onClick}
- className="px-4 py-1.5 border border-white/[0.05] bg-red-900/40 hover:bg-red-800/60
- text-white/70 text-xs font-bold tracking-wide transition-all
- hover:border-red-600 hover:text-red-200">
+ className="px-4 py-1.5 border border-white/[0.1] bg-red-900/40 hover:bg-red-800/60
+ text-white/[0.82] text-xs font-bold tracking-wide transition-all
+ hover:border-red-600 hover:text-red-800">
  {children}
  </button>
  );
 }
 
 export function NoData() {
- return <span className="text-xs text-white/30 tracking-wide">NO DATA</span>;
+ return <span className="text-xs text-white/[0.55] tracking-wide">NO DATA</span>;
 }

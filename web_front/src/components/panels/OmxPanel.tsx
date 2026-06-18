@@ -87,7 +87,7 @@ export default function OmxPanel({
  <Section label="자가진단">
  <div className="flex items-center justify-between gap-4">
  <div className="flex items-center gap-2">
- {diagStatus === "idle" && <span className="text-xs text-white/30 tracking-wide">대기 중</span>}
+ {diagStatus === "idle" && <span className="text-xs text-white/[0.55] tracking-wide">대기 중</span>}
  {diagStatus === "loading" && <span className="text-xs text-white/90 tracking-wide animate-pulse">진단 중…</span>}
  {diagStatus === "ok" && <span className="text-xs text-white/90 font-semibold tracking-wide">◉ 정상</span>}
  {diagStatus === "error" && <span className="text-xs text-white/90 font-semibold tracking-wide ">⚠ 이상 감지</span>}

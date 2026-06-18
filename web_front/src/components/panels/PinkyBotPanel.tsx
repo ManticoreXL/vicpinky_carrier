@@ -37,11 +37,11 @@ function quatToYaw(q: { x: number; y: number; z: number; w: number }) {
 type MotorState = "unknown" | "starting" | "running" | "stopping" | "stopped";
 
 const MOTOR_STYLE: Record<MotorState, { dot: string; text: string; label: string }> = {
- unknown: { dot: "bg-[#333]", text: "text-white/50", label: "UNKNOWN" },
+ unknown: { dot: "bg-[#521C0D]/40", text: "text-white/[0.68]", label: "UNKNOWN" },
  starting: { dot: "bg-amber-400 animate-pulse", text: "text-white/90", label: "STARTING…" },
  running: { dot: "bg-green-500 animate-pulse", text: "text-white/90", label: "RUNNING" },
  stopping: { dot: "bg-red-400 animate-pulse", text: "text-white/90", label: "STOPPING…" },
- stopped: { dot: "bg-[#444]", text: "text-white/50", label: "STOPPED" },
+ stopped: { dot: "bg-[#521C0D]/40", text: "text-white/[0.68]", label: "STOPPED" },
 };
 
 // ── Props ─────────────────────────────────────────────────────────────────────
@@ -164,7 +164,7 @@ export default function PinkyBotPanel({ rosMessages, emitCmdVel, callService }: 
  {batRound !== null ? (
  <div className="space-y-2">
  <div className="flex items-center justify-between mb-1">
- <span className="text-xs text-white/40 tracking-wide">충전량</span>
+ <span className="text-xs text-white/[0.6] tracking-wide">충전량</span>
  <span className={`text-2xl font-semibold tabular-nums ${
  batRound < 20 ? "text-white/90 " :
  batRound < 50 ? "text-white/90" : "text-white/90"
@@ -172,10 +172,10 @@ export default function PinkyBotPanel({ rosMessages, emitCmdVel, callService }: 
  </div>
  <BatteryBar pct={batRound} />
  {batVolt !== null && (
- <div className="flex justify-between text-xs mt-2 border-t border-[#111] pt-2">
- <span className="text-white/40">전압</span>
+ <div className="flex justify-between text-xs mt-2 border-t border-[#521C0D]/10 pt-2">
+ <span className="text-white/[0.6]">전압</span>
  <span className={`font-bold tabular-nums ${
- batVolt < 10 ? "text-white/90" : batVolt < 11.5 ? "text-white/90" : "text-white/60"
+ batVolt < 10 ? "text-white/90" : batVolt < 11.5 ? "text-white/90" : "text-white/[0.75]"
  }`}>{f(batVolt, 2)} V</span>
  </div>
  )}
@@ -183,7 +183,7 @@ export default function PinkyBotPanel({ rosMessages, emitCmdVel, callService }: 
  ) : (
  <div className="flex items-center gap-3">
  <NoData />
- <span className="text-xs text-white/30">수신 대기: /battery/percent</span>
+ <span className="text-xs text-white/[0.55]">수신 대기: /battery/percent</span>
  </div>
  )}
  </Section>
@@ -221,13 +221,13 @@ export default function PinkyBotPanel({ rosMessages, emitCmdVel, callService }: 
  return (
  <div key={name}>
  <div className="flex justify-between text-xs mb-0.5">
- <span className="text-white/50 truncate max-w-[90px]" title={name}>
+ <span className="text-white/[0.68] truncate max-w-[90px]" title={name}>
  {name.length > 12 ? "…" + name.slice(-12) : name}
  </span>
- <span className="text-white/60">{f(pos, 3)} r</span>
+ <span className="text-white/[0.75]">{f(pos, 3)} r</span>
  </div>
  {/* 속도 바 */}
- <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+ <div className="h-1 bg-[#FFCE99]/32 rounded-full overflow-hidden">
  <div
  className={`h-full rounded-full transition-all ${
  Math.abs(vel) > maxVel * 0.8 ? "bg-red-600" :
@@ -236,7 +236,7 @@ export default function PinkyBotPanel({ rosMessages, emitCmdVel, callService }: 
  style={{ width: `${barW}%` }}
  />
  </div>
- <div className="flex justify-between text-xs text-white/30 mt-0.5">
+ <div className="flex justify-between text-xs text-white/[0.55] mt-0.5">
  <span>vel {f(vel, 2)} r/s</span>
  {eff != null && <span>eff {f(eff, 2)} Nm</span>}
  </div>
@@ -258,7 +258,7 @@ export default function PinkyBotPanel({ rosMessages, emitCmdVel, callService }: 
  {/* ── LiDAR ──────────────────────────────────────────────────────── */}
  <Section label="LiDAR (/scan · SLAMTEC)">
  <div className="flex gap-4 items-start">
- <div className="bg-black/40 backdrop-blur-xl border border-white/[0.05] p-1.5 shadow-inner shadow-black/60">
+ <div className="bg-[#FFCE99]/14 backdrop-blur-xl border border-white/[0.1] p-1.5 shadow-inner shadow-black/60">
  <LidarCanvas scanData={scanData} size={220} />
  </div>
  <div className="flex-1 space-y-1.5">
@@ -266,10 +266,10 @@ export default function PinkyBotPanel({ rosMessages, emitCmdVel, callService }: 
  {nearest !== null && (
  <div className={`px-2 py-1 border text-xs font-bold mb-2 flex items-center gap-2 ${
  nearest < 0.25
- ? "border-white/[0.05] bg-red-950/30 text-white/90 "
+ ? "border-white/[0.1] bg-red-950/30 text-white/90 "
  : nearest < 0.5
- ? "border-white/[0.05] bg-amber-950/10 text-white/90"
- : "border-white/[0.05] text-white/60"
+ ? "border-white/[0.1] bg-amber-950/10 text-white/90"
+ : "border-white/[0.1] text-white/[0.75]"
  }`}>
  <span>{nearest < 0.25 ? "⚠" : "◎"}</span>
  <span>최근접 {f(nearest)} m</span>
@@ -300,7 +300,7 @@ export default function PinkyBotPanel({ rosMessages, emitCmdVel, callService }: 
  ) : (
  <div className="flex items-center gap-3">
  <NoData />
- <span className="text-xs text-white/30">명령 없음</span>
+ <span className="text-xs text-white/[0.55]">명령 없음</span>
  </div>
  )}
  </Section>
@@ -309,13 +309,13 @@ export default function PinkyBotPanel({ rosMessages, emitCmdVel, callService }: 
  <Section label="모터 제어 (/start_motor · /stop_motor)">
  <div className="space-y-3">
  {/* 상태 표시 */}
- <div className="flex items-center gap-2.5 px-3 py-2 bg-black/20 border border-white/[0.05]">
+ <div className="flex items-center gap-2.5 px-3 py-2 bg-[#FFCE99]/32 border border-white/[0.1]">
  <span className={`w-2 h-2 rounded-full flex-none ${ms.dot}`} />
  <span className={`text-xs font-semibold tracking-wide ${ms.text}`}>
  {ms.label}
  </span>
  {svcLog && (
- <span className="ml-auto text-xs text-white/30 truncate">{svcLog}</span>
+ <span className="ml-auto text-xs text-white/[0.55] truncate">{svcLog}</span>
  )}
  </div>
 
@@ -326,15 +326,15 @@ export default function PinkyBotPanel({ rosMessages, emitCmdVel, callService }: 
  disabled={motorState === "starting" || motorState === "running"}
  className={`py-3 border text-xs font-semibold tracking-[0.15em] transition-all flex flex-col items-center gap-1 ${
  motorState === "running"
- ? "border-white/[0.05] bg-green-950/30 text-white/90 cursor-default"
+ ? "border-white/[0.1] bg-green-950/30 text-white/90 cursor-default"
  : motorState === "starting"
- ? "border-white/[0.05] text-white/30 cursor-not-allowed"
- : "border-white/[0.05] bg-[#0a0f0a] text-green-600 hover:bg-green-950/30 hover:border-white/[0.05] hover:text-white/90"
+ ? "border-white/[0.1] text-white/[0.55] cursor-not-allowed"
+ : "border-white/[0.1] bg-[#FFCE99]/32 text-green-600 hover:bg-green-950/30 hover:border-white/[0.1] hover:text-white/90"
  }`}
  >
  <span className="text-base">▶</span>
  <span>START MOTOR</span>
- <span className="text-xs text-white/40 font-normal ">/start_motor</span>
+ <span className="text-xs text-white/[0.6] font-normal ">/start_motor</span>
  </button>
 
  <button
@@ -342,15 +342,15 @@ export default function PinkyBotPanel({ rosMessages, emitCmdVel, callService }: 
  disabled={motorState === "stopping" || motorState === "stopped"}
  className={`py-3 border text-xs font-semibold tracking-[0.15em] transition-all flex flex-col items-center gap-1 ${
  motorState === "stopped"
- ? "border-white/[0.05] text-white/30 cursor-default"
+ ? "border-white/[0.1] text-white/[0.55] cursor-default"
  : motorState === "stopping"
- ? "border-white/[0.05] text-white/30 cursor-not-allowed"
- : "border-white/[0.05] bg-red-950/20 text-white/90 hover:bg-red-950/40 hover:border-white/[0.05] hover:text-white/90"
+ ? "border-white/[0.1] text-white/[0.55] cursor-not-allowed"
+ : "border-white/[0.1] bg-red-950/20 text-white/90 hover:bg-red-950/40 hover:border-white/[0.1] hover:text-white/90"
  }`}
  >
  <span className="text-base">■</span>
  <span>STOP MOTOR</span>
- <span className="text-xs text-white/40 font-normal ">/stop_motor</span>
+ <span className="text-xs text-white/[0.6] font-normal ">/stop_motor</span>
  </button>
  </div>
  </div>
@@ -363,8 +363,8 @@ export default function PinkyBotPanel({ rosMessages, emitCmdVel, callService }: 
  onClick={() => setKeyboardActive(v => !v)}
  className={`w-full py-2.5 text-xs font-semibold tracking-wide transition-all border ${
  keyboardActive
- ? "border-white/[0.05] bg-green-950/30 text-white/90"
- : "border-white/[0.05] bg-transparent text-white/40 hover:border-white/[0.05] hover:text-white/60"
+ ? "border-white/[0.1] bg-green-950/30 text-white/90"
+ : "border-white/[0.1] bg-transparent text-white/[0.6] hover:border-white/[0.1] hover:text-white/[0.75]"
  }`}
  >
  {keyboardActive ? "◉ 조종 활성 — ESC 비활성" : "◎ 키보드 조종 시작"}
@@ -381,10 +381,10 @@ export default function PinkyBotPanel({ rosMessages, emitCmdVel, callService }: 
  </div>
  {/* 실시간 cmd_vel */}
  <div className="flex-1 space-y-1.5 pt-1">
- <p className="text-xs text-white/30 tracking-wide">실시간 명령</p>
+ <p className="text-xs text-white/[0.55] tracking-wide">실시간 명령</p>
  <VelMini label="linear.x" value={cvData?.linear?.x ?? 0} unit="m/s" />
  <VelMini label="angular.z" value={cvData?.angular?.z ?? 0} unit="r/s" />
- <p className="text-xs text-white/30 mt-2">
+ <p className="text-xs text-white/[0.55] mt-2">
  0.3 m/s · 1.0 r/s
  </p>
  </div>
@@ -403,8 +403,8 @@ export default function PinkyBotPanel({ rosMessages, emitCmdVel, callService }: 
 function SensorBox({ label, children }: { label: string; children: React.ReactNode }) {
  return (
  <div className="flex flex-col gap-1">
- <p className="text-xs font-bold text-white/40 tracking-[0.25em]">{label}</p>
- <div className="bg-black/20 p-3 border border-white/[0.05] h-full min-h-[100px]">{children}</div>
+ <p className="text-xs font-bold text-white/[0.6] tracking-[0.25em]">{label}</p>
+ <div className="bg-[#FFCE99]/32 p-3 border border-white/[0.1] h-full min-h-[100px]">{children}</div>
  </div>
  );
 }
@@ -414,7 +414,7 @@ function TRow({
 }: { label: string; value: string; color?: string }) {
  return (
  <tr>
- <td className="text-white/40 py-0.5 pr-2 whitespace-nowrap text-xs">{label}</td>
+ <td className="text-white/[0.6] py-0.5 pr-2 whitespace-nowrap text-xs">{label}</td>
  <td className={` text-right text-xs ${color ?? "text-white/90"}`}>{value}</td>
  </tr>
  );
@@ -423,7 +423,7 @@ function TRow({
 function DR({ label, value }: { label: string; value: string }) {
  return (
  <div className="flex justify-between items-center text-xs">
- <span className="text-white/40 ">{label}</span>
+ <span className="text-white/[0.6] ">{label}</span>
  <span className="text-white/90 ">{value}</span>
  </div>
  );
@@ -431,23 +431,23 @@ function DR({ label, value }: { label: string; value: string }) {
 
 function VelBox({ label, value, unit }: { label: string; value: number | null; unit: string }) {
  const v = value ?? 0;
- const color = v > 0.01 ? "text-white/90" : v < -0.01 ? "text-white/90" : "text-white/40";
+ const color = v > 0.01 ? "text-white/90" : v < -0.01 ? "text-white/90" : "text-white/[0.6]";
  return (
- <div className="bg-black/20 border border-white/[0.05] px-3 py-2.5 flex flex-col gap-0.5">
- <span className="text-xs text-white/30 tracking-wide ">{label}</span>
+ <div className="bg-[#FFCE99]/32 border border-white/[0.1] px-3 py-2.5 flex flex-col gap-0.5">
+ <span className="text-xs text-white/[0.55] tracking-wide ">{label}</span>
  <span className={`text-xl font-semibold tabular-nums ${color}`}>
  {v >= 0 ? "+" : ""}{v.toFixed(3)}
- <span className="text-xs text-white/30 ml-1">{unit}</span>
+ <span className="text-xs text-white/[0.55] ml-1">{unit}</span>
  </span>
  </div>
  );
 }
 
 function VelMini({ label, value, unit }: { label: string; value: number; unit: string }) {
- const color = value > 0.01 ? "text-white/90" : value < -0.01 ? "text-white/90" : "text-white/30";
+ const color = value > 0.01 ? "text-white/90" : value < -0.01 ? "text-white/90" : "text-white/[0.55]";
  return (
  <div className="flex justify-between text-xs ">
- <span className="text-white/30">{label}</span>
+ <span className="text-white/[0.55]">{label}</span>
  <span className={`font-bold tabular-nums ${color}`}>
  {value >= 0 ? "+" : ""}{value.toFixed(3)} {unit}
  </span>
@@ -458,11 +458,11 @@ function VelMini({ label, value, unit }: { label: string; value: number; unit: s
 function KeyCap({ label, sub }: { label: string; sub: string }) {
  return (
  <div className="flex flex-col items-center gap-0.5">
- <div className="w-9 h-9 bg-black/20 border border-white/[0.05] flex items-center
+ <div className="w-9 h-9 bg-[#FFCE99]/32 border border-white/[0.1] flex items-center
  justify-center font-semibold text-white/90 text-sm shadow shadow-black/60">
  {label}
  </div>
- <span className="text-white/30 text-xs ">{sub}</span>
+ <span className="text-white/[0.55] text-xs ">{sub}</span>
  </div>
  );
 }

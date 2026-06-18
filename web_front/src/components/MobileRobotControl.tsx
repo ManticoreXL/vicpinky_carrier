@@ -63,7 +63,7 @@ function ControlButton({ label, active, onStart, onEnd }: {
  className={`w-14 h-14 rounded-xl border-2 flex items-center justify-center font-bold text-base select-none transition-all ${
  active
  ? "bg-orange-500 border-orange-400 text-white scale-95 shadow-lg shadow-orange-500/30"
- : "bg-black/50 border-white/[0.08] text-white/70 hover:border-orange-500/30"
+ : "bg-[#FFCE99]/32 border-white/[0.1] text-white/[0.82] hover:border-orange-500/30"
  }`}
  >
  {label}

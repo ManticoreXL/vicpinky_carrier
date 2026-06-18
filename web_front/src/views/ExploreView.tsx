@@ -164,25 +164,25 @@ export default function ExploreView({ rosMessages, mapTimestamps, mapInfos, sock
  }, [selectedBot]);
 
  return (
- <div className="flex flex-col h-full bg-transparent text-slate-100 overflow-hidden relative">
+ <div className="flex flex-col h-full bg-transparent text-[#521C0D] overflow-hidden relative">
  
  {/* ── Mission Status Bar ─────────────────────────────────────────── */}
- <div className="flex-none flex items-center justify-between px-8 py-4 bg-white/[0.02] backdrop-blur-3xl border-b border-white/[0.05]">
+ <div className="flex-none flex items-center justify-between px-8 py-4 bg-[#FFCE99]/32 backdrop-blur-3xl border-b border-white/[0.1]">
  <div className="flex items-center gap-8">
  <div className="flex items-center gap-3">
  <div className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse " />
  <span className="text-white/90 font-semibold text-xs tracking-wide ">Mission Active</span>
  </div>
- <div className="flex items-center gap-3 px-5 py-1.5 bg-black/20 rounded-xl border border-white/[0.05]">
- <span className="text-xs text-white/20 font-semibold tracking-wide ">Elapsed</span>
+ <div className="flex items-center gap-3 px-5 py-1.5 bg-[#FFCE99]/32 rounded-xl border border-white/[0.1]">
+ <span className="text-xs text-white/[0.45] font-semibold tracking-wide ">Elapsed</span>
  <span className=" text-white/90 text-base font-semibold tabular-nums">{fmtTime(elapsed)}</span>
  </div>
  </div>
 
  <div className="flex items-center gap-10">
  <StatChip label="Assets Online" value={`${onlineCount}/4`} color={onlineCount > 0 ? "text-white/90" : "text-white/90"} />
- <StatChip label="Targets Spotted" value={String(totalDetected)} color={totalDetected > 0 ? "text-white/90" : "text-white/10"} />
- <StatChip label="Tactical Alerts" value={String(alertCount)} color={alertCount > 0 ? "text-white/90" : "text-white/10"} />
+ <StatChip label="Targets Spotted" value={String(totalDetected)} color={totalDetected > 0 ? "text-white/90" : "text-white/[0.4]"} />
+ <StatChip label="Tactical Alerts" value={String(alertCount)} color={alertCount > 0 ? "text-white/90" : "text-white/[0.4]"} />
  {alertCount > 0 && (
  <button onClick={() => setAlertCount(0)} className="glass-button !px-3 !py-1 text-xs !rounded-md">Reset Feed</button>
  )}
@@ -192,7 +192,7 @@ export default function ExploreView({ rosMessages, mapTimestamps, mapInfos, sock
  <div className="flex flex-col md:flex-row flex-1 overflow-hidden gap-px">
  
  {/* ── Left Sidebar: Fleet Deployment ───────────────────────────── */}
- <aside className="w-full md:w-64 flex-none flex md:flex-col bg-white/[0.02] backdrop-blur-3xl border-r border-white/[0.05] overflow-y-auto">
+ <aside className="w-full md:w-64 flex-none flex md:flex-col bg-[#FFCE99]/32 backdrop-blur-3xl border-r border-white/[0.1] overflow-y-auto">
  <PanelHeader icon="⬡" label="Asset Deployment" />
  <div className="p-4 space-y-3">
  <DeploymentCard 
@@ -222,7 +222,7 @@ export default function ExploreView({ rosMessages, mapTimestamps, mapInfos, sock
  </aside>
 
  {/* ── Center: Tactical Display ─────────────────────────────────── */}
- <main className="flex-1 flex flex-col bg-black/10 overflow-y-auto min-w-0">
+ <main className="flex-1 flex flex-col bg-[#FFCE99]/32 overflow-y-auto min-w-0">
  <div className="p-6 space-y-6">
  <div className="flex items-center justify-between">
  <PanelHeader icon="▣" label={`Tactical Area — ${selectedBot.toUpperCase()}`} />
@@ -235,7 +235,7 @@ export default function ExploreView({ rosMessages, mapTimestamps, mapInfos, sock
  </div>
 
  <div className="flex justify-center">
- <div className="glass-card w-full max-w-3xl p-1 bg-white/5 border-white/[0.05] ">
+ <div className="glass-card w-full max-w-3xl p-1 bg-[#FFCE99]/32 border-white/[0.1] ">
  <MapCanvas
  ref={mapCanvasRef}
  imageUrl={mapImageUrl}
@@ -254,8 +254,8 @@ export default function ExploreView({ rosMessages, mapTimestamps, mapInfos, sock
  </main>
 
  {/* ── Right Sidebar: Intel & Timeline ─────────────────────────── */}
- <aside className="w-full md:w-96 flex-none flex flex-col bg-white/[0.02] backdrop-blur-3xl border-l border-white/[0.05] overflow-hidden">
- <div className="flex-none border-b border-white/[0.05]">
+ <aside className="w-full md:w-96 flex-none flex flex-col bg-[#FFCE99]/32 backdrop-blur-3xl border-l border-white/[0.1] overflow-hidden">
+ <div className="flex-none border-b border-white/[0.1]">
  <PanelHeader icon="◑" label="Intelligence Uplink" />
  <div className="p-6 pt-0 space-y-4">
  {[...activatedBots].map(bot => {
@@ -274,21 +274,21 @@ export default function ExploreView({ rosMessages, mapTimestamps, mapInfos, sock
  </div>
 
  <div className="flex-1 flex flex-col overflow-hidden">
- <div className="flex-none flex items-center justify-between px-6 py-4 border-b border-white/[0.05]">
+ <div className="flex-none flex items-center justify-between px-6 py-4 border-b border-white/[0.1]">
  <span className="sub-label !mb-0">Mission Timeline</span>
- <span className="text-xs text-white/20 font-bold">{events.length} LOGS</span>
+ <span className="text-xs text-white/[0.45] font-bold">{events.length} LOGS</span>
  </div>
  <div ref={logRef} className="flex-1 overflow-y-auto p-4 space-y-2">
  {events.map(evt => (
  <div key={evt.id} className={`p-4 rounded-xl border transition-all duration-500 ${
- evt.level === "critical" ? "bg-rose-500/10 border-white/[0.05] shadow-lg " :
- evt.level === "warning" ? "bg-amber-500/10 border-white/[0.05]" : "bg-white/[0.03] border-white/[0.05]"
+ evt.level === "critical" ? "bg-rose-500/10 border-white/[0.1] shadow-lg " :
+ evt.level === "warning" ? "bg-amber-500/10 border-white/[0.1]" : "bg-[#FFCE99]/32 border-white/[0.1]"
  }`}>
  <div className="flex justify-between items-start mb-1">
  <span className={`text-xs font-semibold tracking-wide ${
- evt.level === "critical" ? "text-white/90" : evt.level === "warning" ? "text-white/90" : "text-white/20"
+ evt.level === "critical" ? "text-white/90" : evt.level === "warning" ? "text-white/90" : "text-white/[0.45]"
  }`}>{evt.level}</span>
- <span className="text-xs text-white/10">{new Date(evt.ts).toLocaleTimeString()}</span>
+ <span className="text-xs text-white/[0.4]">{new Date(evt.ts).toLocaleTimeString()}</span>
  </div>
  <p className="text-sm text-white/80 font-medium tracking-tight leading-relaxed">{evt.message}</p>
  </div>
@@ -305,7 +305,7 @@ function PanelHeader({ icon, label }: { icon: string; label: string }) {
  return (
  <div className="px-6 py-5 flex items-center gap-3">
  <span className="text-white/90/50 font-semibold text-lg">{icon}</span>
- <span className="text-xs font-semibold text-white/60 tracking-wide ">{label}</span>
+ <span className="text-xs font-semibold text-white/[0.75] tracking-wide ">{label}</span>
  </div>
  );
 }
@@ -313,16 +313,16 @@ function PanelHeader({ icon, label }: { icon: string; label: string }) {
 function DeploymentCard({ id, label, type, online, isSelected, onClick, telemetry, warning }: any) {
  return (
  <button onClick={onClick} className={`w-full text-left p-4 rounded-2xl border transition-all duration-500 ${
- isSelected ? "bg-white/10 border-white/[0.05] shadow-2xl scale-[1.02]" : "bg-black/20 border-white/[0.05] hover:border-white/[0.05]"
+ isSelected ? "bg-white/10 border-white/[0.1] shadow-2xl scale-[1.02]" : "bg-[#FFCE99]/32 border-white/[0.1] hover:border-white/[0.1]"
  }`}>
  <div className="flex justify-between items-center mb-2">
  <div className="flex items-center gap-2">
- <div className={`w-2 h-2 rounded-full ${online ? (warning ? "bg-rose-500 animate-pulse" : "bg-emerald-500") : "bg-white/5"}`} />
- <span className={`text-xs font-semibold tracking-wider ${isSelected ? "text-white" : "text-white/60"}`}>{label}</span>
+ <div className={`w-2 h-2 rounded-full ${online ? (warning ? "bg-rose-500 animate-pulse" : "bg-emerald-500") : "bg-[#FFCE99]/32"}`} />
+ <span className={`text-xs font-semibold tracking-wider ${isSelected ? "text-white" : "text-white/[0.75]"}`}>{label}</span>
  </div>
- <span className="text-xs text-white/20 font-semibold tracking-wide">{type}</span>
+ <span className="text-xs text-white/[0.45] font-semibold tracking-wide">{type}</span>
  </div>
- {telemetry && <div className="text-xs text-white/40">{telemetry}</div>}
+ {telemetry && <div className="text-xs text-white/[0.6]">{telemetry}</div>}
  </button>
  );
 }
@@ -330,7 +330,7 @@ function DeploymentCard({ id, label, type, online, isSelected, onClick, telemetr
 function StatChip({ label, value, color }: { label: string; value: string; color: string }) {
  return (
  <div className="flex flex-col items-center">
- <span className="text-xs text-white/20 font-semibold tracking-wide mb-1">{label}</span>
+ <span className="text-xs text-white/[0.45] font-semibold tracking-wide mb-1">{label}</span>
  <span className={` text-sm font-semibold tabular-nums ${color} tracking-wide`}>{value}</span>
  </div>
  );

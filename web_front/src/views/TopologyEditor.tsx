@@ -82,7 +82,7 @@ async function api<T>(path: string, opts?: RequestInit): Promise<T> {
 
 // ── 스타일 상수 ───────────────────────────────────────────────────────────────
 
-const INP = "bg-white/5 border border-white/[0.05] rounded px-2 py-1 text-xs text-white/90 w-full focus:outline-none focus:border-white/20";
+const INP = "bg-[#FFCE99]/32 border border-white/[0.1] rounded px-2 py-1 text-xs text-white/90 w-full focus:outline-none focus:border-white/[0.08]";
 const SEL = `${INP} cursor-pointer`;
 const BTN = (c: string) => `px-2 py-1 text-xs font-bold tracking-wider rounded border transition-colors ${c}`;
 
@@ -168,7 +168,7 @@ export default function TopologyEditor() {
   const H = canvas.height;
   ctx.clearRect(0, 0, W, H);
 
-  ctx.fillStyle = "#0a0a0a";
+  ctx.fillStyle = "#241509";
   ctx.fillRect(0, 0, W, H);
 
   const scale = Math.min(W / mapInfo.width, H / mapInfo.height) * 0.95;
@@ -180,7 +180,7 @@ export default function TopologyEditor() {
   if (img) {
    ctx.drawImage(img, offX, offY, mapInfo.width * scale, mapInfo.height * scale);
   } else {
-   ctx.fillStyle = "#1a1a1a";
+   ctx.fillStyle = "#3a2414";
    ctx.fillRect(offX, offY, mapInfo.width * scale, mapInfo.height * scale);
   }
 
@@ -595,7 +595,7 @@ export default function TopologyEditor() {
    <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
     {/* 툴바 */}
-    <div className="flex-none flex items-center gap-2 px-3 py-2 bg-black/20 border-b border-white/[0.05]">
+    <div className="flex-none flex items-center gap-2 px-3 py-2 bg-[#FFCE99]/32 border-b border-white/[0.1]">
      <select
       className={`${SEL} w-40`}
       value={selMap}
@@ -608,20 +608,20 @@ export default function TopologyEditor() {
      <div className="w-px h-5 bg-white/10" />
 
      {([
-      ["select", "◈ 선택", "text-white/60 border-white/[0.05] hover:text-white"],
-      ["node",   "⊕ 노드", "text-white/90 border-white/[0.05] hover:bg-blue-950/40"],
-      ["edge",   "⇌ 엣지", "text-white/90 border-white/[0.05] hover:bg-purple-950/40"],
+      ["select", "◈ 선택", "text-white/[0.75] border-white/[0.1] hover:text-white"],
+      ["node",   "⊕ 노드", "text-white/90 border-white/[0.1] hover:bg-blue-950/40"],
+      ["edge",   "⇌ 엣지", "text-white/90 border-white/[0.1] hover:bg-purple-950/40"],
      ] as [Mode, string, string][]).map(([m, label, color]) => (
       <button
        key={m}
        onClick={() => { setMode(m); setEdgeStart(null); setAddNode(null); setAddEdge(null); }}
        className={`px-3 py-1 text-xs font-bold tracking-wider rounded border transition-colors ${
-        mode === m ? color + " bg-opacity-50 brightness-150" : "border-white/[0.05] text-white/40 hover:text-white/90"
+        mode === m ? color + " bg-opacity-50 brightness-150" : "border-white/[0.1] text-white/[0.6] hover:text-white/90"
        } ${mode === m ? "ring-1 ring-inset ring-white/10" : ""}`}
       >{label}</button>
      ))}
 
-     <span className="text-xs text-white/40 ml-2">
+     <span className="text-xs text-white/[0.6] ml-2">
       {mode === "select"
        ? (isDragging ? "드래그로 노드 이동 중…" : "클릭으로 선택 / 드래그로 이동")
        : mode === "node" ? "빈 공간 클릭 → 노드 추가"
@@ -634,27 +634,27 @@ export default function TopologyEditor() {
      {hover && mapInfo && (
       <span className="text-xs">
        {hoverNode ? (
-        <span className="text-white/60">
+        <span className="text-white/[0.75]">
          <span style={{ color: NODE_COLOR[hoverNode.type] }}>{hoverNode.node_id}</span>
          {" "}x={hoverNode.x.toFixed(3)} y={hoverNode.y.toFixed(3)} yaw={hoverNode.yaw.toFixed(3)}
         </span>
        ) : (
-        <span className="text-white/50">
+        <span className="text-white/[0.68]">
          x={hover[0].toFixed(3)} y={hover[1].toFixed(3)}
         </span>
        )}
       </span>
      )}
 
-     <span className="text-xs text-white/40">
+     <span className="text-xs text-white/[0.6]">
       N:{nodes.length} / E:{edges.length}
      </span>
     </div>
 
     {/* 캔버스 */}
-    <div className="flex-1 relative overflow-hidden bg-black/40 backdrop-blur-xl">
+    <div className="flex-1 relative overflow-hidden bg-[#FFCE99]/14 backdrop-blur-xl">
      {!selMap && (
-      <div className="absolute inset-0 flex items-center justify-center text-white/30 text-sm select-none">
+      <div className="absolute inset-0 flex items-center justify-center text-white/[0.55] text-sm select-none">
        위 드롭다운에서 맵을 선택하세요
       </div>
      )}
@@ -672,34 +672,34 @@ export default function TopologyEditor() {
    </div>
 
    {/* ── 사이드 패널 ─────────────────────────────────────────────────── */}
-   <div className="w-64 flex-none flex flex-col bg-black/20 border-l border-white/[0.05] overflow-y-auto">
+   <div className="w-64 flex-none flex flex-col bg-[#FFCE99]/32 border-l border-white/[0.1] overflow-y-auto">
 
     {/* 범례 */}
-    <div className="px-3 py-2 border-b border-white/[0.05]">
-     <div className="text-xs text-white/40 tracking-wide mb-1.5">범례</div>
+    <div className="px-3 py-2 border-b border-white/[0.1]">
+     <div className="text-xs text-white/[0.6] tracking-wide mb-1.5">범례</div>
      <div className="flex flex-col gap-1">
       {[["WAYPOINT","#60a5fa"],["STATION","#fbbf24"],["CHARGER","#4ade80"]].map(([t,c]) => (
        <div key={t} className="flex items-center gap-2">
         <div className="w-3 h-3 rounded-full" style={{ background: c }} />
-        <span className="text-xs text-white/60">{t}</span>
+        <span className="text-xs text-white/[0.75]">{t}</span>
        </div>
       ))}
       <div className="flex items-center gap-2 mt-0.5">
-       <div className="w-6 h-px bg-[#4b5563]" />
-       <span className="text-xs text-white/60">엣지 (열림)</span>
+       <div className="w-6 h-px bg-[#521C0D]/30" />
+       <span className="text-xs text-white/[0.75]">엣지 (열림)</span>
       </div>
       <div className="flex items-center gap-2">
-       <div className="w-6 h-px bg-[#6b2424]" />
-       <span className="text-xs text-white/60">엣지 (잠김)</span>
+       <div className="w-6 h-px bg-[#D5451B]/60" />
+       <span className="text-xs text-white/[0.75]">엣지 (잠김)</span>
       </div>
      </div>
     </div>
 
     {/* 에러 */}
     {err && (
-     <div className="mx-2 mt-2 px-2 py-1.5 bg-red-950/40 border border-white/[0.05] rounded text-xs text-white/90 flex justify-between">
+     <div className="mx-2 mt-2 px-2 py-1.5 bg-red-950/40 border border-white/[0.1] rounded text-xs text-white/90 flex justify-between">
       {err}
-      <button className="text-white/50 hover:text-white/90 ml-2" onClick={() => setErr("")}>✕</button>
+      <button className="text-white/[0.68] hover:text-white/90 ml-2" onClick={() => setErr("")}>✕</button>
      </div>
     )}
 
@@ -726,8 +726,8 @@ export default function TopologyEditor() {
        <input className={INP} type="number" step="0.01" value={addNode.yaw ?? 0} onChange={e => setAddNode(d => ({ ...d, yaw: +e.target.value }))} />
       </Field>
       <div className="flex gap-1 mt-2">
-       <button className={BTN("bg-green-900/40 text-white/70 border-white/[0.05] hover:bg-green-800/50 flex-1")} onClick={saveNode}>저장</button>
-       <button className={BTN("bg-white/5 text-white/50 border-white/[0.05] hover:text-white/90 flex-1")} onClick={() => setAddNode(null)}>취소</button>
+       <button className={BTN("bg-green-900/40 text-white/[0.82] border-white/[0.1] hover:bg-green-800/50 flex-1")} onClick={saveNode}>저장</button>
+       <button className={BTN("bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1] hover:text-white/90 flex-1")} onClick={() => setAddNode(null)}>취소</button>
       </div>
      </PanelSection>
     )}
@@ -739,10 +739,10 @@ export default function TopologyEditor() {
        <input className={INP} value={addEdge.edge_id ?? ""} onChange={e => setAddEdge(d => ({ ...d, edge_id: e.target.value }))} autoFocus />
       </Field>
       <Field label="출발 노드">
-       <input className={`${INP} text-white/50`} readOnly value={addEdge.startNode ?? ""} />
+       <input className={`${INP} text-white/[0.68]`} readOnly value={addEdge.startNode ?? ""} />
       </Field>
       <Field label="도착 노드">
-       <input className={`${INP} text-white/50`} readOnly value={addEdge.endNode ?? ""} />
+       <input className={`${INP} text-white/[0.68]`} readOnly value={addEdge.endNode ?? ""} />
       </Field>
       <Field label="방향">
        <select className={SEL} value={addEdge.direction} onChange={e => setAddEdge(d => ({ ...d, direction: e.target.value as FEdge["direction"] }))}>
@@ -754,8 +754,8 @@ export default function TopologyEditor() {
        <input className={INP} type="number" step="1" value={addEdge.weight ?? 1} onChange={e => setAddEdge(d => ({ ...d, weight: +e.target.value }))} />
       </Field>
       <div className="flex gap-1 mt-2">
-       <button className={BTN("bg-green-900/40 text-white/70 border-white/[0.05] hover:bg-green-800/50 flex-1")} onClick={saveEdge}>저장</button>
-       <button className={BTN("bg-white/5 text-white/50 border-white/[0.05] hover:text-white/90 flex-1")} onClick={() => setAddEdge(null)}>취소</button>
+       <button className={BTN("bg-green-900/40 text-white/[0.82] border-white/[0.1] hover:bg-green-800/50 flex-1")} onClick={saveEdge}>저장</button>
+       <button className={BTN("bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1] hover:text-white/90 flex-1")} onClick={() => setAddEdge(null)}>취소</button>
       </div>
      </PanelSection>
     )}
@@ -765,12 +765,12 @@ export default function TopologyEditor() {
      <PanelSection title={`노드 편집`}>
       <Field label="node_id">
        <input
-        className={`${INP} ${editNode.node_id !== selNode.node_id ? "border-indigo-400/60 text-indigo-200" : ""}`}
+        className={`${INP} ${editNode.node_id !== selNode.node_id ? "border-indigo-400/60 text-indigo-800" : ""}`}
         value={editNode.node_id}
         onChange={e => setEditNode(d => d && ({ ...d, node_id: e.target.value }))}
        />
        {editNode.node_id !== selNode.node_id && (
-        <div className="text-[9px] text-indigo-400 mt-0.5">ID 변경 (저장 시 cascade 적용)</div>
+        <div className="text-[9px] text-indigo-600 mt-0.5">ID 변경 (저장 시 cascade 적용)</div>
        )}
       </Field>
       <Field label="타입">
@@ -789,12 +789,12 @@ export default function TopologyEditor() {
       <Field label="yaw (rad)">
        <input className={INP} type="number" step="0.01" value={editNode.yaw} onChange={e => setEditNode(d => d && ({ ...d, yaw: +e.target.value }))} />
       </Field>
-      <div className="text-[10px] text-white/30 mt-1 mb-1">드래그로 위치를 변경할 수 있습니다</div>
+      <div className="text-[10px] text-white/[0.55] mt-1 mb-1">드래그로 위치를 변경할 수 있습니다</div>
       <div className="flex gap-1 mt-1">
-       <button className={BTN("bg-blue-900/40 text-white/70 border-white/[0.05] hover:bg-blue-800/50 flex-1")} onClick={updateNode}>저장</button>
-       <button className={BTN("bg-red-900/40 text-white/70 border-white/[0.05] hover:bg-red-800/50 flex-1")} onClick={deleteNode}>삭제</button>
+       <button className={BTN("bg-blue-900/40 text-white/[0.82] border-white/[0.1] hover:bg-blue-800/50 flex-1")} onClick={updateNode}>저장</button>
+       <button className={BTN("bg-red-900/40 text-white/[0.82] border-white/[0.1] hover:bg-red-800/50 flex-1")} onClick={deleteNode}>삭제</button>
       </div>
-      <button className={BTN("bg-white/5 text-white/50 border-white/[0.05] hover:text-white/90 w-full mt-1")} onClick={() => { setSelNodeId(null); setEditNode(null); }}>선택 해제</button>
+      <button className={BTN("bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1] hover:text-white/90 w-full mt-1")} onClick={() => { setSelNodeId(null); setEditNode(null); }}>선택 해제</button>
      </PanelSection>
     )}
 
@@ -803,15 +803,15 @@ export default function TopologyEditor() {
      <PanelSection title={`엣지 편집`}>
       <Field label="edge_id">
        <input
-        className={`${INP} ${editEdge.edge_id !== selEdge.edge_id ? "border-indigo-400/60 text-indigo-200" : ""}`}
+        className={`${INP} ${editEdge.edge_id !== selEdge.edge_id ? "border-indigo-400/60 text-indigo-800" : ""}`}
         value={editEdge.edge_id}
         onChange={e => setEditEdge(d => d && ({ ...d, edge_id: e.target.value }))}
        />
        {editEdge.edge_id !== selEdge.edge_id && (
-        <div className="text-[9px] text-indigo-400 mt-0.5">ID 변경</div>
+        <div className="text-[9px] text-indigo-600 mt-0.5">ID 변경</div>
        )}
       </Field>
-      <div className="text-xs text-white/50 mb-2 font-mono">
+      <div className="text-xs text-white/[0.68] mb-2 font-mono">
        {selEdge.startNode} → {selEdge.endNode}
       </div>
       <Field label="방향">
@@ -825,8 +825,8 @@ export default function TopologyEditor() {
         onClick={toggleLock}
         className={`px-2 py-1 text-xs font-bold rounded border w-full ${
          editEdge.isLocked
-          ? "bg-red-900/40 text-white/70 border-white/[0.05]"
-          : "bg-white/5 text-white/50 border-white/[0.05] hover:text-white/90"
+          ? "bg-red-900/40 text-white/[0.82] border-white/[0.1]"
+          : "bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1] hover:text-white/90"
         }`}
        >{editEdge.isLocked ? "잠김 — 클릭으로 해제" : "열림 — 클릭으로 잠금"}</button>
       </Field>
@@ -834,16 +834,16 @@ export default function TopologyEditor() {
        <input className={INP} type="number" step="1" value={editEdge.weight ?? 1} onChange={e => setEditEdge(d => d && ({ ...d, weight: +e.target.value }))} />
       </Field>
       <div className="flex gap-1 mt-2">
-       <button className={BTN("bg-blue-900/40 text-white/70 border-white/[0.05] hover:bg-blue-800/50 flex-1")} onClick={updateEdge}>저장</button>
-       <button className={BTN("bg-red-900/40 text-white/70 border-white/[0.05] hover:bg-red-800/50 flex-1")} onClick={deleteEdge}>삭제</button>
+       <button className={BTN("bg-blue-900/40 text-white/[0.82] border-white/[0.1] hover:bg-blue-800/50 flex-1")} onClick={updateEdge}>저장</button>
+       <button className={BTN("bg-red-900/40 text-white/[0.82] border-white/[0.1] hover:bg-red-800/50 flex-1")} onClick={deleteEdge}>삭제</button>
       </div>
-      <button className={BTN("bg-white/5 text-white/50 border-white/[0.05] hover:text-white/90 w-full mt-1")} onClick={() => { setSelEdgeId(null); setEditEdge(null); }}>선택 해제</button>
+      <button className={BTN("bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1] hover:text-white/90 w-full mt-1")} onClick={() => { setSelEdgeId(null); setEditEdge(null); }}>선택 해제</button>
      </PanelSection>
     )}
 
     {/* 기본 안내 */}
     {!addNode && !addEdge && !selNode && !selEdge && selMap && (
-     <div className="px-3 py-4 text-xs text-white/30 leading-relaxed space-y-1">
+     <div className="px-3 py-4 text-xs text-white/[0.55] leading-relaxed space-y-1">
       {mode === "select" && (
        <>
         <div>• 노드/엣지 클릭 → 선택 및 편집</div>
@@ -863,8 +863,8 @@ export default function TopologyEditor() {
 
 function PanelSection({ title, children }: { title: string; children: React.ReactNode }) {
  return (
-  <div className="border-b border-white/[0.05] px-3 py-3">
-   <div className="text-xs text-white/50 tracking-wide mb-2">{title}</div>
+  <div className="border-b border-white/[0.1] px-3 py-3">
+   <div className="text-xs text-white/[0.68] tracking-wide mb-2">{title}</div>
    {children}
   </div>
  );
@@ -873,7 +873,7 @@ function PanelSection({ title, children }: { title: string; children: React.Reac
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
  return (
   <div className="mb-1.5">
-   <div className="text-xs text-white/40 mb-0.5 tracking-wider">{label}</div>
+   <div className="text-xs text-white/[0.6] mb-0.5 tracking-wider">{label}</div>
    {children}
   </div>
  );

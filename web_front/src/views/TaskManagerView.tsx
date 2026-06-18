@@ -15,10 +15,10 @@ const ROBOTS = [
 ] as const;
 
 const TASK_COLORS: Record<string, string> = {
-  SUPPLY:  "bg-sky-500/10 border-sky-500/30 text-sky-300",
-  PROCESS: "bg-violet-500/10 border-violet-500/30 text-violet-300",
-  CHARGE:  "bg-emerald-500/10 border-emerald-500/30 text-emerald-300",
-  MOVE:    "bg-white/5 border-white/10 text-white/50",
+  SUPPLY:  "bg-sky-500/10 border-sky-500/30 text-sky-700",
+  PROCESS: "bg-violet-500/10 border-violet-500/30 text-violet-700",
+  CHARGE:  "bg-emerald-500/10 border-emerald-500/30 text-emerald-700",
+  MOVE:    "bg-[#FFCE99]/32 border-white/[0.12] text-white/[0.68]",
 };
 
 const STATUS_DOT: Record<string, string> = {
@@ -76,7 +76,7 @@ function isOnline(rosMessages: Record<string, RosMessage>, robotId: string): boo
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
 function statusDot(online: boolean, status?: string): string {
-  if (!online) return "bg-slate-600";
+  if (!online) return "bg-[#521C0D]/40";
   switch (status) {
     case "IDLE":                      return "bg-emerald-400";
     case "MOVING": case "WORKING":
@@ -93,11 +93,11 @@ function statusLabel(online: boolean, status?: string): string {
 function statusColor(online: boolean, status?: string): string {
   if (!online) return "text-slate-500";
   switch (status) {
-    case "IDLE":                      return "text-emerald-400";
+    case "IDLE":                      return "text-emerald-600";
     case "MOVING": case "WORKING":
-    case "CHARGING":                  return "text-amber-400";
-    case "ERROR":                     return "text-rose-400";
-    default:                          return "text-emerald-400";
+    case "CHARGING":                  return "text-amber-600";
+    case "ERROR":                     return "text-rose-600";
+    default:                          return "text-emerald-600";
   }
 }
 
@@ -239,7 +239,7 @@ export default function TaskManagerView({
     <div className="flex flex-col h-full bg-transparent overflow-hidden">
 
       {/* ── 상단 통계바 ─────────────────────────────────────────────────── */}
-      <div className="flex-none flex items-center justify-between px-6 py-2.5 bg-white/[0.02] border-b border-white/[0.05]">
+      <div className="flex-none flex items-center justify-between px-6 py-2.5 bg-[#FFCE99]/32 border-b border-white/[0.1]">
         <div className="flex items-center gap-8">
           <Stat label="Fleet Online" value={`${onlineCount}/${ROBOTS.length}`} />
           <Stat label="Active Tasks" value={String(activeCount)} />
@@ -249,11 +249,11 @@ export default function TaskManagerView({
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-violet-500/20 bg-violet-500/5">
             <div className="w-1 h-1 rounded-full bg-violet-400" />
-            <span className="text-[9px] font-bold tracking-widest text-violet-400/80 uppercase">RAG · MongoDB</span>
+            <span className="text-[9px] font-bold tracking-widest text-violet-600/80 uppercase">RAG · MongoDB</span>
           </div>
           <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border ${loading ? "border-amber-500/20 bg-amber-500/5" : "border-emerald-500/20 bg-emerald-500/5"}`}>
             <div className={`w-1 h-1 rounded-full ${loading ? "bg-amber-400 animate-pulse" : "bg-emerald-400"}`} />
-            <span className={`text-[9px] font-bold tracking-widest uppercase ${loading ? "text-amber-400/80" : "text-emerald-400/80"}`}>
+            <span className={`text-[9px] font-bold tracking-widest uppercase ${loading ? "text-amber-600/80" : "text-emerald-600/80"}`}>
               {loading ? "Generating..." : "AI Ready"}
             </span>
           </div>
@@ -264,12 +264,12 @@ export default function TaskManagerView({
       <div className="flex flex-1 overflow-hidden">
 
         {/* ══ 컬럼 1: Fleet AI ════════════════════════════════════════════ */}
-        <aside className="w-80 flex-none flex flex-col border-r border-white/[0.05] bg-white/[0.01]">
-          <div className="flex-none px-5 py-3.5 border-b border-white/[0.05]">
+        <aside className="w-80 flex-none flex flex-col border-r border-white/[0.1] bg-[#FFCE99]/32">
+          <div className="flex-none px-5 py-3.5 border-b border-white/[0.1]">
             <span className="sub-label">AI Command Interface</span>
             <div className="flex items-center justify-between mt-0.5">
               <h2 className="text-sm font-semibold text-white/80 tracking-wide">FLEET AI</h2>
-              <span className="text-[9px] text-violet-400/60 tracking-wide">Qwen + EXAONE</span>
+              <span className="text-[9px] text-violet-600/60 tracking-wide">Qwen + EXAONE</span>
             </div>
           </div>
 
@@ -280,7 +280,7 @@ export default function TaskManagerView({
             <div ref={chatEndRef} />
           </div>
 
-          <div className="flex-none p-4 border-t border-white/[0.05] space-y-2">
+          <div className="flex-none p-4 border-t border-white/[0.1] space-y-2">
             {listening && (
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20">
                 <div className="flex items-end gap-[2px]">
@@ -288,7 +288,7 @@ export default function TaskManagerView({
                     <div key={i} className="w-0.5 h-3 bg-orange-400 rounded animate-pulse" style={{ animationDelay: `${d}s` }} />
                   ))}
                 </div>
-                <span className="text-[10px] text-orange-300 font-medium flex-1">{interim || "듣는 중..."}</span>
+                <span className="text-[10px] text-orange-700 font-medium flex-1">{interim || "듣는 중..."}</span>
               </div>
             )}
             <div className="flex gap-2 items-end">
@@ -296,32 +296,32 @@ export default function TaskManagerView({
                 onKeyDown={handleKeyDown} rows={2}
                 placeholder={listening ? "음성 인식 중..." : "명령이나 질문 입력... (Enter 전송)"}
                 disabled={listening}
-                className="flex-1 bg-black/40 border border-white/[0.08] rounded-xl px-3 py-2 text-xs text-white/80 placeholder:text-white/15 focus:outline-none focus:border-white/20 resize-none disabled:opacity-40"
+                className="flex-1 bg-[#FFCE99]/14 border border-white/[0.1] rounded-xl px-3 py-2 text-xs text-white/80 placeholder:text-white/[0.4] focus:outline-none focus:border-white/[0.08] resize-none disabled:opacity-40"
               />
               <button onClick={toggleMic} disabled={loading}
                 className={`flex-none w-9 h-9 rounded-xl flex items-center justify-center border transition-all ${
-                  listening ? "bg-orange-500/30 border-orange-500/50 text-orange-300 animate-pulse"
-                            : "bg-white/[0.05] border-white/[0.08] text-white/40 hover:text-orange-300 hover:border-orange-500/30"
+                  listening ? "bg-orange-500/30 border-orange-500/50 text-orange-700 animate-pulse"
+                            : "bg-[#FFCE99]/32 border-white/[0.1] text-white/[0.6] hover:text-orange-700 hover:border-orange-500/30"
                 } disabled:opacity-30 disabled:cursor-not-allowed`}>
                 <MicIcon className="w-4 h-4" />
               </button>
               <button onClick={sendMessage} disabled={!input.trim() || listening || loading}
-                className="flex-none px-3 py-2 rounded-xl bg-sky-600/30 border border-sky-500/30 text-sky-300 text-xs font-semibold hover:bg-sky-600/50 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
+                className="flex-none px-3 py-2 rounded-xl bg-sky-600/30 border border-sky-500/30 text-sky-700 text-xs font-semibold hover:bg-sky-600/50 disabled:opacity-30 disabled:cursor-not-allowed transition-all">
                 {loading ? "..." : "전송"}
               </button>
             </div>
-            <p className="text-[10px] text-white/15">Shift+Enter 줄바꿈 · 🎙 음성 명령 가능</p>
+            <p className="text-[10px] text-white/[0.4]">Shift+Enter 줄바꿈 · 🎙 음성 명령 가능</p>
           </div>
         </aside>
 
         {/* ══ 컬럼 2: Fleet Monitor ════════════════════════════════════════ */}
-        <div className="w-80 flex-none flex flex-col border-r border-white/[0.05] bg-black/10">
+        <div className="w-80 flex-none flex flex-col border-r border-white/[0.1] bg-[#FFCE99]/32">
           {/* 헤더 + 검색 */}
-          <div className="flex-none px-4 pt-3.5 pb-3 border-b border-white/[0.05]">
+          <div className="flex-none px-4 pt-3.5 pb-3 border-b border-white/[0.1]">
             <div className="flex items-center justify-between mb-2.5">
               <div>
                 <span className="sub-label">Fleet Monitor</span>
-                <div className="text-xs font-semibold text-white/70 tracking-wide mt-0.5">
+                <div className="text-xs font-semibold text-white/[0.82] tracking-wide mt-0.5">
                   {onlineCount} / {ROBOTS.length} Online
                 </div>
               </div>
@@ -331,9 +331,9 @@ export default function TaskManagerView({
                 value={robotSearch}
                 onChange={e => setRobotSearch(e.target.value)}
                 placeholder="로봇 검색 (id · domain)..."
-                className="w-full bg-black/40 border border-white/[0.08] rounded-lg pl-7 pr-3 py-1.5 text-xs text-white/60 placeholder:text-white/15 focus:outline-none focus:border-white/20"
+                className="w-full bg-[#FFCE99]/14 border border-white/[0.1] rounded-lg pl-7 pr-3 py-1.5 text-xs text-white/[0.75] placeholder:text-white/[0.4] focus:outline-none focus:border-white/[0.08]"
               />
-              <svg className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/20" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="absolute left-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white/[0.45]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </div>
@@ -342,7 +342,7 @@ export default function TaskManagerView({
           {/* 로봇 카드 목록 */}
           <div className="flex-1 overflow-y-auto p-3 space-y-2">
             {visibleRobots.length === 0 ? (
-              <div className="flex items-center justify-center h-full text-white/15 text-xs">검색 결과 없음</div>
+              <div className="flex items-center justify-center h-full text-white/[0.4] text-xs">검색 결과 없음</div>
             ) : visibleRobots.map(r => {
               const online  = isOnline(rosMessages, r.id);
               const status  = robotStatuses[r.id];
@@ -371,13 +371,13 @@ export default function TaskManagerView({
 
         {/* ══ 컬럼 3: Task 목록 ════════════════════════════════════════════ */}
         <main className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-none px-5 pt-3.5 pb-3 border-b border-white/[0.05]">
+          <div className="flex-none px-5 pt-3.5 pb-3 border-b border-white/[0.1]">
             <span className="sub-label">Task Board</span>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               {["active", "all", "PENDING", "RUNNING", "COMPLETED", "FAILED"].map(tab => (
                 <button key={tab} onClick={() => setFilterStatus(tab)}
                   className={`px-3 py-1 text-[10px] font-semibold tracking-wide rounded-lg border transition-all ${
-                    filterStatus === tab ? "bg-white/10 border-white/20 text-white" : "border-white/[0.05] text-white/25 hover:text-white/50"
+                    filterStatus === tab ? "bg-white/10 border-white/[0.08] text-white" : "border-white/[0.1] text-white/[0.5] hover:text-white/[0.68]"
                   }`}>{tab}</button>
               ))}
             </div>
@@ -387,7 +387,7 @@ export default function TaskManagerView({
             {filtered.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center">
                 <div className="text-4xl mb-4 opacity-10">◻</div>
-                <p className="text-sm text-white/15 tracking-wide">No tasks found</p>
+                <p className="text-sm text-white/[0.4] tracking-wide">No tasks found</p>
               </div>
             ) : (
               <div className="space-y-3">
@@ -409,8 +409,8 @@ export default function TaskManagerView({
 function Stat({ label, value, warn }: { label: string; value: string; warn?: boolean }) {
   return (
     <div>
-      <div className="text-[10px] text-white/20 font-semibold tracking-widest uppercase">{label}</div>
-      <div className={`text-sm font-semibold mt-0.5 tabular-nums ${warn ? "text-rose-400" : "text-white/80"}`}>{value}</div>
+      <div className="text-[10px] text-white/[0.45] font-semibold tracking-widest uppercase">{label}</div>
+      <div className={`text-sm font-semibold mt-0.5 tabular-nums ${warn ? "text-rose-600" : "text-white/80"}`}>{value}</div>
     </div>
   );
 }
@@ -439,8 +439,8 @@ function RobotMonitorCard({
       title="클릭 → Fleet 탭에서 해당 로봇 확인"
       className={`group w-full cursor-pointer rounded-xl border px-4 py-3 transition-all duration-300 select-none ${
         online
-          ? "bg-white/[0.04] border-white/[0.10] hover:bg-white/[0.07] hover:border-white/20"
-          : "bg-transparent border-white/[0.04] opacity-55 hover:opacity-75 hover:border-white/[0.09]"
+          ? "bg-[#FFCE99]/32 border-white/[0.12] hover:bg-[#FFCE99]/32 hover:border-white/[0.08]"
+          : "bg-transparent border-white/[0.08] opacity-55 hover:opacity-75 hover:border-white/[0.11]"
       }`}
     >
       {/* 행 1: robot_id + 상태 도트 + 상태 텍스트 */}
@@ -454,15 +454,15 @@ function RobotMonitorCard({
 
       {/* 행 2: 노드 위치 + domain */}
       <div className="flex items-center justify-between mb-2">
-        <span className="text-[10px] text-white/35 font-mono truncate max-w-[70%]" title={nodeId ?? ""}>
-          {nodeId ? `📍 ${nodeId}` : <span className="text-white/15 italic">위치 없음</span>}
+        <span className="text-[10px] text-white/[0.55] font-mono truncate max-w-[70%]" title={nodeId ?? ""}>
+          {nodeId ? `📍 ${nodeId}` : <span className="text-white/[0.4] italic">위치 없음</span>}
         </span>
-        <span className="text-[9px] text-white/15 flex-none">DOM {robot.domain}</span>
+        <span className="text-[9px] text-white/[0.4] flex-none">DOM {robot.domain}</span>
       </div>
 
       {/* 행 3: 현재 태스크 */}
       {task ? (
-        <div className={`text-[10px] px-2 py-0.5 rounded border mb-2 truncate ${TASK_COLORS[task.type] ?? "bg-white/5 border-white/10 text-white/50"}`}
+        <div className={`text-[10px] px-2 py-0.5 rounded border mb-2 truncate ${TASK_COLORS[task.type] ?? "bg-[#FFCE99]/32 border-white/[0.12] text-white/[0.68]"}`}
           title={`${task.type} → ${task.targetNode}`}>
           {task.type} → {task.targetNode}
         </div>
@@ -474,18 +474,18 @@ function RobotMonitorCard({
       <div className="flex items-center gap-2">
         {batPct !== null ? (
           <>
-            <div className="flex-1 h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
+            <div className="flex-1 h-1.5 bg-[#FFCE99]/32 rounded-full overflow-hidden">
               <div
                 className={`h-full rounded-full transition-all ${batPct < 20 ? "bg-rose-500 animate-pulse" : batPct < 50 ? "bg-amber-400" : "bg-emerald-500"}`}
                 style={{ width: `${batPct}%` }}
               />
             </div>
-            <span className={`text-[10px] font-mono flex-none w-8 text-right ${isLowBat ? "text-rose-400 font-bold" : "text-white/40"}`}>
+            <span className={`text-[10px] font-mono flex-none w-8 text-right ${isLowBat ? "text-rose-600 font-bold" : "text-white/[0.6]"}`}>
               {batPct}%
             </span>
           </>
         ) : (
-          <div className="flex-1 h-1.5 bg-white/[0.03] rounded-full" />
+          <div className="flex-1 h-1.5 bg-[#FFCE99]/32 rounded-full" />
         )}
         {online && (
           <button
@@ -493,8 +493,8 @@ function RobotMonitorCard({
             title="충전소 이동 태스크 생성"
             className={`flex-none text-[9px] px-2 py-0.5 rounded border transition-all ${
               isLowBat
-                ? "bg-rose-500/20 border-rose-500/40 text-rose-300 hover:bg-rose-500/30"
-                : "border-white/[0.07] text-white/20 hover:text-white/55 hover:border-white/15"
+                ? "bg-rose-500/20 border-rose-500/40 text-rose-700 hover:bg-rose-500/30"
+                : "border-white/[0.1] text-white/[0.45] hover:text-white/55 hover:border-white/[0.13]"
             }`}
           >
             ⚡
@@ -504,7 +504,7 @@ function RobotMonitorCard({
 
       {/* Fleet 이동 힌트 */}
       <div className="h-3 mt-0.5 flex justify-end items-center opacity-0 group-hover:opacity-100 transition-opacity">
-        <span className="text-[8px] text-white/20">→ Fleet 보기</span>
+        <span className="text-[8px] text-white/[0.45]">→ Fleet 보기</span>
       </div>
     </div>
   );
@@ -529,12 +529,12 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
     <div className={`flex flex-col ${isUser ? "items-end" : "items-start"}`}>
       {isUser && msg.fromStt && (
         <div className="flex items-center gap-1 mb-0.5 px-1">
-          <MicIcon className="w-2.5 h-2.5 text-orange-400/60" />
-          <span className="text-[9px] text-orange-400/50">음성 입력</span>
+          <MicIcon className="w-2.5 h-2.5 text-orange-600/60" />
+          <span className="text-[9px] text-orange-600/50">음성 입력</span>
         </div>
       )}
       {!isUser && (
-        <span className="text-[10px] text-violet-400/70 font-semibold tracking-widest px-1 mb-0.5">
+        <span className="text-[10px] text-violet-600/70 font-semibold tracking-widest px-1 mb-0.5">
           FLEET AI {msg.fromStt && "🎙"}
         </span>
       )}
@@ -542,11 +542,11 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
         isUser
           ? `bg-sky-600/20 border text-sky-100 ${msg.fromStt ? "border-orange-500/30" : "border-sky-500/20"}`
           : msg.error
-            ? "bg-rose-500/10 border border-rose-500/20 text-rose-300"
-            : "bg-white/[0.04] border border-white/[0.07] text-white/75"
+            ? "bg-rose-500/10 border border-rose-500/20 text-rose-700"
+            : "bg-[#FFCE99]/32 border border-white/[0.1] text-white/75"
       }`}>
         {msg.loading
-          ? <span className="flex items-center gap-2 text-white/40">
+          ? <span className="flex items-center gap-2 text-white/[0.6]">
               <span className="flex gap-0.5">
                 {[0, 1, 2].map(i => (
                   <span key={i} className="w-1 h-1 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
@@ -563,7 +563,7 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
         <div className="w-full max-w-[92%] mt-1.5 space-y-1">
           <button
             onClick={() => setExpanded(e => !e)}
-            className="text-[10px] text-violet-400/60 hover:text-violet-400 flex items-center gap-1 px-1 transition-colors"
+            className="text-[10px] text-violet-600/60 hover:text-violet-600 flex items-center gap-1 px-1 transition-colors"
           >
             <span>{expanded ? "▾" : "▸"}</span>
             {msg.actions.length}개 액션 실행됨
@@ -584,16 +584,16 @@ function ActionCard({ action }: { action: AgentAction }) {
   return (
     <div className={`rounded-xl px-3 py-2 border text-xs ${ok ? "bg-emerald-500/8 border-emerald-500/20" : "bg-rose-500/8 border-rose-500/20"}`}>
       <div className="flex items-center gap-1.5 mb-1">
-        <span className={ok ? "text-emerald-400" : "text-rose-400"}>{ok ? "✓" : "✗"}</span>
-        <span className={`font-semibold ${ok ? "text-emerald-300" : "text-rose-300"}`}>{label}</span>
+        <span className={ok ? "text-emerald-600" : "text-rose-600"}>{ok ? "✓" : "✗"}</span>
+        <span className={`font-semibold ${ok ? "text-emerald-700" : "text-rose-700"}`}>{label}</span>
       </div>
-      <div className="text-white/30 font-mono text-[10px] mb-0.5">
+      <div className="text-white/[0.55] font-mono text-[10px] mb-0.5">
         {Object.entries(action.args).map(([k, v]) => (
-          <span key={k} className="mr-2"><span className="text-white/20">{k}:</span> <span className="text-white/45">{String(v)}</span></span>
+          <span key={k} className="mr-2"><span className="text-white/[0.45]">{k}:</span> <span className="text-white/45">{String(v)}</span></span>
         ))}
       </div>
-      {result?.message && <p className={`mt-0.5 text-[10px] ${ok ? "text-emerald-300/70" : "text-rose-300/70"}`}>{result.message}</p>}
-      {result?.error   && <p className="mt-0.5 text-[10px] text-rose-400">{result.error}</p>}
+      {result?.message && <p className={`mt-0.5 text-[10px] ${ok ? "text-emerald-700/70" : "text-rose-700/70"}`}>{result.message}</p>}
+      {result?.error   && <p className="mt-0.5 text-[10px] text-rose-600">{result.error}</p>}
     </div>
   );
 }
@@ -608,28 +608,28 @@ function MicIcon({ className }: { className?: string }) {
 }
 
 function TaskCard({ task, onCancel }: { task: FmsTask; onCancel: () => void }) {
-  const colorClass = TASK_COLORS[task.type] ?? "bg-white/5 border-white/10 text-white/50";
+  const colorClass = TASK_COLORS[task.type] ?? "bg-[#FFCE99]/32 border-white/[0.12] text-white/[0.68]";
   const dotClass   = STATUS_DOT[task.status] ?? "bg-white/20";
   const elapsed    = task.startedAt ? Math.floor((Date.now() - new Date(task.startedAt).getTime()) / 1000) : null;
   return (
-    <div className="glass-card !bg-white/[0.02] border-white/[0.06] p-4 hover:border-white/10 transition-all group">
+    <div className="glass-card !bg-[#FFCE99]/32 border-white/[0.1] p-4 hover:border-white/[0.12] transition-all group">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2.5">
           <div className={`w-1.5 h-1.5 rounded-full flex-none ${dotClass}`} />
           <span className={`text-[10px] font-bold tracking-widest px-2 py-0.5 rounded border ${colorClass}`}>{task.type}</span>
-          <span className="text-xs text-white/40 font-mono">→ {task.targetNode}</span>
+          <span className="text-xs text-white/[0.6] font-mono">→ {task.targetNode}</span>
         </div>
         {["PENDING", "ASSIGNED", "RUNNING"].includes(task.status) && (
-          <button onClick={onCancel} className="opacity-0 group-hover:opacity-100 text-white/20 hover:text-rose-400 text-sm transition-all">✕</button>
+          <button onClick={onCancel} className="opacity-0 group-hover:opacity-100 text-white/[0.45] hover:text-rose-600 text-sm transition-all">✕</button>
         )}
       </div>
-      <div className="flex items-center justify-between text-[10px] text-white/25">
+      <div className="flex items-center justify-between text-[10px] text-white/[0.5]">
         <div className="flex items-center gap-3">
           <span className={`font-semibold ${
-            task.status === "RUNNING" ? "text-emerald-400" : task.status === "ASSIGNED" ? "text-sky-400" :
-            task.status === "FAILED" ? "text-rose-400" : "text-amber-400"
+            task.status === "RUNNING" ? "text-emerald-600" : task.status === "ASSIGNED" ? "text-sky-600" :
+            task.status === "FAILED" ? "text-rose-600" : "text-amber-600"
           }`}>{task.status}</span>
-          {task.assignedRobotId && <span className="text-white/30 font-mono">@ {task.assignedRobotId}</span>}
+          {task.assignedRobotId && <span className="text-white/[0.55] font-mono">@ {task.assignedRobotId}</span>}
         </div>
         <div className="flex items-center gap-3">
           {elapsed !== null && <span className="font-mono">{elapsed}s</span>}
@@ -637,7 +637,7 @@ function TaskCard({ task, onCancel }: { task: FmsTask; onCancel: () => void }) {
           <span>{new Date(task.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</span>
         </div>
       </div>
-      {task.waitReason && <div className="mt-2 text-[10px] text-amber-400/60 italic">{task.waitReason}</div>}
+      {task.waitReason && <div className="mt-2 text-[10px] text-amber-600/60 italic">{task.waitReason}</div>}
     </div>
   );
 }

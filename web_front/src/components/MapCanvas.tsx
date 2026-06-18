@@ -50,7 +50,7 @@ const MapCanvas = forwardRef<MapCanvasHandle, Props>(
  const ctx = canvas.getContext("2d");
  if (!ctx) return;
 
- ctx.fillStyle = "#050505";
+ ctx.fillStyle = "#241509";
  ctx.fillRect(0, 0, size, size);
 
  if (!imageUrl) {
@@ -70,7 +70,7 @@ const MapCanvas = forwardRef<MapCanvasHandle, Props>(
  img.onload = () => {
  if (!canvasRef.current) return;
  const c = canvasRef.current.getContext("2d")!;
- c.fillStyle = "#050505";
+ c.fillStyle = "#241509";
  c.fillRect(0, 0, size, size);
  c.imageSmoothingEnabled = false;
  c.drawImage(img, 0, 0, size, size);
@@ -147,7 +147,7 @@ const MapCanvas = forwardRef<MapCanvasHandle, Props>(
  img.onerror = () => {
  const c = canvasRef.current?.getContext("2d");
  if (!c) return;
- c.fillStyle = "#050505";
+ c.fillStyle = "#241509";
  c.fillRect(0, 0, size, size);
  c.fillStyle = "rgba(80,80,80,0.4)";
  c.font = "9px monospace";

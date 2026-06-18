@@ -240,7 +240,7 @@ export default function TopologyMapView({
  if (W === 0 || H === 0) return;
  ctx.clearRect(0, 0, W, H);
 
- ctx.fillStyle = "#0a0a0a";
+ ctx.fillStyle = "#241509";
  ctx.fillRect(0, 0, W, H);
 
  const scale = Math.min(W / effectiveInfo.width, H / effectiveInfo.height) * 0.92;
@@ -253,7 +253,7 @@ export default function TopologyMapView({
  if (img && mapInfo) {
  ctx.drawImage(img, offX, offY, effectiveInfo.width * scale, effectiveInfo.height * scale);
  } else {
- ctx.fillStyle = "#111";
+ ctx.fillStyle = "#2e1b0e";
  ctx.fillRect(offX, offY, effectiveInfo.width * scale, effectiveInfo.height * scale);
  }
 
@@ -534,14 +534,14 @@ export default function TopologyMapView({
  // ── 렌더 ─────────────────────────────────────────────────────────────────
 
  return (
- <div className={`relative ${className} bg-black/20 border border-white/[0.05] overflow-hidden`}>
+ <div className={`relative ${className} bg-[#FFCE99]/32 border border-white/[0.1] overflow-hidden`}>
  {!mapInfo && !nodes.length && mapId && (
- <div className="absolute inset-0 flex items-center justify-center text-white/30 text-xs select-none">
+ <div className="absolute inset-0 flex items-center justify-center text-white/[0.55] text-xs select-none">
  맵 로딩 중…
  </div>
  )}
  {!mapInfo && nodes.length > 0 && (
- <div className="absolute top-1.5 left-2 text-xs text-white/30 pointer-events-none">
+ <div className="absolute top-1.5 left-2 text-xs text-white/[0.55] pointer-events-none">
  정적 맵 없음 — 노드 좌표계
  </div>
  )}
@@ -555,7 +555,7 @@ export default function TopologyMapView({
 
  {/* hover 노드 툴팁 — 우상단 */}
  {hover && (
- <div className="absolute top-1.5 right-2 text-xs text-white/60 bg-black/80 px-2 py-1 border border-white/[0.05] pointer-events-none z-10 shadow-lg">
+ <div className="absolute top-1.5 right-2 text-xs text-white/[0.75] bg-[#FFCE99]/14 px-2 py-1 border border-white/[0.1] pointer-events-none z-10 shadow-lg">
  <span style={{ color: activeNodeMap[hover.node_id] ? robotColorMap[activeNodeMap[hover.node_id]] : NODE_COLOR[hover.type] }}>
  {hover.node_id}
  </span>
@@ -565,12 +565,12 @@ export default function TopologyMapView({
 
  {/* hover 엣지 툴팁 — 우상단 (노드 툴팁 아래) */}
  {hoverEdge && !hover && (
- <div className="absolute top-1.5 right-2 flex flex-col gap-0.5 text-xs bg-black/80 px-2 py-1 border border-white/[0.05] pointer-events-none z-10 shadow-lg">
+ <div className="absolute top-1.5 right-2 flex flex-col gap-0.5 text-xs bg-[#FFCE99]/14 px-2 py-1 border border-white/[0.1] pointer-events-none z-10 shadow-lg">
  <div className="flex items-center gap-2 text-white/90">
  <span className="font-bold text-white/90">{hoverEdge.edge_id}</span>
  {hoverEdge.isLocked && <span className="text-white/90">🔒 잠김</span>}
  </div>
- <div className="text-white/60">
+ <div className="text-white/[0.75]">
  {hoverEdge.startNode} {hoverEdge.direction === "BOTH_WAY" ? "↔" : "→"} {hoverEdge.endNode}
  </div>
  <div className="text-white/90/80">
@@ -590,13 +590,13 @@ export default function TopologyMapView({
  {(["WAYPOINT","STATION","CHARGER"] as const).map(t => (
  <div key={t} className="flex items-center gap-1">
  <div className="w-2 h-2 rounded-full" style={{ background: NODE_COLOR[t] }} />
- <span className="text-xs text-white/40">{t}</span>
+ <span className="text-xs text-white/[0.6]">{t}</span>
  </div>
  ))}
  </div>
 
  {/* N/E 통계 — 좌하단 */}
- <div className="absolute bottom-1.5 left-2 text-xs text-white/30 pointer-events-none">
+ <div className="absolute bottom-1.5 left-2 text-xs text-white/[0.55] pointer-events-none">
  N:{nodes.length} / E:{edges.length}
  {activePaths.length > 0 && (
  <span className="ml-2 text-white/90">{activePaths.length}대 활성</span>

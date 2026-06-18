@@ -233,7 +233,7 @@ export default function NavMapCanvas({
  if (img) {
  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
  } else {
- ctx.fillStyle = "#080808";
+ ctx.fillStyle = "#241509";
  ctx.fillRect(0, 0, canvas.width, canvas.height);
  }
 
@@ -914,14 +914,14 @@ export default function NavMapCanvas({
  const hEdge = hoveredEdgeId && !hNode ? topoEdgesRef.current.find(e => e.edge_id === hoveredEdgeId) : null;
 
  return (
- <div className="flex flex-col h-full bg-black/40 backdrop-blur-xl">
+ <div className="flex flex-col h-full bg-[#FFCE99]/14 backdrop-blur-xl">
 
  {/* ── 툴바 ──────────────────────────────────────────────────────────── */}
- <div className="flex-none flex items-center gap-2 px-3 py-1.5 border-b border-[#111] bg-black/20 flex-wrap">
+ <div className="flex-none flex items-center gap-2 px-3 py-1.5 border-b border-[#521C0D]/10 bg-[#FFCE99]/32 flex-wrap">
 
  {/* 맵 선택 */}
  <div className="flex items-center gap-1.5">
- <span className="text-xs text-white/40 tracking-wide">MAP</span>
+ <span className="text-xs text-white/[0.6] tracking-wide">MAP</span>
  <select
  value={selectedMap}
  onChange={async (e) => {
@@ -946,8 +946,8 @@ export default function NavMapCanvas({
  setAssignLoading(false);
  }
  }}
- className={`text-xs bg-black/20 border text-white/90 px-2 py-0.5 max-w-[160px] truncate ${
- assignLoading ? "border-white/[0.05] text-white/90" : "border-white/[0.05]"
+ className={`text-xs bg-[#FFCE99]/32 border text-white/90 px-2 py-0.5 max-w-[160px] truncate ${
+ assignLoading ? "border-white/[0.1] text-white/90" : "border-white/[0.1]"
  }`}
  >
  {availableMaps.length === 0 && <option value="">맵 없음</option>}
@@ -958,11 +958,11 @@ export default function NavMapCanvas({
  )}
  </div>
 
- <div className="w-px h-4 bg-white/5" />
+ <div className="w-px h-4 bg-[#FFCE99]/32" />
 
  {/* 로봇 선택 */}
  <div className="flex items-center gap-1.5">
- <span className="text-xs text-white/40 tracking-wide">ROBOT</span>
+ <span className="text-xs text-white/[0.6] tracking-wide">ROBOT</span>
  <div className="flex">
  <button
  onClick={() => {
@@ -970,10 +970,10 @@ export default function NavMapCanvas({
  const allSelected = allIds.every((id) => selectedBots.has(id));
  setSelectedBots(allSelected ? new Set() : new Set(allIds));
  }}
- className={`px-2 py-0.5 text-xs font-bold border-r border-white/[0.05] transition-all ${
+ className={`px-2 py-0.5 text-xs font-bold border-r border-white/[0.1] transition-all ${
  TB3_ROBOTS.every((r) => selectedBots.has(r.id))
- ? "bg-white text-black"
- : "text-white/50 hover:text-white/90"
+ ? "bg-[#521C0D] text-[#F4E7E1]"
+ : "text-white/[0.68] hover:text-white/90"
  }`}
  >
  ALL
@@ -993,7 +993,7 @@ export default function NavMapCanvas({
  return next;
  });
  }}
- className="relative px-2 py-0.5 text-xs font-bold border-r border-white/[0.05] last:border-0 transition-all"
+ className="relative px-2 py-0.5 text-xs font-bold border-r border-white/[0.1] last:border-0 transition-all"
  style={isOn
  ? { background: r.color, color: "#000" }
  : { color: hasPos ? r.color + "66" : "#2a2a2a" }}
@@ -1004,7 +1004,7 @@ export default function NavMapCanvas({
  )}
  {assignments[r.id] && (
  <span
- className="absolute -bottom-3 left-0 right-0 text-center text-[7px] text-white/50 truncate"
+ className="absolute -bottom-3 left-0 right-0 text-center text-[7px] text-white/[0.68] truncate"
  title={assignments[r.id]}
  >
  {assignments[r.id].length > 6 ? assignments[r.id].slice(0, 6) + "…" : assignments[r.id]}
@@ -1016,15 +1016,15 @@ export default function NavMapCanvas({
  </div>
  </div>
 
- <div className="w-px h-4 bg-white/5" />
+ <div className="w-px h-4 bg-[#FFCE99]/32" />
 
  {/* 조작 토글 */}
  <button
  onClick={() => setInteractive((v) => !v)}
  className={`px-3 py-1 text-xs font-bold tracking-wider border transition-all ${
  interactive
- ? "border-white/[0.05] text-white/90 bg-blue-950/20"
- : "border-white/[0.05] text-white/30 hover:text-white/60"
+ ? "border-white/[0.1] text-white/90 bg-blue-950/20"
+ : "border-white/[0.1] text-white/[0.55] hover:text-white/[0.75]"
  }`}
  >
  {interactive ? "● 조작 중" : "○ 보기"}
@@ -1036,8 +1036,8 @@ export default function NavMapCanvas({
  onClick={() => setHomeMode((v) => !v)}
  className={`px-3 py-1 text-xs font-bold tracking-wider border transition-all ${
  homeMode
- ? "border-white/[0.05] text-white/90 bg-green-950/20"
- : "border-white/[0.05] text-white/30 hover:text-white/60"
+ ? "border-white/[0.1] text-white/90 bg-green-950/20"
+ : "border-white/[0.1] text-white/[0.55] hover:text-white/[0.75]"
  }`}
  >
  {homeMode ? "● 홈 설정" : "⌂ 홈"}
@@ -1049,8 +1049,8 @@ export default function NavMapCanvas({
  onClick={() => setShowTopology((v) => !v)}
  className={`px-3 py-1 text-xs font-bold tracking-wider border transition-all ${
  showTopology
- ? "border-white/[0.05] text-white/90 bg-amber-950/20"
- : "border-white/[0.05] text-white/30 hover:text-white/60"
+ ? "border-white/[0.1] text-white/90 bg-amber-950/20"
+ : "border-white/[0.1] text-white/[0.55] hover:text-white/[0.75]"
  }`}
  title={`노드 ${topoStats.n}개 / 엣지 ${topoStats.e}개`}
  >
@@ -1061,13 +1061,13 @@ export default function NavMapCanvas({
  {interactive && (
  <div className="flex items-center gap-3">
  <span className="flex items-center gap-1 text-xs ">
- <kbd className="px-1 py-0.5 border border-white/[0.05] text-white/40 text-xs">L</kbd>
+ <kbd className="px-1 py-0.5 border border-white/[0.1] text-white/[0.6] text-xs">L</kbd>
  <span className={homeMode ? "text-white/90/70" : "text-white/90/70"}>
  {homeMode ? "홈" : "목표"}
  </span>
  </span>
  <span className="flex items-center gap-1 text-xs ">
- <kbd className="px-1 py-0.5 border border-white/[0.05] text-white/40 text-xs">R</kbd>
+ <kbd className="px-1 py-0.5 border border-white/[0.1] text-white/[0.6] text-xs">R</kbd>
  <span className="text-white/90/70">초기위치</span>
  </span>
  </div>
@@ -1084,8 +1084,8 @@ export default function NavMapCanvas({
  onClick={() => setShowCamera((v) => !v)}
  className={`ml-auto px-3 py-1 text-xs font-bold tracking-wider border transition-all ${
  showCamera
- ? "border-white/[0.05] text-white/90 bg-green-950/20"
- : "border-white/[0.05] text-white/30 hover:text-white/60"
+ ? "border-white/[0.1] text-white/90 bg-green-950/20"
+ : "border-white/[0.1] text-white/[0.55] hover:text-white/[0.75]"
  }`}
  >
  ◉ CAM
@@ -1093,10 +1093,10 @@ export default function NavMapCanvas({
  </div>
 
  {/* ── 본문 ─────────────────────────────────────────────────────────── */}
- <div ref={wrapRef} className="flex-1 relative overflow-hidden flex items-center justify-center bg-black/40 backdrop-blur-xl">
+ <div ref={wrapRef} className="flex-1 relative overflow-hidden flex items-center justify-center bg-[#FFCE99]/14 backdrop-blur-xl">
 
  {!canvasReady ? (
- <span className="text-xs text-white/30 tracking-wide">
+ <span className="text-xs text-white/[0.55] tracking-wide">
  {availableMaps.length === 0 ? "맵 파일 없음" : "맵 로딩 중…"}
  </span>
  ) : (
@@ -1114,14 +1114,14 @@ export default function NavMapCanvas({
 
  {/* hover 노드 정보 */}
  {hNode && (
- <div className="absolute top-2 right-2 bg-black/80 border border-white/[0.05] px-2 py-1.5 pointer-events-none">
+ <div className="absolute top-2 right-2 bg-[#FFCE99]/14 border border-white/[0.1] px-2 py-1.5 pointer-events-none">
  <div className="text-xs font-bold" style={{ color: NODE_COLOR[hNode.type] ?? "#888" }}>
  {hNode.node_id}
  </div>
- <div className="text-xs text-white/60 mt-0.5">
+ <div className="text-xs text-white/[0.75] mt-0.5">
  x={hNode.x.toFixed(3)} y={hNode.y.toFixed(3)}
  </div>
- <div className="text-xs text-white/60">
+ <div className="text-xs text-white/[0.75]">
  yaw={hNode.yaw.toFixed(3)} <span style={{ color: NODE_COLOR[hNode.type] }}>{hNode.type}</span>
  </div>
  {onNodeClick && (
@@ -1132,12 +1132,12 @@ export default function NavMapCanvas({
 
  {/* hover 엣지 정보 */}
  {hEdge && (
- <div className="absolute top-2 right-2 bg-black/80 border border-white/[0.05] px-2 py-1.5 pointer-events-none z-10 shadow-lg">
+ <div className="absolute top-2 right-2 bg-[#FFCE99]/14 border border-white/[0.1] px-2 py-1.5 pointer-events-none z-10 shadow-lg">
  <div className="flex items-center gap-2 text-white/90">
  <span className="text-xs font-bold text-white/90">{hEdge.edge_id}</span>
  {hEdge.isLocked && <span className="text-xs text-white/90">🔒 잠김</span>}
  </div>
- <div className="text-xs text-white/60 mt-0.5">
+ <div className="text-xs text-white/[0.75] mt-0.5">
  {hEdge.startNode} {hEdge.direction === "BOTH_WAY" ? "↔" : "→"} {hEdge.endNode}
  </div>
  <div className="text-xs text-white/90/80">
@@ -1148,15 +1148,15 @@ export default function NavMapCanvas({
 
  {/* 카메라 오버레이 */}
  {showCamera && socket && canvasReady && (
- <div className="absolute bottom-3 right-3 w-56 z-10 shadow-2xl shadow-black/80 border border-white/[0.05]">
- <div className="flex items-center justify-between px-2 py-1 bg-black/20 border-b border-white/[0.05]">
+ <div className="absolute bottom-3 right-3 w-56 z-10 shadow-2xl shadow-black/80 border border-white/[0.1]">
+ <div className="flex items-center justify-between px-2 py-1 bg-[#FFCE99]/32 border-b border-white/[0.1]">
  <span
  className="text-xs font-bold tracking-wide"
  style={{ color: cameraRobotMeta?.color ?? "#888" }}
  >
  ◉ {cameraRobotMeta?.label ?? cameraBot}{selectedBots.size > 1 && ` (+${selectedBots.size - 1})`}
  </span>
- <button onClick={() => setShowCamera(false)} className="text-xs text-white/30 hover:text-white/60">✕</button>
+ <button onClick={() => setShowCamera(false)} className="text-xs text-white/[0.55] hover:text-white/[0.75]">✕</button>
  </div>
  <CameraFeed botId={cameraBot} label={cameraRobotMeta?.label ?? cameraBot} socket={socket} />
  </div>
@@ -1164,7 +1164,7 @@ export default function NavMapCanvas({
 
  {/* 범례 (좌상단) */}
  {canvasReady && (
- <div className="absolute top-2 left-2 flex flex-col gap-1 bg-black/40 backdrop-blur-xl/90 px-2 py-1.5 border border-[#111]">
+ <div className="absolute top-2 left-2 flex flex-col gap-1 bg-[#FFCE99]/14 backdrop-blur-xl/90 px-2 py-1.5 border border-[#521C0D]/10">
  {TB3_ROBOTS.map((r) => {
  const isOn = selectedBots.has(r.id);
  const hasPos = rosMessages[`/${r.id}/amcl_pose`]?.data != null;
@@ -1180,7 +1180,7 @@ export default function NavMapCanvas({
  className={`flex items-center gap-1.5 text-left transition-all ${isOn ? "opacity-100" : "opacity-40 hover:opacity-70"}`}
  >
  <span className="w-2 h-2 rounded-full flex-none" style={{ background: r.color, opacity: hasPos ? 1 : 0.2 }} />
- <span className={`text-xs ${hasPos ? "text-white/60" : "text-white/30"}`}>{r.label}</span>
+ <span className={`text-xs ${hasPos ? "text-white/[0.75]" : "text-white/[0.55]"}`}>{r.label}</span>
  {hasPlan && <span className="text-[6px]" style={{ color: r.color }}>▶ 경로</span>}
  </button>
  );
@@ -1188,14 +1188,14 @@ export default function NavMapCanvas({
  {/* 토폴로지 범례 */}
  {showTopology && topoStats.n > 0 && (
  <>
- <div className="h-px bg-white/5 my-0.5" />
+ <div className="h-px bg-[#FFCE99]/32 my-0.5" />
  {(["WAYPOINT","STATION","CHARGER"] as const).map(t => (
  <div key={t} className="flex items-center gap-1.5">
  <div className="w-2 h-2 rounded-full flex-none" style={{ background: NODE_COLOR[t] }} />
- <span className="text-[7px] text-white/40">{t}</span>
+ <span className="text-[7px] text-white/[0.6]">{t}</span>
  </div>
  ))}
- <div className="text-[7px] text-white/30">E:{topoStats.e}</div>
+ <div className="text-[7px] text-white/[0.55]">E:{topoStats.e}</div>
  </>
  )}
  </div>
@@ -1204,8 +1204,8 @@ export default function NavMapCanvas({
 
  {/* ── 하단 정보 바 ─────────────────────────────────────────────────── */}
  {mapInfo && (
- <div className="flex-none flex gap-4 px-3 py-1 border-t border-[#0a0a0a] bg-[#070707] text-xs text-white/30">
- <span className="text-white/30">{selectedMap}</span>
+ <div className="flex-none flex gap-4 px-3 py-1 border-t border-[#521C0D]/10 bg-[#FFCE99]/14 text-xs text-white/[0.55]">
+ <span className="text-white/[0.55]">{selectedMap}</span>
  <span>{mapInfo.width}×{mapInfo.height}px</span>
  <span>{mapInfo.resolution}m/px</span>
  <span>원점 ({mapInfo.originX.toFixed(2)}, {mapInfo.originY.toFixed(2)})</span>

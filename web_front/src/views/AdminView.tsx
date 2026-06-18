@@ -73,9 +73,9 @@ async function api<T>(path: string, opts?: RequestInit): Promise<T> {
 
 // ── 공통 스타일 ───────────────────────────────────────────────────────────────
 
-const TH = "px-3 py-2 text-left text-xs font-bold tracking-wide text-white/50 whitespace-nowrap";
+const TH = "px-3 py-2 text-left text-xs font-bold tracking-wide text-white/[0.68] whitespace-nowrap";
 const TD = "px-3 py-2 text-xs text-white/90 whitespace-nowrap";
-const INP = "bg-white/5 border border-white/[0.05] rounded px-2 py-1 text-xs text-white/90 w-full focus:outline-none focus:border-white/[0.05]";
+const INP = "bg-[#FFCE99]/32 border border-white/[0.1] rounded px-2 py-1 text-xs text-white/90 w-full focus:outline-none focus:border-white/[0.1]";
 const SEL = `${INP} cursor-pointer`;
 const BTN = (color: string) =>
  `px-2 py-0.5 text-xs font-bold tracking-wider rounded border transition-colors ${color}`;
@@ -85,7 +85,7 @@ const STATUS_COLOR: Record<RobotStatus, string> = {
  MOVING: "text-white/90",
  WORKING: "text-white/90",
  ERROR: "text-white/90",
- OFFLINE: "text-white/50",
+ OFFLINE: "text-white/[0.68]",
 };
 
 const TASK_STATUS_COLOR: Record<TaskStatus, string> = {
@@ -97,10 +97,10 @@ const TASK_STATUS_COLOR: Record<TaskStatus, string> = {
 };
 
 const TASK_TYPE_COLOR: Record<TaskType, string> = {
- SUPPLY: "bg-blue-900/40 text-white/70 border-white/[0.05]",
- PROCESS: "bg-yellow-900/40 text-white/70 border-white/[0.05]",
- CHARGE: "bg-green-900/40 text-white/70 border-white/[0.05]",
- MOVE: "bg-purple-900/40 text-white/70 border-white/[0.05]",
+ SUPPLY: "bg-blue-900/40 text-white/[0.82] border-white/[0.1]",
+ PROCESS: "bg-yellow-900/40 text-white/[0.82] border-white/[0.1]",
+ CHARGE: "bg-green-900/40 text-white/[0.82] border-white/[0.1]",
+ MOVE: "bg-purple-900/40 text-white/[0.82] border-white/[0.1]",
 };
 
 // ── 섹션: 로봇 ───────────────────────────────────────────────────────────────
@@ -168,39 +168,39 @@ function RobotSection({ liveStatuses }: { liveStatuses: Record<string, string> }
  {err && <ErrBar msg={err} onClose={() => setErr("")} />}
  <TableWrap>
  <thead>
- <tr className="border-b border-white/[0.05]">
+ <tr className="border-b border-white/[0.1]">
  {["robot_id","ip","도메인 ID","상태","현재 위치",""].map(h => <th key={h} className={TH}>{h}</th>)}
  </tr>
  </thead>
  <tbody>
  {adding && (
- <tr className="border-b border-white/[0.05] bg-white/5">
+ <tr className="border-b border-white/[0.1] bg-[#FFCE99]/32">
  <td className={TD}><input className={INP} placeholder="tb3_01" value={addDraft.robot_id} onChange={e => setAddDraft(d => ({ ...d, robot_id: e.target.value }))} /></td>
  <td className={TD}><input className={INP} placeholder="192.168.0.10" value={addDraft.ip} onChange={e => setAddDraft(d => ({ ...d, ip: e.target.value }))} /></td>
  <td className={TD}><input className={INP} type="number" value={addDraft.ros_domain_id} onChange={e => setAddDraft(d => ({ ...d, ros_domain_id: +e.target.value }))} /></td>
- <td className={TD} colSpan={2}><span className="text-white/40">—</span></td>
+ <td className={TD} colSpan={2}><span className="text-white/[0.6]">—</span></td>
  <td className={TD}>
  <div className="flex gap-1">
- <button className={BTN("bg-green-900/40 text-white/70 border-white/[0.05] hover:bg-green-800/50")} onClick={add}>저장</button>
- <button className={BTN("bg-white/5 text-white/50 border-white/[0.05] hover:text-white/90")} onClick={() => setAdding(false)}>취소</button>
+ <button className={BTN("bg-green-900/40 text-white/[0.82] border-white/[0.1] hover:bg-green-800/50")} onClick={add}>저장</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1] hover:text-white/90")} onClick={() => setAdding(false)}>취소</button>
  </div>
  </td>
  </tr>
  )}
  {robots.length === 0 && !adding && (
- <tr><td colSpan={6} className="px-3 py-6 text-center text-white/30 text-xs">등록된 로봇이 없습니다</td></tr>
+ <tr><td colSpan={6} className="px-3 py-6 text-center text-white/[0.55] text-xs">등록된 로봇이 없습니다</td></tr>
  )}
  {robots.map(r => {
  const isEdit = editId === r.robot_id;
  const idChanged = isEdit && editDraft.newId !== r.robot_id;
  return (
- <tr key={r.robot_id} className={`border-b border-white/[0.05] hover:bg-white/10 transition-colors ${isEdit ? "bg-indigo-950/20" : ""}`}>
+ <tr key={r.robot_id} className={`border-b border-white/[0.1] hover:bg-white/10 transition-colors ${isEdit ? "bg-indigo-950/20" : ""}`}>
  <td className={TD}>
  {isEdit ? (
  <div className="flex items-center gap-1">
- <input className={`${INP} w-28 ${idChanged ? "border-indigo-400/60 text-indigo-200" : ""}`}
+ <input className={`${INP} w-28 ${idChanged ? "border-indigo-400/60 text-indigo-800" : ""}`}
  value={editDraft.newId} onChange={e => setEditDraft(d => ({ ...d, newId: e.target.value }))} autoFocus />
- {idChanged && <span className="text-[9px] bg-indigo-500/20 text-indigo-300 px-1 py-0.5 rounded whitespace-nowrap">ID변경</span>}
+ {idChanged && <span className="text-[9px] bg-indigo-500/20 text-indigo-700 px-1 py-0.5 rounded whitespace-nowrap">ID변경</span>}
  </div>
  ) : r.robot_id}
  </td>
@@ -227,7 +227,7 @@ function RobotSection({ liveStatuses }: { liveStatuses: Record<string, string> }
  <span className="inline-flex items-center gap-1.5">
  {isLive && (
  <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${
- display === "OFFLINE" ? "bg-[#555]" :
+ display === "OFFLINE" ? "bg-[#521C0D]/40" :
  display === "IDLE" ? "bg-green-400" :
  display === "MOVING" ? "bg-blue-400" :
  display === "WORKING" ? "bg-yellow-400": "bg-red-400"
@@ -238,23 +238,23 @@ function RobotSection({ liveStatuses }: { liveStatuses: Record<string, string> }
  );
  })()}
  </td>
- <td className={TD}>{r.location ?? <span className="text-white/40">—</span>}</td>
+ <td className={TD}>{r.location ?? <span className="text-white/[0.6]">—</span>}</td>
  <td className={TD}>
  {delConfirm === r.robot_id ? (
  <div className="flex gap-1 items-center">
  <span className="text-white/90 text-xs">삭제?</span>
- <button className={BTN("bg-red-900/40 text-white/70 border-white/[0.05] hover:bg-red-800/50")} onClick={() => del(r.robot_id)}>확인</button>
- <button className={BTN("bg-white/5 text-white/50 border-white/[0.05] hover:text-white/90")} onClick={() => setDelConfirm(null)}>취소</button>
+ <button className={BTN("bg-red-900/40 text-white/[0.82] border-white/[0.1] hover:bg-red-800/50")} onClick={() => del(r.robot_id)}>확인</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1] hover:text-white/90")} onClick={() => setDelConfirm(null)}>취소</button>
  </div>
  ) : isEdit ? (
  <div className="flex gap-1">
- <button className={BTN("bg-green-900/40 text-white/70 border-white/[0.05] hover:bg-green-800/50")} onClick={save}>저장</button>
- <button className={BTN("bg-white/5 text-white/50 border-white/[0.05] hover:text-white/90")} onClick={() => setEditId(null)}>취소</button>
+ <button className={BTN("bg-green-900/40 text-white/[0.82] border-white/[0.1] hover:bg-green-800/50")} onClick={save}>저장</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1] hover:text-white/90")} onClick={() => setEditId(null)}>취소</button>
  </div>
  ) : (
  <div className="flex gap-1">
- <button className={BTN("bg-white/5 text-white/60 border-white/[0.05] hover:text-white/90")} onClick={() => startEdit(r)}>수정</button>
- <button className={BTN("bg-white/5 text-red-800 border-white/[0.05] hover:text-white/90")} onClick={() => setDelConfirm(r.robot_id)}>삭제</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.75] border-white/[0.1] hover:text-white/90")} onClick={() => startEdit(r)}>수정</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-red-800 border-white/[0.1] hover:text-white/90")} onClick={() => setDelConfirm(r.robot_id)}>삭제</button>
  </div>
  )}
  </td>
@@ -329,57 +329,57 @@ function MapSection() {
  {err && <ErrBar msg={err} onClose={() => setErr("")} />}
  <TableWrap>
  <thead>
- <tr className="border-b border-white/[0.05]">
+ <tr className="border-b border-white/[0.1]">
  {["map_id","초기위치 로봇 수",""].map(h => <th key={h} className={TH}>{h}</th>)}
  </tr>
  </thead>
  <tbody>
  {adding && (
- <tr className="border-b border-white/[0.05] bg-white/5">
+ <tr className="border-b border-white/[0.1] bg-[#FFCE99]/32">
  <td className={TD}><input className={INP} placeholder="floor_1" value={addMapId} onChange={e => setAddMapId(e.target.value)} /></td>
- <td className={TD}><span className="text-white/40">—</span></td>
+ <td className={TD}><span className="text-white/[0.6]">—</span></td>
  <td className={TD}>
  <div className="flex gap-1">
- <button className={BTN("bg-green-900/40 text-white/70 border-white/[0.05] hover:bg-green-800/50")} onClick={addMap}>저장</button>
- <button className={BTN("bg-white/5 text-white/50 border-white/[0.05] hover:text-white/90")} onClick={() => setAdding(false)}>취소</button>
+ <button className={BTN("bg-green-900/40 text-white/[0.82] border-white/[0.1] hover:bg-green-800/50")} onClick={addMap}>저장</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1] hover:text-white/90")} onClick={() => setAdding(false)}>취소</button>
  </div>
  </td>
  </tr>
  )}
  {maps.length === 0 && !adding && (
- <tr><td colSpan={3} className="px-3 py-6 text-center text-white/30 text-xs">등록된 맵이 없습니다</td></tr>
+ <tr><td colSpan={3} className="px-3 py-6 text-center text-white/[0.55] text-xs">등록된 맵이 없습니다</td></tr>
  )}
  {maps.map(m => {
  const initCount = Object.keys(m.init_position ?? {}).length;
  const isExp = expanded === m.map_id;
  return (
  <Fragment key={m.map_id}>
- <tr key={m.map_id} className={`border-b border-white/[0.05] hover:bg-white/10 transition-colors cursor-pointer ${isExp ? "bg-white/10" : ""}`}
+ <tr key={m.map_id} className={`border-b border-white/[0.1] hover:bg-white/10 transition-colors cursor-pointer ${isExp ? "bg-white/10" : ""}`}
  onClick={() => setExpanded(isExp ? null : m.map_id)}>
  <td className={TD}>
- <span className="mr-1.5 text-white/40">{isExp ? "▾" : "▸"}</span>
+ <span className="mr-1.5 text-white/[0.6]">{isExp ? "▾" : "▸"}</span>
  {m.map_id}
  </td>
- <td className={TD}><span className="text-white/60">{initCount}개</span></td>
+ <td className={TD}><span className="text-white/[0.75]">{initCount}개</span></td>
  <td className={TD} onClick={e => e.stopPropagation()}>
  {delConfirm === m.map_id ? (
  <div className="flex gap-1 items-center">
  <span className="text-white/90 text-xs">삭제?</span>
- <button className={BTN("bg-red-900/40 text-white/70 border-white/[0.05]")} onClick={() => del(m.map_id)}>확인</button>
- <button className={BTN("bg-white/5 text-white/50 border-white/[0.05]")} onClick={() => setDelConfirm(null)}>취소</button>
+ <button className={BTN("bg-red-900/40 text-white/[0.82] border-white/[0.1]")} onClick={() => del(m.map_id)}>확인</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1]")} onClick={() => setDelConfirm(null)}>취소</button>
  </div>
  ) : (
- <button className={BTN("bg-white/5 text-red-800 border-white/[0.05] hover:text-white/90")} onClick={() => setDelConfirm(m.map_id)}>삭제</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-red-800 border-white/[0.1] hover:text-white/90")} onClick={() => setDelConfirm(m.map_id)}>삭제</button>
  )}
  </td>
  </tr>
  {isExp && (
- <tr key={`${m.map_id}-exp`} className="border-b border-white/[0.05] bg-transparent">
+ <tr key={`${m.map_id}-exp`} className="border-b border-white/[0.1] bg-transparent">
  <td colSpan={3} className="px-6 py-3">
- <div className="text-xs text-white/50 tracking-wide mb-2">초기 위치 (init_position)</div>
+ <div className="text-xs text-white/[0.68] tracking-wide mb-2">초기 위치 (init_position)</div>
  <table className="w-full">
  <thead>
- <tr className="border-b border-white/[0.05]">
+ <tr className="border-b border-white/[0.1]">
  {["robot_id","x","y","yaw",""].map(h => <th key={h} className={`${TH} text-xs`}>{h}</th>)}
  </tr>
  </thead>
@@ -388,7 +388,7 @@ function MapSection() {
  const isEd = initEdit?.map_id === m.map_id && initEdit.robot_id === rid;
  const initKey = `${m.map_id}::${rid}`;
  return (
- <tr key={rid} className="border-b border-[#111]">
+ <tr key={rid} className="border-b border-[#521C0D]/10">
  <td className={`${TD} text-xs`}>{rid}</td>
  {isEd ? (
  <>
@@ -397,8 +397,8 @@ function MapSection() {
  <td className={`${TD} text-xs`}><input className={`${INP} w-20`} value={initEdit.yaw} onChange={e => setInitEdit(d => d && ({ ...d, yaw: e.target.value }))} /></td>
  <td className={`${TD} text-xs`}>
  <div className="flex gap-1">
- <button className={BTN("bg-green-900/40 text-white/70 border-white/[0.05]")} onClick={() => saveInitPos(m.map_id, rid, +initEdit.x, +initEdit.y, +initEdit.yaw)}>저장</button>
- <button className={BTN("bg-white/5 text-white/50 border-white/[0.05]")} onClick={() => setInitEdit(null)}>취소</button>
+ <button className={BTN("bg-green-900/40 text-white/[0.82] border-white/[0.1]")} onClick={() => saveInitPos(m.map_id, rid, +initEdit.x, +initEdit.y, +initEdit.yaw)}>저장</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1]")} onClick={() => setInitEdit(null)}>취소</button>
  </div>
  </td>
  </>
@@ -410,8 +410,8 @@ function MapSection() {
  <td className={`${TD} text-xs`}>
  <div className="flex gap-1 items-center">
  <span className="text-white/90">삭제?</span>
- <button className={BTN("bg-red-900/40 text-white/70 border-white/[0.05]")} onClick={() => deleteInitPos(m.map_id, rid)}>확인</button>
- <button className={BTN("bg-white/5 text-white/50 border-white/[0.05]")} onClick={() => setDelInitConfirm(null)}>취소</button>
+ <button className={BTN("bg-red-900/40 text-white/[0.82] border-white/[0.1]")} onClick={() => deleteInitPos(m.map_id, rid)}>확인</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1]")} onClick={() => setDelInitConfirm(null)}>취소</button>
  </div>
  </td>
  </>
@@ -422,8 +422,8 @@ function MapSection() {
  <td className={`${TD} text-xs`}>{pos.yaw.toFixed(3)}</td>
  <td className={`${TD} text-xs`}>
  <div className="flex gap-1">
- <button className={BTN("bg-white/5 text-white/60 border-white/[0.05] hover:text-white/90")} onClick={() => setInitEdit({ map_id: m.map_id, robot_id: rid, x: String(pos.x), y: String(pos.y), yaw: String(pos.yaw) })}>수정</button>
- <button className={BTN("bg-white/5 text-red-800 border-white/[0.05] hover:text-white/90")} onClick={() => setDelInitConfirm(initKey)}>삭제</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.75] border-white/[0.1] hover:text-white/90")} onClick={() => setInitEdit({ map_id: m.map_id, robot_id: rid, x: String(pos.x), y: String(pos.y), yaw: String(pos.yaw) })}>수정</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-red-800 border-white/[0.1] hover:text-white/90")} onClick={() => setDelInitConfirm(initKey)}>삭제</button>
  </div>
  </td>
  </>
@@ -433,22 +433,22 @@ function MapSection() {
  })}
  {/* 추가 행 */}
  {addInit?.map_id === m.map_id ? (
- <tr className="border-b border-[#111] bg-white/5">
+ <tr className="border-b border-[#521C0D]/10 bg-[#FFCE99]/32">
  <td className={`${TD} text-xs`}><input className={`${INP} w-24`} placeholder="tb3_01" value={addInit.robot_id} onChange={e => setAddInit(d => d && ({ ...d, robot_id: e.target.value }))} /></td>
  <td className={`${TD} text-xs`}><input className={`${INP} w-20`} placeholder="0.0" value={addInit.x} onChange={e => setAddInit(d => d && ({ ...d, x: e.target.value }))} /></td>
  <td className={`${TD} text-xs`}><input className={`${INP} w-20`} placeholder="0.0" value={addInit.y} onChange={e => setAddInit(d => d && ({ ...d, y: e.target.value }))} /></td>
  <td className={`${TD} text-xs`}><input className={`${INP} w-20`} placeholder="0.0" value={addInit.yaw} onChange={e => setAddInit(d => d && ({ ...d, yaw: e.target.value }))} /></td>
  <td className={`${TD} text-xs`}>
  <div className="flex gap-1">
- <button className={BTN("bg-green-900/40 text-white/70 border-white/[0.05]")} onClick={() => saveInitPos(m.map_id, addInit.robot_id, +addInit.x, +addInit.y, +addInit.yaw)}>저장</button>
- <button className={BTN("bg-white/5 text-white/50 border-white/[0.05]")} onClick={() => setAddInit(null)}>취소</button>
+ <button className={BTN("bg-green-900/40 text-white/[0.82] border-white/[0.1]")} onClick={() => saveInitPos(m.map_id, addInit.robot_id, +addInit.x, +addInit.y, +addInit.yaw)}>저장</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1]")} onClick={() => setAddInit(null)}>취소</button>
  </div>
  </td>
  </tr>
  ) : (
  <tr>
  <td colSpan={5} className="py-1.5 px-2">
- <button className="text-xs text-white/40 hover:text-white/60 transition-colors" onClick={() => setAddInit({ map_id: m.map_id, robot_id: "", x: "0", y: "0", yaw: "0" })}>
+ <button className="text-xs text-white/[0.6] hover:text-white/[0.75] transition-colors" onClick={() => setAddInit({ map_id: m.map_id, robot_id: "", x: "0", y: "0", yaw: "0" })}>
  + 초기위치 추가
  </button>
  </td>
@@ -559,13 +559,13 @@ function NodeSection() {
  {err && <ErrBar msg={err} onClose={() => setErr("")} />}
  <TableWrap>
  <thead>
- <tr className="border-b border-white/[0.05]">
+ <tr className="border-b border-white/[0.1]">
  {["node_id","map_id","타입","x","y","yaw","잠금",""].map(h => <th key={h} className={TH}>{h}</th>)}
  </tr>
  </thead>
  <tbody>
  {adding && (
- <tr className="border-b border-white/[0.05] bg-white/5">
+ <tr className="border-b border-white/[0.1] bg-[#FFCE99]/32">
  <td className={TD}><input className={INP} placeholder="N01" value={addDraft.node_id ?? ""} onChange={e => setAddDraft(d => ({ ...d, node_id: e.target.value }))} /></td>
  <td className={TD}>
  <input className={INP} placeholder="floor_1" list="node-maps-list" value={addDraft.map_id ?? ""} onChange={e => setAddDraft(d => ({ ...d, map_id: e.target.value }))} />
@@ -581,33 +581,33 @@ function NodeSection() {
  <td className={TD}>
  <div className="flex items-center gap-1">
  <input className={`${INP} w-16`} type="number" step="0.01" value={addDraft.yaw ?? 0} onChange={e => setAddDraft(d => ({ ...d, yaw: +e.target.value }))} />
- <span className="text-white/40 text-xs whitespace-nowrap">{((addDraft.yaw ?? 0) * 180 / Math.PI).toFixed(0)}°</span>
+ <span className="text-white/[0.6] text-xs whitespace-nowrap">{((addDraft.yaw ?? 0) * 180 / Math.PI).toFixed(0)}°</span>
  </div>
  </td>
  <td className={TD} />
  <td className={TD}>
  <div className="flex gap-1">
- <button className={BTN("bg-green-900/40 text-white/70 border-white/[0.05]")} onClick={add}>저장</button>
- <button className={BTN("bg-white/5 text-white/50 border-white/[0.05]")} onClick={() => setAdding(false)}>취소</button>
+ <button className={BTN("bg-green-900/40 text-white/[0.82] border-white/[0.1]")} onClick={add}>저장</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1]")} onClick={() => setAdding(false)}>취소</button>
  </div>
  </td>
  </tr>
  )}
  {displayed.length === 0 && !adding && (
- <tr><td colSpan={8} className="px-3 py-6 text-center text-white/30 text-xs">노드 없음</td></tr>
+ <tr><td colSpan={8} className="px-3 py-6 text-center text-white/[0.55] text-xs">노드 없음</td></tr>
  )}
  {displayed.map(n => {
  const isEdit = editId === n.node_id;
  const d = editDraft;
  const idChanged = isEdit && d.newId !== n.node_id;
  return (
- <tr key={n.node_id} className={`border-b border-white/[0.05] hover:bg-white/10 transition-colors ${isEdit ? "bg-indigo-950/20" : n.isLocked ? "bg-red-950/10" : ""}`}>
+ <tr key={n.node_id} className={`border-b border-white/[0.1] hover:bg-white/10 transition-colors ${isEdit ? "bg-indigo-950/20" : n.isLocked ? "bg-red-950/10" : ""}`}>
  <td className={TD}>
  {isEdit ? (
  <div className="flex items-center gap-1">
- <input className={`${INP} w-24 ${idChanged ? "border-indigo-400/60 text-indigo-200" : ""}`}
+ <input className={`${INP} w-24 ${idChanged ? "border-indigo-400/60 text-indigo-800" : ""}`}
  value={d.newId} onChange={e => setEditDraft(p => ({ ...p, newId: e.target.value }))} autoFocus />
- {idChanged && <span className="text-[9px] bg-indigo-500/20 text-indigo-300 px-1 py-0.5 rounded whitespace-nowrap">ID변경</span>}
+ {idChanged && <span className="text-[9px] bg-indigo-500/20 text-indigo-700 px-1 py-0.5 rounded whitespace-nowrap">ID변경</span>}
  </div>
  ) : n.node_id}
  </td>
@@ -621,29 +621,29 @@ function NodeSection() {
  <td className={TD}>{isEdit ? (
  <div className="flex items-center gap-1">
  <input className={`${INP} w-16`} type="number" step="0.01" value={d.yaw} onChange={e => setEditDraft(p => ({ ...p, yaw: +e.target.value }))} />
- <span className="text-white/40 text-xs whitespace-nowrap">{(d.yaw * 180 / Math.PI).toFixed(0)}°</span>
+ <span className="text-white/[0.6] text-xs whitespace-nowrap">{(d.yaw * 180 / Math.PI).toFixed(0)}°</span>
  </div>
- ) : <span>{n.yaw.toFixed(3)}<span className="text-white/35 ml-1">{(n.yaw * 180 / Math.PI).toFixed(0)}°</span></span>}</td>
+ ) : <span>{n.yaw.toFixed(3)}<span className="text-white/[0.55] ml-1">{(n.yaw * 180 / Math.PI).toFixed(0)}°</span></span>}</td>
  <td className={TD}>
- <button className={`px-2 py-0.5 text-xs font-bold rounded border transition-colors ${n.isLocked ? "bg-red-900/40 text-white/70 border-white/[0.05] hover:bg-red-800/50" : "bg-white/5 text-white/50 border-white/[0.05] hover:text-white/90"}`}
+ <button className={`px-2 py-0.5 text-xs font-bold rounded border transition-colors ${n.isLocked ? "bg-red-900/40 text-white/[0.82] border-white/[0.1] hover:bg-red-800/50" : "bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1] hover:text-white/90"}`}
  onClick={() => toggleNodeLock(n)}>{n.isLocked ? "잠김" : "열림"}</button>
  </td>
  <td className={TD}>
  {delConfirm === n.node_id ? (
  <div className="flex gap-1 items-center">
  <span className="text-white/90 text-xs">삭제?</span>
- <button className={BTN("bg-red-900/40 text-white/70 border-white/[0.05]")} onClick={() => del(n.node_id)}>확인</button>
- <button className={BTN("bg-white/5 text-white/50 border-white/[0.05]")} onClick={() => setDelConfirm(null)}>취소</button>
+ <button className={BTN("bg-red-900/40 text-white/[0.82] border-white/[0.1]")} onClick={() => del(n.node_id)}>확인</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1]")} onClick={() => setDelConfirm(null)}>취소</button>
  </div>
  ) : isEdit ? (
  <div className="flex gap-1">
- <button className={BTN("bg-green-900/40 text-white/70 border-white/[0.05]")} onClick={save}>저장</button>
- <button className={BTN("bg-white/5 text-white/50 border-white/[0.05]")} onClick={() => setEditId(null)}>취소</button>
+ <button className={BTN("bg-green-900/40 text-white/[0.82] border-white/[0.1]")} onClick={save}>저장</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1]")} onClick={() => setEditId(null)}>취소</button>
  </div>
  ) : (
  <div className="flex gap-1">
- <button className={BTN("bg-white/5 text-white/60 border-white/[0.05] hover:text-white/90")} onClick={() => startEdit(n)}>수정</button>
- <button className={BTN("bg-white/5 text-red-800 border-white/[0.05] hover:text-white/90")} onClick={() => setDelConfirm(n.node_id)}>삭제</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.75] border-white/[0.1] hover:text-white/90")} onClick={() => startEdit(n)}>수정</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-red-800 border-white/[0.1] hover:text-white/90")} onClick={() => setDelConfirm(n.node_id)}>삭제</button>
  </div>
  )}
  </td>
@@ -656,7 +656,7 @@ function NodeSection() {
 
  {mapFilter && (
  <div className="w-[420px] flex-none sticky top-0">
- <div className="text-xs text-white/40 tracking-wide mb-1 ">{mapFilter}</div>
+ <div className="text-xs text-white/[0.6] tracking-wide mb-1 ">{mapFilter}</div>
  <TopologyMapView mapId={mapFilter} className="h-[420px]" />
  </div>
  )}
@@ -763,13 +763,13 @@ function EdgeSection() {
  {err && <ErrBar msg={err} onClose={() => setErr("")} />}
  <TableWrap>
  <thead>
- <tr className="border-b border-white/[0.05]">
+ <tr className="border-b border-white/[0.1]">
  {["edge_id","맵","출발 → 도착","방향","가중치","잠금",""].map(h => <th key={h} className={TH}>{h}</th>)}
  </tr>
  </thead>
  <tbody>
  {adding && (
- <tr className="border-b border-white/[0.05] bg-white/5">
+ <tr className="border-b border-white/[0.1] bg-[#FFCE99]/32">
  <td className={TD}><input className={INP} placeholder="E01" value={addDraft.edge_id ?? ""} onChange={e => setAddDraft(d => ({ ...d, edge_id: e.target.value }))} /></td>
  <td className={TD}>
  <select className={NSEL} value={addDraft.map_id ?? ""} onChange={e => setAddDraft(d => ({ ...d, map_id: e.target.value, startNode: "", endNode: "" }))}>
@@ -786,7 +786,7 @@ function EdgeSection() {
  <option key={n.node_id} value={n.node_id}>{n.node_id}</option>
  ))}
  </select>
- <span className="text-white/40">→</span>
+ <span className="text-white/[0.6]">→</span>
  <select className={NSEL} value={addDraft.endNode ?? ""} disabled={!addDraft.startNode}
  onChange={e => setAddDraft(d => ({ ...d, endNode: e.target.value }))}>
  <option value="">도착</option>
@@ -805,30 +805,30 @@ function EdgeSection() {
  <td className={TD}>
  <input className={`${INP} w-16`} type="number" step="1" placeholder="1" value={addDraft.weight ?? ""} onChange={e => setAddDraft(d => ({ ...d, weight: +e.target.value }))} />
  </td>
- <td className={TD}><span className="text-white/40">—</span></td>
+ <td className={TD}><span className="text-white/[0.6]">—</span></td>
  <td className={TD}>
  <div className="flex gap-1">
- <button className={BTN("bg-green-900/40 text-white/70 border-white/[0.05]")} onClick={add}>저장</button>
- <button className={BTN("bg-white/5 text-white/50 border-white/[0.05]")} onClick={() => { setAdding(false); setAddDraft({ direction: "BOTH_WAY", isLocked: false }); }}>취소</button>
+ <button className={BTN("bg-green-900/40 text-white/[0.82] border-white/[0.1]")} onClick={add}>저장</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1]")} onClick={() => { setAdding(false); setAddDraft({ direction: "BOTH_WAY", isLocked: false }); }}>취소</button>
  </div>
  </td>
  </tr>
  )}
  {displayed.length === 0 && !adding && (
- <tr><td colSpan={6} className="px-3 py-6 text-center text-white/30 text-xs">엣지 없음</td></tr>
+ <tr><td colSpan={6} className="px-3 py-6 text-center text-white/[0.55] text-xs">엣지 없음</td></tr>
  )}
  {displayed.map(e => {
  const isEdit = editId === e.edge_id;
  const d = editDraft;
  const idChanged = isEdit && d.newId !== e.edge_id;
  return (
- <tr key={e.edge_id} className={`border-b border-white/[0.05] hover:bg-white/10 transition-colors ${isEdit ? "bg-indigo-950/20" : ""}`}>
+ <tr key={e.edge_id} className={`border-b border-white/[0.1] hover:bg-white/10 transition-colors ${isEdit ? "bg-indigo-950/20" : ""}`}>
  <td className={TD}>
  {isEdit ? (
  <div className="flex items-center gap-1">
- <input className={`${INP} w-24 ${idChanged ? "border-indigo-400/60 text-indigo-200" : ""}`}
+ <input className={`${INP} w-24 ${idChanged ? "border-indigo-400/60 text-indigo-800" : ""}`}
  value={d.newId} onChange={ev => setEditDraft(p => ({ ...p, newId: ev.target.value }))} autoFocus />
- {idChanged && <span className="text-[9px] bg-indigo-500/20 text-indigo-300 px-1 py-0.5 rounded whitespace-nowrap">ID변경</span>}
+ {idChanged && <span className="text-[9px] bg-indigo-500/20 text-indigo-700 px-1 py-0.5 rounded whitespace-nowrap">ID변경</span>}
  </div>
  ) : e.edge_id}
  </td>
@@ -842,7 +842,7 @@ function EdgeSection() {
  <option key={n.node_id} value={n.node_id}>{n.node_id}</option>
  ))}
  </select>
- <span className="text-white/40">→</span>
+ <span className="text-white/[0.6]">→</span>
  <select className={NSEL} value={d.endNode}
  onChange={ev => setEditDraft(p => ({ ...p, endNode: ev.target.value }))}>
  {nodesForMap(d.map_id).filter(n => n.node_id !== d.startNode).map(n => (
@@ -851,7 +851,7 @@ function EdgeSection() {
  </select>
  </div>
  ) : (
- <span><span className="text-white/90">{e.startNode}</span><span className="text-white/40 mx-1">→</span><span className="text-white/90">{e.endNode}</span></span>
+ <span><span className="text-white/90">{e.startNode}</span><span className="text-white/[0.6] mx-1">→</span><span className="text-white/90">{e.endNode}</span></span>
  )}
  </td>
  <td className={TD}>
@@ -862,11 +862,11 @@ function EdgeSection() {
  <td className={TD}>
  {isEdit
  ? <input className={`${INP} w-16`} type="number" step="1" value={d.weight} onChange={ev => setEditDraft(p => ({ ...p, weight: +ev.target.value }))} />
- : <span className="text-white/60">{e.weight ?? 1}</span>}
+ : <span className="text-white/[0.75]">{e.weight ?? 1}</span>}
  </td>
  <td className={TD}>
  <button
- className={`px-2 py-0.5 text-xs font-bold rounded border transition-colors ${e.isLocked ? "bg-red-900/40 text-white/70 border-white/[0.05] hover:bg-red-800/50" : "bg-white/5 text-white/50 border-white/[0.05] hover:text-white/90"}`}
+ className={`px-2 py-0.5 text-xs font-bold rounded border transition-colors ${e.isLocked ? "bg-red-900/40 text-white/[0.82] border-white/[0.1] hover:bg-red-800/50" : "bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1] hover:text-white/90"}`}
  onClick={() => toggleLock(e)}
  >{e.isLocked ? "잠김" : "열림"}</button>
  </td>
@@ -874,18 +874,18 @@ function EdgeSection() {
  {delConfirm === e.edge_id ? (
  <div className="flex gap-1 items-center">
  <span className="text-white/90 text-xs">삭제?</span>
- <button className={BTN("bg-red-900/40 text-white/70 border-white/[0.05]")} onClick={() => del(e.edge_id)}>확인</button>
- <button className={BTN("bg-white/5 text-white/50 border-white/[0.05]")} onClick={() => setDelConfirm(null)}>취소</button>
+ <button className={BTN("bg-red-900/40 text-white/[0.82] border-white/[0.1]")} onClick={() => del(e.edge_id)}>확인</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1]")} onClick={() => setDelConfirm(null)}>취소</button>
  </div>
  ) : isEdit ? (
  <div className="flex gap-1">
- <button className={BTN("bg-green-900/40 text-white/70 border-white/[0.05]")} onClick={save}>저장</button>
- <button className={BTN("bg-white/5 text-white/50 border-white/[0.05]")} onClick={() => setEditId(null)}>취소</button>
+ <button className={BTN("bg-green-900/40 text-white/[0.82] border-white/[0.1]")} onClick={save}>저장</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1]")} onClick={() => setEditId(null)}>취소</button>
  </div>
  ) : (
  <div className="flex gap-1">
- <button className={BTN("bg-white/5 text-white/60 border-white/[0.05] hover:text-white/90")} onClick={() => startEdit(e)}>수정</button>
- <button className={BTN("bg-white/5 text-red-800 border-white/[0.05] hover:text-white/90")} onClick={() => setDelConfirm(e.edge_id)}>삭제</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.75] border-white/[0.1] hover:text-white/90")} onClick={() => startEdit(e)}>수정</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-red-800 border-white/[0.1] hover:text-white/90")} onClick={() => setDelConfirm(e.edge_id)}>삭제</button>
  </div>
  )}
  </td>
@@ -899,7 +899,7 @@ function EdgeSection() {
  {/* 맵 미리보기 */}
  {mapFilter && (
  <div className="w-[420px] flex-none sticky top-0">
- <div className="text-xs text-white/40 tracking-wide mb-1 ">{mapFilter}</div>
+ <div className="text-xs text-white/[0.6] tracking-wide mb-1 ">{mapFilter}</div>
  <TopologyMapView mapId={mapFilter} className="h-[420px]" />
  </div>
  )}
@@ -978,14 +978,14 @@ function TaskSection() {
  {err && <ErrBar msg={err} onClose={() => setErr("")} />}
  <TableWrap>
  <thead>
- <tr className="border-b border-white/[0.05]">
+ <tr className="border-b border-white/[0.1]">
  {["task_id","타입","상태","우선순위","목표 노드","로봇","생성일",""].map(h => <th key={h} className={TH}>{h}</th>)}
  </tr>
  </thead>
  <tbody>
  {adding && (
- <tr className="border-b border-white/[0.05] bg-white/5">
- <td className={TD}><span className="text-white/40 text-xs">자동 생성</span></td>
+ <tr className="border-b border-white/[0.1] bg-[#FFCE99]/32">
+ <td className={TD}><span className="text-white/[0.6] text-xs">자동 생성</span></td>
  <td className={TD}>
  <select className={SEL} value={addDraft.type} onChange={e => setAddDraft(d => ({ ...d, type: e.target.value as TaskType }))}>
  {(["SUPPLY","PROCESS","CHARGE","MOVE"] as TaskType[]).map(t => <option key={t}>{t}</option>)}
@@ -998,47 +998,47 @@ function TaskSection() {
  <td className={TD}>
  <input className={INP} placeholder="N01" value={addDraft.targetNode} onChange={e => setAddDraft(d => ({ ...d, targetNode: e.target.value }))} />
  </td>
- <td className={TD}><span className="text-white/40">—</span></td>
- <td className={TD}><span className="text-white/40">—</span></td>
+ <td className={TD}><span className="text-white/[0.6]">—</span></td>
+ <td className={TD}><span className="text-white/[0.6]">—</span></td>
  <td className={TD}>
  <div className="flex gap-1">
- <button className={BTN("bg-green-900/40 text-white/70 border-white/[0.05]")} onClick={add}>생성</button>
- <button className={BTN("bg-white/5 text-white/50 border-white/[0.05]")} onClick={() => setAdding(false)}>취소</button>
+ <button className={BTN("bg-green-900/40 text-white/[0.82] border-white/[0.1]")} onClick={add}>생성</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1]")} onClick={() => setAdding(false)}>취소</button>
  </div>
  </td>
  </tr>
  )}
  {tasks.length === 0 && !adding && (
- <tr><td colSpan={8} className="px-3 py-6 text-center text-white/30 text-xs">태스크 없음</td></tr>
+ <tr><td colSpan={8} className="px-3 py-6 text-center text-white/[0.55] text-xs">태스크 없음</td></tr>
  )}
  {tasks.map(t => (
- <tr key={t._id} className="border-b border-white/[0.05] hover:bg-white/10 transition-colors">
- <td className={`${TD} text-xs text-white/50`}>{t.task_id.slice(0, 18)}</td>
+ <tr key={t._id} className="border-b border-white/[0.1] hover:bg-white/10 transition-colors">
+ <td className={`${TD} text-xs text-white/[0.68]`}>{t.task_id.slice(0, 18)}</td>
  <td className={TD}><span className={`px-1.5 py-0.5 text-xs font-bold border rounded ${TASK_TYPE_COLOR[t.type]}`}>{t.type}</span></td>
  <td className={TD}><span className={`font-bold text-xs ${TASK_STATUS_COLOR[t.status]}`}>{t.status}</span></td>
- <td className={TD}><span className="text-white/60">P{t.priority}</span></td>
+ <td className={TD}><span className="text-white/[0.75]">P{t.priority}</span></td>
  <td className={TD}>{t.targetNode}</td>
- <td className={TD}>{(t as any).assignedRobotId ?? <span className="text-white/40">—</span>}</td>
- <td className={`${TD} text-white/50 text-xs`}>{new Date(t.createdAt).toLocaleString("ko-KR", { month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" })}</td>
+ <td className={TD}>{(t as any).assignedRobotId ?? <span className="text-white/[0.6]">—</span>}</td>
+ <td className={`${TD} text-white/[0.68] text-xs`}>{new Date(t.createdAt).toLocaleString("ko-KR", { month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" })}</td>
  <td className={TD}>
  {delConfirm === t._id ? (
  <div className="flex gap-1 items-center">
  <span className="text-white/90 text-xs">영구삭제?</span>
- <button className={BTN("bg-red-900/40 text-white/70 border-white/[0.05]")} onClick={() => deleteTask(t._id)}>확인</button>
- <button className={BTN("bg-white/5 text-white/50 border-white/[0.05]")} onClick={() => setDelConfirm(null)}>취소</button>
+ <button className={BTN("bg-red-900/40 text-white/[0.82] border-white/[0.1]")} onClick={() => deleteTask(t._id)}>확인</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1]")} onClick={() => setDelConfirm(null)}>취소</button>
  </div>
  ) : cancelConfirm === t._id ? (
  <div className="flex gap-1 items-center">
- <span className="text-orange-400 text-xs">취소?</span>
- <button className={BTN("bg-orange-900/40 text-orange-300 border-orange-800/60")} onClick={() => cancelTask(t._id)}>확인</button>
- <button className={BTN("bg-white/5 text-white/50 border-white/[0.05]")} onClick={() => setCancelConfirm(null)}>취소</button>
+ <span className="text-orange-600 text-xs">취소?</span>
+ <button className={BTN("bg-orange-900/40 text-orange-700 border-orange-800/60")} onClick={() => cancelTask(t._id)}>확인</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1]")} onClick={() => setCancelConfirm(null)}>취소</button>
  </div>
  ) : (
  <div className="flex gap-1">
  {(t.status === "PENDING" || t.status === "ASSIGNED" || t.status === "RUNNING") && (
- <button className={BTN("bg-white/5 text-orange-800 border-[#2a1a10] hover:text-orange-400")} onClick={() => setCancelConfirm(t._id)}>취소</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-orange-800 border-[#521C0D]/15 hover:text-orange-600")} onClick={() => setCancelConfirm(t._id)}>취소</button>
  )}
- <button className={BTN("bg-white/5 text-red-800 border-white/[0.05] hover:text-white/90")} onClick={() => setDelConfirm(t._id)}>삭제</button>
+ <button className={BTN("bg-[#FFCE99]/32 text-red-800 border-white/[0.1] hover:text-white/90")} onClick={() => setDelConfirm(t._id)}>삭제</button>
  </div>
  )}
  </td>
@@ -1051,7 +1051,7 @@ function TaskSection() {
  {/* 맵 미리보기 */}
  {mapPreview && (
  <div className="w-[420px] flex-none sticky top-0">
- <div className="text-xs text-white/40 tracking-wide mb-1 ">{mapPreview}</div>
+ <div className="text-xs text-white/[0.6] tracking-wide mb-1 ">{mapPreview}</div>
  <TopologyMapView mapId={mapPreview} className="h-[420px]" />
  </div>
  )}
@@ -1066,16 +1066,16 @@ function SectionHeader({ title, count, onAdd, onRefresh, loading, noMargin }: {
 }) {
  return (
  <div className={`flex items-center gap-3 ${noMargin ? "" : "mb-2"}`}>
- <h2 className="text-xs font-bold text-white/60 tracking-wide">{title}</h2>
- <span className="text-xs text-white/40 ">{count}건</span>
+ <h2 className="text-xs font-bold text-white/[0.75] tracking-wide">{title}</h2>
+ <span className="text-xs text-white/[0.6] ">{count}건</span>
  <div className="flex-1" />
  <button
- className={BTN("bg-white/5 text-white/60 border-white/[0.05] hover:text-white/90") + " text-xs"}
+ className={BTN("bg-[#FFCE99]/32 text-white/[0.75] border-white/[0.1] hover:text-white/90") + " text-xs"}
  onClick={onRefresh}
  disabled={loading}
  >{loading ? "..." : "새로고침"}</button>
  <button
- className={BTN("bg-blue-950/60 text-white/90 border-white/[0.05] hover:bg-blue-900/50")}
+ className={BTN("bg-blue-950/60 text-white/90 border-white/[0.1] hover:bg-blue-900/50")}
  onClick={onAdd}
  >+ 추가</button>
  </div>
@@ -1084,7 +1084,7 @@ function SectionHeader({ title, count, onAdd, onRefresh, loading, noMargin }: {
 
 function TableWrap({ children }: { children: React.ReactNode }) {
  return (
- <div className="overflow-x-auto rounded border border-white/[0.05]">
+ <div className="overflow-x-auto rounded border border-white/[0.1]">
  <table className="w-full border-collapse">{children}</table>
  </div>
  );
@@ -1092,9 +1092,9 @@ function TableWrap({ children }: { children: React.ReactNode }) {
 
 function ErrBar({ msg, onClose }: { msg: string; onClose: () => void }) {
  return (
- <div className="mb-2 px-3 py-2 bg-red-950/40 border border-white/[0.05] rounded text-xs text-white/90 flex justify-between">
+ <div className="mb-2 px-3 py-2 bg-red-950/40 border border-white/[0.1] rounded text-xs text-white/90 flex justify-between">
  {msg}
- <button className="text-white/50 hover:text-white/90 ml-4" onClick={onClose}>✕</button>
+ <button className="text-white/[0.68] hover:text-white/90 ml-4" onClick={onClose}>✕</button>
  </div>
  );
 }
@@ -1122,17 +1122,17 @@ export default function AdminView() {
  const { robotStatuses } = useNestSocket();
 
  return (
- <div className="h-full flex flex-col bg-black/40 backdrop-blur-xl text-white/90 overflow-hidden">
+ <div className="h-full flex flex-col bg-[#FFCE99]/14 backdrop-blur-xl text-white/90 overflow-hidden">
  {/* 탭 바 */}
- <div className="flex-none flex border-b border-white/[0.05] bg-black/20 px-4 pt-2 gap-1">
+ <div className="flex-none flex border-b border-white/[0.1] bg-[#FFCE99]/32 px-4 pt-2 gap-1">
  {TABS.map(t => (
  <button
  key={t.id}
  onClick={() => setTab(t.id)}
  className={`px-4 py-2 text-xs font-bold tracking-wider border-b-2 transition-colors ${
  tab === t.id
- ? "border-indigo-500 text-white/70"
- : "border-transparent text-white/40 hover:text-white/60"
+ ? "border-indigo-500 text-white/[0.82]"
+ : "border-transparent text-white/[0.6] hover:text-white/[0.75]"
  }`}
  >
  {t.label}

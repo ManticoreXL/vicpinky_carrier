@@ -32,7 +32,7 @@ export default function LidarCanvas({ scanData, size = 300 }: Props) {
  const scale = (Math.min(w, h) / 2 - pad) / rMax;
 
  // Background — pitch black
- ctx.fillStyle = "#050505";
+ ctx.fillStyle = "#241509";
  ctx.fillRect(0, 0, w, h);
 
  // Danger zone fill (<0.4m)

@@ -55,13 +55,13 @@ export default function ControlCameraPanel({ selectedRobot, socket }: Props) {
  };
 
  return (
- <aside className="w-[460px] flex-none flex flex-col bg-[#060606] border-l border-white/[0.05] overflow-hidden">
+ <aside className="w-[460px] flex-none flex flex-col bg-[#FFCE99]/14 border-l border-white/[0.1] overflow-hidden">
 
  {/* ── 헤더 ─────────────────────────────────────────────────────────── */}
- <div className="flex-none flex items-center justify-between px-4 py-2.5 border-b border-white/[0.05]">
+ <div className="flex-none flex items-center justify-between px-4 py-2.5 border-b border-white/[0.1]">
  <div className="flex items-center gap-2">
  <span className="text-red-700/60 text-xs">◆</span>
- <p className="text-xs font-bold text-white/40 tracking-[0.25em]">
+ <p className="text-xs font-bold text-white/[0.6] tracking-[0.25em]">
  CAMERA FEED
  </p>
  </div>
@@ -72,7 +72,7 @@ export default function ControlCameraPanel({ selectedRobot, socket }: Props) {
  <button
  onClick={toggleFullscreen}
  title="전체화면"
- className="text-white/30 hover:text-white/60 transition-colors text-xs"
+ className="text-white/[0.55] hover:text-white/[0.75] transition-colors text-xs"
  >
  {isFullscreen ? "⊠" : "⊞"}
  </button>
@@ -80,7 +80,7 @@ export default function ControlCameraPanel({ selectedRobot, socket }: Props) {
  </div>
 
  {/* ── 카메라 (방문한 로봇은 mount 유지, 선택된 것만 표시) ──────────── */}
- <div ref={containerRef} className="flex-none p-3 bg-black/40 backdrop-blur-xl overflow-y-auto">
+ <div ref={containerRef} className="flex-none p-3 bg-[#FFCE99]/14 backdrop-blur-xl overflow-y-auto">
  {[...activatedRobots].map((robot) => {
  const cams = ROBOT_CAMERAS[robot] ?? [{ botId: robot, label: robot }];
  return (
@@ -97,7 +97,7 @@ export default function ControlCameraPanel({ selectedRobot, socket }: Props) {
  </div>
 
  {/* ── 카메라 정보 ───────────────────────────────────────────────────── */}
- <div className="flex-none px-4 py-2 border-t border-[#111111]">
+ <div className="flex-none px-4 py-2 border-t border-[#521C0D]/10">
  <div className="grid grid-cols-2 gap-x-4 gap-y-1">
  {[
  { label: "채널 수", val: `${cameras.length}` },
@@ -106,8 +106,8 @@ export default function ControlCameraPanel({ selectedRobot, socket }: Props) {
  { label: "지연", val: "Low-Latency" },
  ].map(({ label: l, val }) => (
  <div key={l} className="flex justify-between text-xs ">
- <span className="text-white/30">{l}</span>
- <span className="text-white/50">{val}</span>
+ <span className="text-white/[0.55]">{l}</span>
+ <span className="text-white/[0.68]">{val}</span>
  </div>
  ))}
  </div>

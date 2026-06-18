@@ -215,19 +215,19 @@ export default function TurtlebotPanel({
  {batData ? (
  <div className="flex flex-col gap-2">
  <div className="flex items-center gap-3">
- <div className="flex-1 h-1.5 bg-white/5 overflow-hidden border border-white/[0.05]">
+ <div className="flex-1 h-1.5 bg-[#FFCE99]/32 overflow-hidden border border-white/[0.1]">
  <div
  className={`h-full transition-all ${
- (batPct ?? 0) < 20 ? "bg-red-700" : (batPct ?? 0) < 50 ? "bg-[#666666]" : "bg-green-700"
+ (batPct ?? 0) < 20 ? "bg-red-700" : (batPct ?? 0) < 50 ? "bg-amber-400" : "bg-green-700"
  }`}
  style={{ width: `${batPct ?? 0}%` }}
  />
  </div>
  <span className={`text-xs font-semibold tabular-nums w-10 text-right ${
- (batPct ?? 0) < 20 ? "text-white/90" : (batPct ?? 0) < 50 ? "text-white/60" : "text-green-600"
+ (batPct ?? 0) < 20 ? "text-white/90" : (batPct ?? 0) < 50 ? "text-white/[0.75]" : "text-green-600"
  }`}>{batPct ?? "—"}%</span>
  </div>
- <div className="flex gap-4 text-xs text-white/40 ">
+ <div className="flex gap-4 text-xs text-white/[0.6] ">
  {batV != null && <span>V <span className="text-white/90">{f(batV, 2)}</span></span>}
  {batA != null && <span>A <span className="text-white/90">{f(batA, 2)}</span></span>}
  </div>
@@ -257,8 +257,8 @@ export default function TurtlebotPanel({
  onClick={() => setKeyboardActive((v) => !v)}
  className={`w-full py-2.5 text-xs font-semibold tracking-wide transition-all border ${
  keyboardActive
- ? "border-white/[0.05] bg-green-950/30 text-white/90"
- : "border-white/[0.05] bg-transparent text-white/40 hover:border-white/[0.05] hover:text-white/60"
+ ? "border-white/[0.1] bg-green-950/30 text-white/90"
+ : "border-white/[0.1] bg-transparent text-white/[0.6] hover:border-white/[0.1] hover:text-white/[0.75]"
  }`}
  >
  {keyboardActive ? "◉ 조종 활성 — ESC 비활성" : "◎ 키보드 조종 시작"}
@@ -271,7 +271,7 @@ export default function TurtlebotPanel({
  <KeyCap label="S" sub="후진" />
  <KeyCap label="D" sub="우" />
  </div>
- <p className="text-xs text-white/30 text-center tracking-wide">
+ <p className="text-xs text-white/[0.55] text-center tracking-wide">
  누르는 동안 이동 · 0.2 m/s · 1.0 rad/s
  </p>
  </>
@@ -284,7 +284,7 @@ export default function TurtlebotPanel({
  <div className="flex flex-col gap-3">
  <div className="flex items-center justify-between gap-4">
  <div className="flex items-center gap-2">
- {diagStatus === "idle" && <span className="text-xs text-white/30 tracking-wide">대기 중</span>}
+ {diagStatus === "idle" && <span className="text-xs text-white/[0.55] tracking-wide">대기 중</span>}
  {diagStatus === "loading" && <span className="text-xs text-white/90 tracking-wide animate-pulse">진단 중…</span>}
  {diagStatus === "ok" && <span className="text-xs text-white/90 font-semibold tracking-wide">◉ 정상</span>}
  {diagStatus === "error" && <span className="text-xs text-white/90 font-semibold tracking-wide ">⚠ 이상 감지</span>}
@@ -294,8 +294,8 @@ export default function TurtlebotPanel({
  disabled={diagStatus === "loading"}
  className={`px-4 py-1.5 border text-xs font-bold tracking-wide transition-all ${
  diagStatus === "loading"
- ? "border-white/[0.05] bg-transparent text-white/30 cursor-not-allowed"
- : "border-white/[0.05] bg-white/5 text-white/60 hover:bg-white/5 hover:border-white/[0.05] hover:text-white/90"
+ ? "border-white/[0.1] bg-transparent text-white/[0.55] cursor-not-allowed"
+ : "border-white/[0.1] bg-[#FFCE99]/32 text-white/[0.75] hover:bg-[#FFCE99]/32 hover:border-white/[0.1] hover:text-white/90"
  }`}
  >
  {diagStatus === "loading" ? "진단 중…" : "자가진단 시작"}
@@ -304,8 +304,8 @@ export default function TurtlebotPanel({
  {diagResult && (
  <div className={`text-xs p-2.5 border ${
  diagResult.isOk
- ? "border-white/[0.05] bg-green-950/20 text-white/90"
- : "border-white/[0.05] bg-red-950/20 text-white/90"
+ ? "border-white/[0.1] bg-green-950/20 text-white/90"
+ : "border-white/[0.1] bg-red-950/20 text-white/90"
  }`}>
  <p className="font-bold">{diagResult.summary}</p>
  {diagResult.errors.length > 0 && (
@@ -343,8 +343,8 @@ export default function TurtlebotPanel({
 function SensorCard({ label, children }: { label: string; children: React.ReactNode }) {
  return (
  <div className="flex flex-col gap-1">
- <p className="text-xs font-bold text-white/40 tracking-[0.25em]">{label}</p>
- <div className="bg-black/20 p-3 border border-white/[0.05] h-full">{children}</div>
+ <p className="text-xs font-bold text-white/[0.6] tracking-[0.25em]">{label}</p>
+ <div className="bg-[#FFCE99]/32 p-3 border border-white/[0.1] h-full">{children}</div>
  </div>
  );
 }
@@ -352,7 +352,7 @@ function SensorCard({ label, children }: { label: string; children: React.ReactN
 function TRow({ label, value, highlight = false }: { label: string; value: string; highlight?: boolean }) {
  return (
  <tr>
- <td className="text-white/40 py-0.5 pr-2 whitespace-nowrap text-xs">{label}</td>
+ <td className="text-white/[0.6] py-0.5 pr-2 whitespace-nowrap text-xs">{label}</td>
  <td className={` text-right text-xs ${
  highlight ? "text-white/90 font-semibold " : "text-white/90"
  }`}>{value}</td>
@@ -362,13 +362,13 @@ function TRow({ label, value, highlight = false }: { label: string; value: strin
 
 function VelDisplay({ label, value, unit }: { label: string; value: number | null; unit: string }) {
  const v = value ?? 0;
- const color = v > 0.001 ? "text-green-600" : v < -0.001 ? "text-white/90" : "text-white/30";
+ const color = v > 0.001 ? "text-green-600" : v < -0.001 ? "text-white/90" : "text-white/[0.55]";
  return (
- <div className="bg-black/20 border border-white/[0.05] px-3 py-2 flex flex-col gap-0.5">
- <span className="text-xs text-white/30 tracking-wide ">{label}</span>
+ <div className="bg-[#FFCE99]/32 border border-white/[0.1] px-3 py-2 flex flex-col gap-0.5">
+ <span className="text-xs text-white/[0.55] tracking-wide ">{label}</span>
  <span className={`text-lg font-semibold tabular-nums ${color}`}>
  {v >= 0 ? "+" : ""}{v.toFixed(3)}
- <span className="text-xs text-white/30 ml-1">{unit}</span>
+ <span className="text-xs text-white/[0.55] ml-1">{unit}</span>
  </span>
  </div>
  );
@@ -377,11 +377,11 @@ function VelDisplay({ label, value, unit }: { label: string; value: number | nul
 function KeyCap({ label, sub }: { label: string; sub: string }) {
  return (
  <div className="flex flex-col items-center gap-0.5">
- <div className="w-10 h-10 bg-black/20 border border-white/[0.05] flex items-center
+ <div className="w-10 h-10 bg-[#FFCE99]/32 border border-white/[0.1] flex items-center
  justify-center font-semibold text-white/90 text-sm ">
  {label}
  </div>
- <span className="text-white/30 text-xs ">{sub}</span>
+ <span className="text-white/[0.55] text-xs ">{sub}</span>
  </div>
  );
 }
@@ -444,8 +444,8 @@ function SpeakCmdPanel({ botId, publish }: { botId: string; publish: PublishFn }
       title="음성 인식 시작"
       className={`w-9 h-9 flex-none border flex items-center justify-center transition-all ${
        status === "listening"
-        ? "border-purple-500/40 bg-purple-500/10 text-purple-400 animate-pulse cursor-not-allowed"
-        : "border-white/[0.05] bg-transparent text-white/40 hover:border-purple-500/30 hover:text-purple-400"
+        ? "border-purple-500/40 bg-purple-500/10 text-purple-600 animate-pulse cursor-not-allowed"
+        : "border-white/[0.1] bg-transparent text-white/[0.6] hover:border-purple-500/30 hover:text-purple-600"
       }`}
      >
       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -456,8 +456,8 @@ function SpeakCmdPanel({ botId, publish }: { botId: string; publish: PublishFn }
 
      {/* 상태 표시 */}
      <span className={`flex-1 text-xs ${
-      status === "listening" ? "text-purple-400 animate-pulse" :
-      status === "sent"      ? "text-green-500" : "text-white/30"
+      status === "listening" ? "text-purple-600 animate-pulse" :
+      status === "sent"      ? "text-green-500" : "text-white/[0.55]"
      }`}>
       {status === "listening" ? "인식 중…" :
        status === "sent"      ? "전송 완료" :
@@ -468,8 +468,8 @@ function SpeakCmdPanel({ botId, publish }: { botId: string; publish: PublishFn }
      {lastText && status === "idle" && (
       <button
        onClick={resend}
-       className="px-3 py-1 text-xs border border-white/[0.05] bg-transparent text-white/40
-                  hover:text-white/70 hover:border-white/[0.1] transition-all"
+       className="px-3 py-1 text-xs border border-white/[0.1] bg-transparent text-white/[0.6]
+                  hover:text-white/[0.82] hover:border-white/[0.12] transition-all"
       >
        재전송
       </button>
@@ -478,7 +478,7 @@ function SpeakCmdPanel({ botId, publish }: { botId: string; publish: PublishFn }
 
     {/* 마지막 인식 텍스트 (별도 행) */}
     {lastText && status !== "idle" && (
-     <div className="bg-black/20 border border-white/[0.05] px-3 py-2 text-xs text-white/50 break-all">
+     <div className="bg-[#FFCE99]/32 border border-white/[0.1] px-3 py-2 text-xs text-white/[0.68] break-all">
       {lastText}
      </div>
     )}

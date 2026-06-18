@@ -2,81 +2,93 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * 4단 역할 팔레트
+ *  배경(surface)  #FFFDF1  아이보리
+ *  큰 컴포넌트(panel) #FFCE99  피치  — navbar / 큰 div
+ *  카드(card)     #FF9644  오렌지 — 작은 컴포넌트
+ *  임팩트(impact) #562F00  다크 브라운 — 버튼 / 본문 텍스트
+ */
+
 @layer base {
   body {
-    background-color: #07090f;
+    background-color: #FFFDF1;
     background-image:
-      radial-gradient(ellipse at 15% 40%, rgba(249, 115, 22, 0.07) 0%, transparent 45%),
-      radial-gradient(ellipse at 85% 15%, rgba(249, 115, 22, 0.04) 0%, transparent 38%),
-      radial-gradient(ellipse at 50% 90%, rgba(15, 20, 40, 0.8) 0%, transparent 60%);
+      radial-gradient(ellipse at 88% 10%, rgba(255, 206, 153, 0.10) 0%, transparent 42%);
     background-attachment: fixed;
-    color: #f1f5f9;
+    color: #562F00;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     -webkit-font-smoothing: antialiased;
     letter-spacing: -0.01em;
   }
 
-  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
   ::-webkit-scrollbar-track { background: transparent; }
-  ::-webkit-scrollbar-thumb { background: rgba(249, 115, 22, 0.25); border-radius: 10px; }
-  ::-webkit-scrollbar-thumb:hover { background: rgba(249, 115, 22, 0.45); }
+  ::-webkit-scrollbar-thumb { background: rgba(86, 47, 0, 0.35); border-radius: 10px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(86, 47, 0, 0.60); }
 }
 
 @layer components {
-  /* Base glassmorphism panel */
+  /*
+   * 톤온톤 통일 — 모든 표면은 같은 피치(#FFCE99) 계열의 은은한 틴트.
+   * 배경에서 살짝 떠 보이되 한 덩어리로 느껴지도록 낮은 채도/부드러운 경계.
+   * 채도 높은 #FF9644·다크브라운 #562F00 은 버튼·액센트에서만 강하게 등장.
+   */
+
+  /* 큰 컴포넌트 — navbar / 큰 div / 사이드바 (배경에서 살짝 뜬 워시) */
   .glass-panel {
-    @apply bg-white/[0.03] backdrop-blur-[28px] border border-white/[0.07];
+    @apply bg-[#FFCE99]/[0.14] backdrop-blur-[20px] border border-[#562F00]/[0.07];
   }
 
-  /* Card variant with rounded corners */
+  /* 카드 — 작은 컴포넌트 (한 톤 더 또렷한 옅은 틴트) */
   .glass-card {
-    @apply bg-white/[0.04] backdrop-blur-[18px] border border-white/[0.07]
+    @apply bg-[#FFCE99]/30 backdrop-blur-[14px] border border-[#562F00]/[0.09]
            rounded-xl overflow-hidden transition-all duration-300
-           shadow-[0_4px_20px_0_rgba(0,0,0,0.3)];
+           shadow-[0_2px_10px_0_rgba(86,47,0,0.06)];
   }
 
-  /* Standard button */
+  /* 보조 버튼 — 옅은 피치 바탕 + 다크 브라운 글자 */
   .glass-button {
-    @apply bg-white/[0.06] hover:bg-white/[0.10] backdrop-blur-md border border-white/[0.08]
-           px-4 py-2 rounded-lg text-sm font-medium text-white/80
-           transition-all active:scale-[0.97] disabled:opacity-30;
+    @apply bg-[#FFCE99]/40 hover:bg-[#FFCE99]/[0.65] border border-[#562F00]/[0.14]
+           px-4 py-2 rounded-lg text-sm font-semibold text-[#562F00]
+           transition-all active:scale-[0.97] disabled:opacity-40;
   }
 
-  /* Muted label above fields */
+  /* 필드 위 보조 라벨 */
   .sub-label {
-    @apply text-[10px] font-semibold text-white/35 mb-1 block tracking-[0.12em] uppercase;
+    @apply text-[10px] font-semibold text-[#562F00]/[0.55] mb-1 block tracking-[0.12em] uppercase;
   }
 
-  /* Orange accent button */
+  /* 강조 버튼(아웃라인) — 액센트 오렌지 */
   .btn-orange {
-    @apply bg-orange-500/10 border border-orange-500/30 text-orange-400
-           hover:bg-orange-500/20 hover:border-orange-500/50
-           rounded-lg px-4 py-2 text-sm font-medium transition-all active:scale-[0.97];
+    @apply bg-[#FF9644]/15 border border-[#FF9644]/50 text-[#562F00]
+           hover:bg-[#FF9644]/30 hover:border-[#FF9644]/80
+           rounded-lg px-4 py-2 text-sm font-semibold transition-all active:scale-[0.97];
   }
 
-  /* Orange filled button */
+  /* 임팩트 버튼(솔리드) — 액센트 오렌지 (가장 강한 강조) */
   .btn-orange-solid {
-    @apply bg-orange-500 text-white rounded-lg px-4 py-2 text-sm font-semibold
-           hover:bg-orange-400 shadow-lg shadow-orange-500/25 transition-all active:scale-[0.97];
+    @apply bg-[#FF9644] text-[#562F00] rounded-lg px-4 py-2 text-sm font-bold
+           hover:bg-[#FFB06A] shadow-md shadow-[#562F00]/15 transition-all active:scale-[0.97];
   }
 
-  /* Status badges */
+  /* 상태 배지 — 표면과 동화되는 은은한 톤 */
   .badge-online {
-    @apply bg-emerald-500/10 border border-emerald-500/25 text-emerald-400
-           rounded-md px-2 py-0.5 text-xs font-semibold tracking-wide;
+    @apply bg-emerald-600/10 border border-emerald-700/25 text-emerald-800
+           rounded-md px-2 py-0.5 text-xs font-bold tracking-wide;
   }
   .badge-offline {
-    @apply bg-red-500/10 border border-red-500/25 text-red-400
-           rounded-md px-2 py-0.5 text-xs font-semibold tracking-wide;
+    @apply bg-red-600/10 border border-red-700/25 text-red-800
+           rounded-md px-2 py-0.5 text-xs font-bold tracking-wide;
   }
   .badge-warning {
-    @apply bg-orange-500/10 border border-orange-500/25 text-orange-400
-           rounded-md px-2 py-0.5 text-xs font-semibold tracking-wide;
+    @apply bg-[#FF9644]/15 border border-[#FF9644]/40 text-[#562F00]
+           rounded-md px-2 py-0.5 text-xs font-bold tracking-wide;
   }
 
   /* Waveform bar animation */
   .wave-bar {
-    @apply w-0.5 bg-orange-500 rounded-full;
+    @apply w-0.5 bg-[#FF9644] rounded-full;
     animation: wave 0.8s ease-in-out infinite;
   }
 }
