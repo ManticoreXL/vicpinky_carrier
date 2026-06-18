@@ -64,6 +64,7 @@ print(" ".join([s.text for s in segments]).strip())
         model: this.model,
         prompt: text,
         stream: false,
+        keep_alive: -1,
       });
 
       return response.data.response;
@@ -127,6 +128,7 @@ preferredRobotId는 언급되지 않으면 null. priority는 1(높음)~10(낮음
         stream: false,
         format: 'json',
         options: { temperature: 0.1 },
+        keep_alive: -1,
       });
 
       const raw: string = response.data.message?.content ?? response.data.response ?? '{}';
@@ -191,6 +193,7 @@ preferredRobotId는 명시적으로 언급되지 않으면 null. priority는 1(�
         stream: false,
         format: 'json',
         options: { temperature: 0.1 },
+        keep_alive: -1,
       });
       const raw: string = response.data.message?.content ?? response.data.response ?? '{}';
       return JSON.parse(raw) as TaskAiResult;
@@ -220,7 +223,7 @@ preferredRobotId는 명시적으로 언급되지 않으면 null. priority는 1(�
     try {
       const response = await axios.post(
         `${this.ollamaUrl}/api/chat`,
-        { model: this.model, messages, stream: true, options: { temperature: 0.3 } },
+        { model: this.model, messages, stream: true, options: { temperature: 0.3 }, keep_alive: -1 },
         { responseType: 'stream', timeout: 120_000 },
       );
 

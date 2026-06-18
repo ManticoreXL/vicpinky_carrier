@@ -177,10 +177,11 @@ export class AgentService {
 
     try {
       const res = await axios.post(`${this.ollamaUrl}/v1/chat/completions`, {
-        model: this.cmdModel, // 판단은 빠른 Qwen으로
+        model: this.cmdModel,
         messages: [{ role: 'system', content: prompt }, { role: 'user', content: text }],
         response_format: { type: 'json_object' },
         options: { temperature: 0 },
+        keep_alive: -1,
       });
       const content = res.data.choices[0].message.content;
       return JSON.parse(content).isCommand === true;
@@ -208,6 +209,7 @@ export class AgentService {
         messages,
         tools: AGENT_TOOLS,
         options: { temperature: 0.1 },
+        keep_alive: -1,
       });
 
       const msg = res.data.choices[0].message;
@@ -264,6 +266,7 @@ export class AgentService {
           { role: 'user', content: userText }
         ],
         options: { temperature: 0.3 },
+        keep_alive: -1,
       });
       let content = res.data.choices[0].message.content ?? '답변을 생성하지 못했습니다.';
       
@@ -302,6 +305,7 @@ ${JSON.stringify(actions, null, 2)}
         model: this.chatModel,
         messages: [{ role: 'user', content: prompt }],
         options: { temperature: 0.3 },
+        keep_alive: -1,
       });
       return res.data.choices[0].message.content ?? '명령이 처리되었습니다.';
     } catch {
