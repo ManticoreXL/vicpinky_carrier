@@ -603,7 +603,7 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
       )}
       <div className={`max-w-[92%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed whitespace-pre-wrap break-words ${
         isUser
-          ? `bg-sky-600/20 border text-sky-100 ${msg.fromStt ? "border-orange-500/30" : "border-sky-500/20"}`
+          ? `bg-sky-500/20 border text-sky-900 ${msg.fromStt ? "border-orange-500/40" : "border-sky-500/40"}`
           : msg.error
             ? "bg-rose-500/10 border border-rose-500/20 text-rose-700"
             : "bg-[#FFCE99]/32 border border-white/[0.1] text-white/75"

@@ -176,7 +176,10 @@ export class FmsService {
     const now = Date.now() / 1000;
     this.rosService.publish({
       topicName:   `/${robotId}/initialpose`,
-      messageType: 'geometry_msgs/msg/PoseWithCovarianceStamped',
+      // rosbridge는 단일 슬래시 형식(pkg/Type)을 사용한다. 다른 토픽(goal_pose,
+      // amcl_pose 등)과 동일하게 맞춰야 타입이 정상 해석돼 실제 ROS 발행이 된다.
+      // ('geometry_msgs/msg/...' 이중 슬래시면 rosbridge가 타입을 못 풀어 발행 실패)
+      messageType: 'geometry_msgs/PoseWithCovarianceStamped',
       message: {
         header: { stamp: { sec: Math.floor(now), nanosec: 0 }, frame_id: 'map' },
         pose: {

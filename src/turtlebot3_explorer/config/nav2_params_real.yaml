@@ -111,7 +111,7 @@ controller_server:
       sim_time: 1.5
       linear_granularity: 0.05
       angular_granularity: 0.025
-      transform_tolerance: 0.2
+      transform_tolerance: 1.0
       xy_goal_tolerance: 0.35
       trans_stopped_velocity: 0.01
       short_circuit_trajectory_evaluation: True
@@ -255,7 +255,7 @@ behavior_server:
     local_frame: tb3_02/odom
     global_frame: tb3_02/map
     robot_base_frame: tb3_02/base_footprint
-    transform_tolerance: 0.1
+    transform_tolerance: 1.0
     simulate_ahead_time: 2.0
     max_rotational_vel: 1.0
     min_rotational_vel: 0.4
@@ -316,7 +316,7 @@ collision_monitor:
     cmd_vel_out_topic: "cmd_vel"
     enable_stamped_cmd_vel: true
     state_topic: "collision_monitor_state"
-    transform_tolerance: 0.2
+    transform_tolerance: 1.0
     source_timeout: 1.0
     base_shift_correction: True
     stop_pub_timeout: 2.0
@@ -374,7 +374,7 @@ docking_server:
       use_collision_detection: true
       costmap_topic: "local_costmap/costmap_raw"
       footprint_topic: "local_costmap/published_footprint"
-      transform_tolerance: 0.1
+      transform_tolerance: 1.0
       projection_time: 5.0
       simulation_step: 0.1
       dock_collision_threshold: 0.3
