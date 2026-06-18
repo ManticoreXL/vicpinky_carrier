@@ -12,9 +12,11 @@ import type { RosMessage } from '../ros/ros.types';
 
 // ── 상수 ─────────────────────────────────────────────────────────────────────
 
-const LOOP_MS          = 2_000;
+const LOOP_MS          = 1_000;     // 오프라인/온라인 전환 반응 속도 (1s 주기 감시)
 const ONLINE_MS          = 5_000;
-const OFFLINE_AFTER_MS   = 20_000;  // 느린 로봇 / WiFi 혼잡 대비 20s
+// 하드웨어 OFF 시 빠른 오프라인 감지. 로봇은 odom/imu를 10~30Hz로 발행하므로
+// 6s 무수신이면 사실상 끊김. (과거 20s는 전환이 너무 느렸음)
+const OFFLINE_AFTER_MS   = 6_000;
 const AMCL_TIMEOUT_MS    = 60_000;  // nav2 TF 초기화 여유 — 60s 대기 후 판단
 const AMCL_RESUME_MS     = 30_000;  // AMCL 복구 후 이 시간 내 AMCL 수신 시 재시도 판단 기준
 const FALL_THRESH_RAD  = Math.PI / 4; // 45° 이상 기울면 전복 판정
@@ -53,6 +55,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   private server: Server | null = null;
   private running = false;
   private loopTimer: NodeJS.Timeout | null = null;
+  private startedAt = Date.now(); // 부팅 직후 온라인 로봇이 첫 메시지를 보낼 유예 시간 계산용
 
   // robotId → 현재 활성 taskId
   private readonly activeTasks      = new Map<string, string>();
@@ -62,6 +65,8 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   private readonly robotCache       = new Map<string, RobotCache>();
   // 전복 알림 중복 방지 (30s 쿨다운)
   private readonly lastFallAlert    = new Map<string, number>();
+  // robotId → 전복으로 장애 잠금한 노드 ID (자세 복귀 시 자동 해제용)
+  private readonly fallLockedNodes  = new Map<string, string>();
   // robotId → 온라인 여부 (undefined = 미확인)
   private readonly robotOnlineState = new Map<string, boolean>();
   // 충돌 회피 정지/재출발 상태는 CollisionAvoidanceService가 소유 (collisionService)
@@ -421,19 +426,39 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
             void this.robotService.updateStatus(id, RobotStatus.ERROR);
             this.server?.emit('robot_status_changed', { robot_id: id, status: RobotStatus.ERROR });
 
+            // AMCL 위치 기준 최근접 노드를 "장애"로 잠금 (전복 지점 봉쇄 + 경유 로봇 자동 우회)
+            const cache = this.robotCache.get(id);
+            if (cache?.posX != null && cache.posY != null) {
+              const px = cache.posX, py = cache.posY;
+              void (async () => {
+                const nearestNodeId = await this.topologyService.findNearestNodeToPosition(px, py);
+                if (!nearestNodeId) return;
+                this.fallLockedNodes.set(id, nearestNodeId);
+                await this.lockNode(nearestNodeId, true);
+                this.logger.warn(`[전복-장애] ${id} 전복 지점 노드 ${nearestNodeId} → 장애 인식, 잠금`);
+              })();
+            }
+
             this.emit({
               type: 'fall', robotId: id,
-              message: `${id} 전복 감지 — roll ${(roll * 180 / Math.PI).toFixed(0)}° / pitch ${(pitch * 180 / Math.PI).toFixed(0)}° → 상태 ERROR`,
+              message: `${id} 전복 감지 — roll ${(roll * 180 / Math.PI).toFixed(0)}° / pitch ${(pitch * 180 / Math.PI).toFixed(0)}° → 상태 ERROR, 전복 지점 노드 장애 잠금`,
               requiresAction: true,
             });
           }
         } else {
-          // 자세 정상 복귀 시 ERROR → IDLE 자동 해제
+          // 자세 정상 복귀 시 로봇 상태(ERROR→IDLE) + 전복 지점 장애 노드 자동 해제
           void this.robotService.findById(id).then(robot => {
             if (robot?.status === RobotStatus.ERROR) {
               void this.robotService.updateStatus(id, RobotStatus.IDLE);
               this.server?.emit('robot_status_changed', { robot_id: id, status: RobotStatus.IDLE });
               this.lastFallAlert.delete(id);
+              // 전복으로 장애 잠금했던 노드 해제
+              const lockedNodeId = this.fallLockedNodes.get(id);
+              if (lockedNodeId) {
+                this.fallLockedNodes.delete(id);
+                void this.lockNode(lockedNodeId, false);
+                this.logger.log(`[전복복구] ${id} 자세 복귀 → 노드 ${lockedNodeId} 장애 잠금 해제`);
+              }
             }
           });
         }
@@ -753,6 +778,32 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
         this.emit({ type: 'robot_offline', robotId, message: `${robotId} 오프라인 (태스크 중단)`, requiresAction: true });
         this.server?.emit('robot_status_changed', { robot_id: robotId, status: 'OFFLINE' });
+      }
+    }
+
+    // ── DB 기준 오프라인 보정 ────────────────────────────────────────────────
+    // 위 캐시 루프는 "이번 세션에 메시지를 보낸" 로봇만 본다. 서버 재시작 후 꺼져
+    // 있던 로봇이나, 끊긴 직후 stray 메시지로 IDLE로 되돌아간 로봇은 캐시에 살아있지
+    // 않은데도 DB가 비-OFFLINE으로 남아 IDLE에 갇힌다. DB를 직접 훑어 확실히 정리.
+    // (부팅 직후엔 온라인 로봇이 아직 첫 메시지를 못 보냈을 수 있어 유예시간 후 적용)
+    if (now - this.startedAt > OFFLINE_AFTER_MS) {
+      try {
+        const notOffline = await this.robotService.findNotOffline();
+        for (const r of notOffline) {
+          const id = r.robot_id;
+          const cache = this.robotCache.get(id);
+          const live = !!cache && (now - cache.lastSeen < OFFLINE_AFTER_MS);
+          if (live) continue;            // 실제 수신 중 → 캐시 루프가 관리
+          if (this.activeTasks.has(id)) continue; // 진행 태스크는 위 루프가 처리
+
+          await this.robotService.setOffline(id);
+          this.telemetryService.clearTelemetry(id);
+          this.robotOnlineState.set(id, false);
+          this.server?.emit('robot_status_changed', { robot_id: id, status: 'OFFLINE' });
+          this.logger.log(`[오프라인 보정] ${id} → OFFLINE (캐시 비활성 · DB ${r.status})`);
+        }
+      } catch (e) {
+        this.logger.warn(`[오프라인 보정] 실패: ${String(e)}`);
       }
     }
   }

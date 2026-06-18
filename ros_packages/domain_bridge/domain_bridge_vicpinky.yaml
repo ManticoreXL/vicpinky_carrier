@@ -1,0 +1,87 @@
+name: domain_bridge_vicpinky
+# vicpinky carrier (domain 40) ↔ hub (domain 49)
+#
+# 🔧 수정 이력:
+#   - 기존: 리스트 형식(- topic:) + 허브 도메인 0 → 표준 domain_bridge 도구가
+#     파싱하지 못하고, 허브(49)가 아닌 0으로 중계되어 백엔드에 데이터가 도달하지 못함.
+#   - 변경: tb3/omx 와 동일한 "맵 형식 + 허브 49"로 통일.
+#   - vicpinky 는 자기 도메인(40)에서 이미 /vicpinky/* 네임스페이스로 발행하므로
+#     uplink 토픽은 remap 없이 도메인만 40→49 로 바꾼다.
+#   - /tf, /tf_static 은 네트워크 부하 때문에 중계하지 않는다(tb3 와 동일 정책).
+#   - carrier_msgs/action/CarrierTask 는 워크스페이스에 빌드돼 있지 않아 타입을
+#     찾지 못하면 브릿지 전체가 죽으므로 주석 처리(빌드 후 활성화).
+
+topics:
+
+  # ── UPLINK: vicpinky(40) → 허브(49) — 센서/상태 (vicpinky 가 이미 네임스페이스 발행) ──
+  /vicpinky/odom:                 # 위치 추적(필수) — AMCL 미사용, odom 기반
+    type: nav_msgs/msg/Odometry
+    from_domain: 40
+    to_domain: 49
+
+  /vicpinky/scan:
+    type: sensor_msgs/msg/LaserScan
+    from_domain: 40
+    to_domain: 49
+
+  /vicpinky/scan_filtered:
+    type: sensor_msgs/msg/LaserScan
+    from_domain: 40
+    to_domain: 49
+
+  /vicpinky/joint_states:
+    type: sensor_msgs/msg/JointState
+    from_domain: 40
+    to_domain: 49
+
+  /vicpinky/robot_description:
+    type: std_msgs/msg/String
+    from_domain: 40
+    to_domain: 49
+
+  # 램프 상태 — 로봇은 네임스페이스 없이 /ramp_state 발행 → 허브에서 /vicpinky/ramp_state 로 통일
+  /ramp_state:
+    type: vicpinky_carrier_interfaces/msg/RampState
+    from_domain: 40
+    to_domain: 49
+    remap: /vicpinky/ramp_state
+
+  # /tf, /tf_static — 네트워크 부하로 중계하지 않음 (필요 시 활성화)
+  # /tf:
+  #   type: tf2_msgs/msg/TFMessage
+  #   from_domain: 40
+  #   to_domain: 49
+  # /tf_static:
+  #   type: tf2_msgs/msg/TFMessage
+  #   from_domain: 40
+  #   to_domain: 49
+
+  # ── DOWNLINK: 허브(49) → vicpinky(40) — 제어 명령 ──
+  /vicpinky/cmd_vel:              # 조이스틱/비상정지 (vicpinky 는 Twist, TwistStamped 아님)
+    type: geometry_msgs/msg/Twist
+    from_domain: 49
+    to_domain: 40
+    qos:
+      reliability: reliable
+
+services:
+
+  # ── DOWNLINK 서비스: 허브(49) → vicpinky(40) ──
+  /vicpinky/run_diagnosis:
+    type: std_srvs/srv/Trigger
+    from_domain: 49
+    to_domain: 40
+
+actions:
+
+  # ── DOWNLINK 액션: 허브(49) → vicpinky(40) ──
+  /ramp_control:
+    type: vicpinky_carrier_interfaces/action/RampControl
+    from_domain: 49
+    to_domain: 40
+
+  # carrier_msgs 미빌드 — 빌드 후 주석 해제할 것
+  # /vicpinky/carrier_task:
+  #   type: carrier_msgs/action/CarrierTask
+  #   from_domain: 49
+  #   to_domain: 40

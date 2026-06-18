@@ -63,8 +63,23 @@ export default function TurtlebotPanel({
  const [diagStatus, setDiagStatus] = useState<DiagStatus>("idle");
  const [diagResult, setDiagResult] = useState<DiagResult | null>(null);
 
+ // 메시지가 끊겨도 오프라인 판정이 갱신되도록 1초마다 강제 리렌더
+ const [, setTick] = useState(0);
+ useEffect(() => { const id = setInterval(() => setTick(t => t + 1), 1000); return () => clearInterval(id); }, []);
+
+ // ── 온라인 판정 — 최근 센서 토픽 수신 시각 기준 (4초 무수신이면 오프라인) ──
+ const OFFLINE_MS = 4_000;
+ const lastMsgTs = Math.max(
+  rosMessages[`/${botId}/odom`]?.timestamp ?? 0,
+  rosMessages[`/${botId}/imu`]?.timestamp ?? 0,
+  rosMessages[`/${botId}/scan`]?.timestamp ?? 0,
+  rosMessages[`/${botId}/battery_state`]?.timestamp ?? 0,
+ );
+ const online = lastMsgTs > 0 && Date.now() - lastMsgTs < OFFLINE_MS;
+
  // ── NestJS rosMessages에서 센서 데이터 추출 ──────────────────────────────
- const p = (topic: string) => rosMessages[`/${botId}/${topic}`]?.data;
+ // 오프라인이면 stale 데이터를 보여주지 않도록 undefined 반환 → 각 카드 NoData 표시
+ const p = (topic: string) => (online ? rosMessages[`/${botId}/${topic}`]?.data : undefined);
 
  // // cmd_vel
  // const cvData = p("cmd_vel") as { linear?: { x?: number }; angular?: { z?: number } } | undefined;
@@ -160,6 +175,14 @@ export default function TurtlebotPanel({
  return (
  <div className="max-w-2xl">
  <PanelCard title={BOT_LABELS[botId] ?? botId} icon="🤖" accent="blue" badge={botId}>
+
+ {/* ── 오프라인 배너 ─────────────────────────────────────────────── */}
+ {!online && (
+ <div className="mb-4 flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-500/25 bg-red-500/10">
+ <span className="w-2 h-2 rounded-full bg-red-500" />
+ <span className="text-xs font-semibold text-red-600">오프라인 — 센서 데이터 수신 없음</span>
+ </div>
+ )}
 
  {/* ── 센서 그리드 (2열) ─────────────────────────────────────────── */}
  <div className="grid grid-cols-2 gap-4">

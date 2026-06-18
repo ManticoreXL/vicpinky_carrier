@@ -67,6 +67,11 @@ export class RobotService {
     }).exec();
   }
 
+  /** OFFLINE이 아닌 모든 로봇 (오프라인 보정 스윕용) */
+  async findNotOffline(): Promise<RobotDocument[]> {
+    return this.robotModel.find({ status: { $ne: RobotStatus.OFFLINE } }).lean().exec() as unknown as RobotDocument[];
+  }
+
   /**
    * ROS 메시지로 처음 감지된 로봇을 DB에 자동 등록.
    * 이미 존재하면 OFFLINE → IDLE 로 복귀시킨다. (process() 루프에서 반환값 필요)

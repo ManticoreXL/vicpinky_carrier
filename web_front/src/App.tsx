@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { robotStatusKo } from "./utils/statusLabel";
 import { useRos } from "./hooks/useRos";
 import { useNestSocket } from "./hooks/useNestSocket";
 import type { RosMessage } from "./hooks/useNestSocket";
@@ -71,22 +72,22 @@ export default function App() {
          </div>
          <div className="hidden sm:block">
            <h1 className="text-sm font-semibold text-white leading-none tracking-tight">
-             {isExplore ? "Disaster Monitoring" : isTasks ? "Task Manager" : isFms ? "Fleet Dispatch" : isFlow ? "Task Workflow" : isAdmin ? "System Config" : "Robot Control"}
+             {isExplore ? "재난 모니터링" : isTasks ? "태스크 관리" : isFms ? "플릿 명령 할당" : isFlow ? "작업 흐름도" : isAdmin ? "시스템 설정" : "로봇 제어"}
            </h1>
-           <p className="text-[10px] text-white/[0.55] leading-none mt-1 tracking-widest uppercase">
-             Operations Center
+           <p className="text-[10px] text-white/[0.55] leading-none mt-1 tracking-widest">
+             통합 관제 센터
            </p>
          </div>
        </div>
 
        {/* 모드 전환 — 중앙 */}
        <div className="flex bg-[#FFCE99]/32 backdrop-blur-xl p-1 rounded-xl border border-white/[0.1] shadow-inner overflow-x-auto">
-         <ModeBtn mode="control" active={appMode === "control"} onClick={() => setAppMode("control")}>CTRL</ModeBtn>
-         <ModeBtn mode="tasks"   active={appMode === "tasks"}   onClick={() => setAppMode("tasks")}>TASKS</ModeBtn>
-         <ModeBtn mode="fms"     active={appMode === "fms"}     onClick={() => setAppMode("fms")}>FLEET</ModeBtn>
-         <ModeBtn mode="flow"    active={appMode === "flow"}    onClick={() => setAppMode("flow")}>FLOW</ModeBtn>
-         <ModeBtn mode="explore" active={appMode === "explore"} onClick={() => setAppMode("explore")}>RECON</ModeBtn>
-         <ModeBtn mode="admin"   active={appMode === "admin"}   onClick={() => setAppMode("admin")}>ADMIN</ModeBtn>
+         <ModeBtn mode="control" active={appMode === "control"} onClick={() => setAppMode("control")}>제어</ModeBtn>
+         <ModeBtn mode="tasks"   active={appMode === "tasks"}   onClick={() => setAppMode("tasks")}>태스크</ModeBtn>
+         <ModeBtn mode="fms"     active={appMode === "fms"}     onClick={() => setAppMode("fms")}>플릿</ModeBtn>
+         <ModeBtn mode="flow"    active={appMode === "flow"}    onClick={() => setAppMode("flow")}>흐름도</ModeBtn>
+         <ModeBtn mode="explore" active={appMode === "explore"} onClick={() => setAppMode("explore")}>정찰</ModeBtn>
+         <ModeBtn mode="admin"   active={appMode === "admin"}   onClick={() => setAppMode("admin")}>관리</ModeBtn>
        </div>
 
        {/* 상태 표시 — 우측 */}
@@ -94,7 +95,7 @@ export default function App() {
          {notifications.length > 0 && (
            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-red-500/10
                            border border-red-500/25 rounded-lg">
-             <span className="text-red-600 text-xs font-semibold hidden sm:inline">⚠ Alert</span>
+             <span className="text-red-600 text-xs font-semibold hidden sm:inline">⚠ 알림</span>
              <span className="w-4.5 h-4.5 bg-red-500 text-[#FFFDF1] text-[10px] font-bold
                               rounded-md flex items-center justify-center px-1">
                {notifications.length}
@@ -157,6 +158,8 @@ export default function App() {
  setRobotHome={setRobotHome}
  lockedNodes={lockedNodes}
  focusRobotId={selectedRobot}
+ robots={robots}
+ robotStatuses={robotStatuses}
  />
  </div>
  ) : isExplore ? (
@@ -325,7 +328,7 @@ function GenericRobotPanel({
  <div>
  <h2 className="text-xl font-semibold tracking-wide text-white ">{robotId}</h2>
  <span className={`text-xs font-semibold tracking-wide ${STATUS_C[liveStatus ?? ""] ?? "text-white/[0.45]"}`}>
- {liveStatus ?? "UNKNOWN STATUS"}
+ {robotStatusKo(liveStatus)}
  </span>
  </div>
  </div>

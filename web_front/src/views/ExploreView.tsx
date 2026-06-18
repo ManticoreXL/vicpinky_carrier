@@ -171,20 +171,20 @@ export default function ExploreView({ rosMessages, mapTimestamps, mapInfos, sock
  <div className="flex items-center gap-8">
  <div className="flex items-center gap-3">
  <div className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse " />
- <span className="text-white/90 font-semibold text-xs tracking-wide ">Mission Active</span>
+ <span className="text-white/90 font-semibold text-xs tracking-wide ">임무 수행 중</span>
  </div>
  <div className="flex items-center gap-3 px-5 py-1.5 bg-[#FFCE99]/32 rounded-xl border border-white/[0.1]">
- <span className="text-xs text-white/[0.45] font-semibold tracking-wide ">Elapsed</span>
+ <span className="text-xs text-white/[0.45] font-semibold tracking-wide ">경과 시간</span>
  <span className=" text-white/90 text-base font-semibold tabular-nums">{fmtTime(elapsed)}</span>
  </div>
  </div>
 
  <div className="flex items-center gap-10">
- <StatChip label="Assets Online" value={`${onlineCount}/4`} color={onlineCount > 0 ? "text-white/90" : "text-white/90"} />
- <StatChip label="Targets Spotted" value={String(totalDetected)} color={totalDetected > 0 ? "text-white/90" : "text-white/[0.4]"} />
- <StatChip label="Tactical Alerts" value={String(alertCount)} color={alertCount > 0 ? "text-white/90" : "text-white/[0.4]"} />
+ <StatChip label="온라인 로봇" value={`${onlineCount}/4`} color={onlineCount > 0 ? "text-white/90" : "text-white/90"} />
+ <StatChip label="탐지 대상" value={String(totalDetected)} color={totalDetected > 0 ? "text-white/90" : "text-white/[0.4]"} />
+ <StatChip label="경보" value={String(alertCount)} color={alertCount > 0 ? "text-white/90" : "text-white/[0.4]"} />
  {alertCount > 0 && (
- <button onClick={() => setAlertCount(0)} className="glass-button !px-3 !py-1 text-xs !rounded-md">Reset Feed</button>
+ <button onClick={() => setAlertCount(0)} className="glass-button !px-3 !py-1 text-xs !rounded-md">경보 초기화</button>
  )}
  </div>
  </div>
@@ -193,7 +193,7 @@ export default function ExploreView({ rosMessages, mapTimestamps, mapInfos, sock
  
  {/* ── Left Sidebar: Fleet Deployment ───────────────────────────── */}
  <aside className="w-full md:w-64 flex-none flex md:flex-col bg-[#FFCE99]/32 backdrop-blur-3xl border-r border-white/[0.1] overflow-y-auto">
- <PanelHeader icon="⬡" label="Asset Deployment" />
+ <PanelHeader icon="⬡" label="로봇 배치" />
  <div className="p-4 space-y-3">
  <DeploymentCard 
  id="project_slam" label="GLOBAL SLAM" type="RVIZ" 
@@ -204,17 +204,17 @@ export default function ExploreView({ rosMessages, mapTimestamps, mapInfos, sock
  id="vicpinky" label="VICPINKY" type="CAM×2" 
  online={!!rosMessages["/vicpinky/odom"]} isSelected={selectedBot === "vicpinky"}
  onClick={() => setSelectedBot("vicpinky")}
- telemetry={vpPos ? `(${vpPos.x.toFixed(1)}, ${vpPos.y.toFixed(1)})` : "N/A"}
+ telemetry={vpPos ? `(${vpPos.x.toFixed(1)}, ${vpPos.y.toFixed(1)})` : "위치 없음"}
  />
  <div className="pt-4 pb-1">
- <span className="sub-label">Tactical Units</span>
+ <span className="sub-label">로봇 유닛</span>
  </div>
  {TB3_IDS.map(id => (
  <DeploymentCard 
  key={id} id={id} label={TB3_LABELS[id]} type="UNIT"
  online={botSnaps[id].online} isSelected={selectedBot === id}
  onClick={() => setSelectedBot(id)}
- telemetry={botSnaps[id].online ? `${botSnaps[id].batPct}% POW` : "DISCONNECTED"}
+ telemetry={botSnaps[id].online ? `${botSnaps[id].batPct}% 전력` : "연결 끊김"}
  warning={botSnaps[id].detected}
  />
  ))}
@@ -264,7 +264,7 @@ export default function ExploreView({ rosMessages, mapTimestamps, mapInfos, sock
  <div key={bot} className={bot === selectedBot ? "space-y-4" : "hidden"}>
  {cams.length === 0 ? (
  <div className="aspect-video glass-card flex items-center justify-center opacity-30">
- <span className="text-xs tracking-wide ">No Signal</span>
+ <span className="text-xs tracking-wide ">신호 없음</span>
  </div>
  ) : cams.map(c => <CameraFeed key={c.botId} botId={c.botId} label={c.label} socket={socket} />)}
  </div>
@@ -275,8 +275,8 @@ export default function ExploreView({ rosMessages, mapTimestamps, mapInfos, sock
 
  <div className="flex-1 flex flex-col overflow-hidden">
  <div className="flex-none flex items-center justify-between px-6 py-4 border-b border-white/[0.1]">
- <span className="sub-label !mb-0">Mission Timeline</span>
- <span className="text-xs text-white/[0.45] font-bold">{events.length} LOGS</span>
+ <span className="sub-label !mb-0">임무 타임라인</span>
+ <span className="text-xs text-white/[0.45] font-bold">{events.length}건</span>
  </div>
  <div ref={logRef} className="flex-1 overflow-y-auto p-4 space-y-2">
  {events.map(evt => (

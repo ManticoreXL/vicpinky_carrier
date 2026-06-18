@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { Socket } from "socket.io-client";
-import type { RosMessage, FmsTask, FmsDispatchPayload, TaskType, TaskManagerAlert, RobotInfo } from "../hooks/useNestSocket";
+import type { RosMessage, FmsTask, FmsDispatchPayload, TaskManagerAlert, RobotInfo } from "../hooks/useNestSocket";
 import { BACKEND_URL } from "../config";
+import { robotStatusKo, taskStatusKo, taskTypeKo } from "../utils/statusLabel";
 
 // ── 상수 ──────────────────────────────────────────────────────────────────────
 
@@ -87,7 +88,8 @@ function statusDot(online: boolean, status?: string): string {
 }
 
 function statusLabel(online: boolean, status?: string): string {
-  return online ? (status ?? "IDLE") : "OFFLINE";
+  if (!online) return '오프라인';
+  return robotStatusKo(status ?? "IDLE");
 }
 
 function statusColor(online: boolean, status?: string): string {
@@ -156,12 +158,14 @@ export default function TaskManagerView({
   const [input, setInput]               = useState("");
   const [loading, setLoading]           = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("active");
+  const [boardTab, setBoardTab]         = useState<"task" | "robot">("task");
   const [robotSearch, setRobotSearch]   = useState("");
   const chatEndRef  = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [topoNodes, setTopoNodes] = useState<TopoNode[]>([]);
-  const chargerNodes = useMemo(() => topoNodes.filter(n => n.type === "charger").map(n => n.node_id), [topoNodes]);
+  // 노드 타입은 대문자(CHARGER). 충전소 노드 목록.
+  const chargerNodes = useMemo(() => topoNodes.filter(n => n.type === "CHARGER"), [topoNodes]);
 
   useEffect(() => {
     fetch(`${BACKEND_URL}/api/map/assignments`)
@@ -192,9 +196,31 @@ export default function TaskManagerView({
     return fmsTasks.filter(t => t.status === filterStatus);
   }, [fmsTasks, filterStatus]);
 
+  // 충전 버튼 — 무조건 현재 위치에서 가장 가까운 충전소로 이동
   const handleCharge = useCallback((robotId: string) => {
-    emitFmsDispatch({ type: "CHARGE", targetNode: chargerNodes[0] ?? "충전소", preferredRobotId: robotId, priority: 3 });
-  }, [chargerNodes, emitFmsDispatch]);
+    if (chargerNodes.length === 0) {
+      alert("등록된 충전소 노드가 없습니다. 토폴로지에서 CHARGER 노드를 먼저 등록하세요.");
+      return;
+    }
+    // 로봇 현재 위치 (AMCL 우선 → odom → DB 값)
+    const amcl = (rosMessages[`/${robotId}/amcl_pose`]?.data as any)?.pose?.pose?.position;
+    const odom = (rosMessages[`/${robotId}/odom`]?.data as any)?.pose?.pose?.position;
+    const dbInfo = robots.find(r => r.robot_id === robotId);
+    const x = amcl?.x ?? odom?.x ?? dbInfo?.pose_x ?? null;
+    const y = amcl?.y ?? odom?.y ?? dbInfo?.pose_y ?? null;
+
+    // 위치를 알면 최근접 충전소, 모르면 첫 충전소로 폴백
+    let target = chargerNodes[0].node_id;
+    if (x != null && y != null) {
+      let best = chargerNodes[0], bestD = Math.hypot(best.x - x, best.y - y);
+      for (const n of chargerNodes) {
+        const d = Math.hypot(n.x - x, n.y - y);
+        if (d < bestD) { bestD = d; best = n; }
+      }
+      target = best.node_id;
+    }
+    emitFmsDispatch({ type: "CHARGE", targetNode: target, preferredRobotId: robotId, priority: 3 });
+  }, [chargerNodes, rosMessages, robots, emitFmsDispatch]);
 
   // ── AI 에이전트 호출 (/ai/agent — 자동 디스패치) ──────────────────────────
 
@@ -241,10 +267,10 @@ export default function TaskManagerView({
       {/* ── 상단 통계바 ─────────────────────────────────────────────────── */}
       <div className="flex-none flex items-center justify-between px-6 py-2.5 bg-[#FFCE99]/32 border-b border-white/[0.1]">
         <div className="flex items-center gap-8">
-          <Stat label="Fleet Online" value={`${onlineCount}/${ROBOTS.length}`} />
-          <Stat label="Active Tasks" value={String(activeCount)} />
-          <Stat label="Total"        value={String(fmsTasks.length)} />
-          {tmAlerts.length > 0 && <Stat label="Alerts" value={String(tmAlerts.length)} warn />}
+          <Stat label="온라인" value={`${onlineCount}/${ROBOTS.length}`} />
+          <Stat label="진행 태스크" value={String(activeCount)} />
+          <Stat label="전체" value={String(fmsTasks.length)} />
+          {tmAlerts.length > 0 && <Stat label="알림" value={String(tmAlerts.length)} warn />}
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg border border-violet-500/20 bg-violet-500/5">
@@ -253,8 +279,8 @@ export default function TaskManagerView({
           </div>
           <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border ${loading ? "border-amber-500/20 bg-amber-500/5" : "border-emerald-500/20 bg-emerald-500/5"}`}>
             <div className={`w-1 h-1 rounded-full ${loading ? "bg-amber-400 animate-pulse" : "bg-emerald-400"}`} />
-            <span className={`text-[9px] font-bold tracking-widest uppercase ${loading ? "text-amber-600/80" : "text-emerald-600/80"}`}>
-              {loading ? "Generating..." : "AI Ready"}
+            <span className={`text-[9px] font-bold tracking-widest ${loading ? "text-amber-600/80" : "text-emerald-600/80"}`}>
+              {loading ? "생성 중…" : "AI 준비됨"}
             </span>
           </div>
         </div>
@@ -266,9 +292,9 @@ export default function TaskManagerView({
         {/* ══ 컬럼 1: Fleet AI ════════════════════════════════════════════ */}
         <aside className="w-80 flex-none flex flex-col border-r border-white/[0.1] bg-[#FFCE99]/32">
           <div className="flex-none px-5 py-3.5 border-b border-white/[0.1]">
-            <span className="sub-label">AI Command Interface</span>
+            <span className="sub-label">AI 명령 인터페이스</span>
             <div className="flex items-center justify-between mt-0.5">
-              <h2 className="text-sm font-semibold text-white/80 tracking-wide">FLEET AI</h2>
+              <h2 className="text-sm font-semibold text-white/80 tracking-wide">플릿 AI</h2>
               <span className="text-[9px] text-violet-600/60 tracking-wide">Qwen + EXAONE</span>
             </div>
           </div>
@@ -320,9 +346,9 @@ export default function TaskManagerView({
           <div className="flex-none px-4 pt-3.5 pb-3 border-b border-white/[0.1]">
             <div className="flex items-center justify-between mb-2.5">
               <div>
-                <span className="sub-label">Fleet Monitor</span>
+                <span className="sub-label">로봇 모니터</span>
                 <div className="text-xs font-semibold text-white/[0.82] tracking-wide mt-0.5">
-                  {onlineCount} / {ROBOTS.length} Online
+                  온라인 {onlineCount} / {ROBOTS.length}
                 </div>
               </div>
             </div>
@@ -369,30 +395,67 @@ export default function TaskManagerView({
           </div>
         </div>
 
-        {/* ══ 컬럼 3: Task 목록 ════════════════════════════════════════════ */}
+        {/* ══ 컬럼 3: 작업 현황 (태스크별 / 로봇별) ═══════════════════════ */}
         <main className="flex-1 flex flex-col overflow-hidden">
           <div className="flex-none px-5 pt-3.5 pb-3 border-b border-white/[0.1]">
-            <span className="sub-label">Task Board</span>
-            <div className="flex items-center gap-2 mt-2 flex-wrap">
-              {["active", "all", "PENDING", "RUNNING", "COMPLETED", "FAILED"].map(tab => (
-                <button key={tab} onClick={() => setFilterStatus(tab)}
-                  className={`px-3 py-1 text-[10px] font-semibold tracking-wide rounded-lg border transition-all ${
-                    filterStatus === tab ? "bg-white/10 border-white/[0.08] text-white" : "border-white/[0.1] text-white/[0.5] hover:text-white/[0.68]"
-                  }`}>{tab}</button>
-              ))}
+            <div className="flex items-center justify-between">
+              <span className="sub-label">작업 현황</span>
+              {/* 최상위 보기 전환: 태스크별 / 로봇별 */}
+              <div className="flex bg-[#FFCE99]/14 p-0.5 rounded-lg border border-white/[0.1]">
+                {([["task", "태스크별"], ["robot", "로봇별"]] as [typeof boardTab, string][]).map(([val, label]) => (
+                  <button key={val} onClick={() => setBoardTab(val)}
+                    className={`px-3 py-1 text-[10px] font-bold tracking-wide rounded-md transition-all ${
+                      boardTab === val ? "bg-white/10 text-white shadow" : "text-white/[0.5] hover:text-white/[0.7]"
+                    }`}>{label}</button>
+                ))}
+              </div>
             </div>
+
+            {/* 태스크별일 때만 상태 필터 노출 */}
+            {boardTab === "task" && (
+              <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                {([
+                  ["active",    "진행 중"],
+                  ["all",       "전체"],
+                  ["PENDING",   "대기 중"],
+                  ["RUNNING",   "수행 중"],
+                  ["COMPLETED", "완료"],
+                  ["FAILED",    "실패"],
+                ] as [string, string][]).map(([val, label]) => (
+                  <button key={val} onClick={() => setFilterStatus(val)}
+                    className={`px-3 py-1 text-[10px] font-semibold tracking-wide rounded-lg border transition-all ${
+                      filterStatus === val ? "bg-white/10 border-white/[0.08] text-white" : "border-white/[0.1] text-white/[0.5] hover:text-white/[0.68]"
+                    }`}>{label}</button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto p-5">
-            {filtered.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center">
-                <div className="text-4xl mb-4 opacity-10">◻</div>
-                <p className="text-sm text-white/[0.4] tracking-wide">No tasks found</p>
-              </div>
+            {boardTab === "task" ? (
+              filtered.length === 0 ? (
+                <div className="flex flex-col items-center justify-center h-full text-center">
+                  <div className="text-4xl mb-4 opacity-10">◻</div>
+                  <p className="text-sm text-white/[0.4] tracking-wide">표시할 태스크가 없습니다</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {filtered.map(task => (
+                    <TaskCard key={task._id} task={task} onCancel={() => emitFmsCancel(task._id)} />
+                  ))}
+                </div>
+              )
             ) : (
-              <div className="space-y-3">
-                {filtered.map(task => (
-                  <TaskCard key={task._id} task={task} onCancel={() => emitFmsCancel(task._id)} />
+              <div className="space-y-4">
+                {ROBOTS.map(r => (
+                  <RobotTaskGroup
+                    key={r.id}
+                    robotId={r.id}
+                    tasks={fmsTasks}
+                    online={isOnline(rosMessages, r.id)}
+                    status={robotStatuses[r.id]}
+                    onCancel={emitFmsCancel}
+                  />
                 ))}
               </div>
             )}
@@ -457,14 +520,14 @@ function RobotMonitorCard({
         <span className="text-[10px] text-white/[0.55] font-mono truncate max-w-[70%]" title={nodeId ?? ""}>
           {nodeId ? `📍 ${nodeId}` : <span className="text-white/[0.4] italic">위치 없음</span>}
         </span>
-        <span className="text-[9px] text-white/[0.4] flex-none">DOM {robot.domain}</span>
+        <span className="text-[9px] text-white/[0.4] flex-none">도메인 {robot.domain}</span>
       </div>
 
       {/* 행 3: 현재 태스크 */}
       {task ? (
         <div className={`text-[10px] px-2 py-0.5 rounded border mb-2 truncate ${TASK_COLORS[task.type] ?? "bg-[#FFCE99]/32 border-white/[0.12] text-white/[0.68]"}`}
-          title={`${task.type} → ${task.targetNode}`}>
-          {task.type} → {task.targetNode}
+          title={`${taskTypeKo(task.type)} → ${task.targetNode}`}>
+          {taskTypeKo(task.type)} → {task.targetNode}
         </div>
       ) : (
         <div className="mb-2 h-5" />
@@ -535,7 +598,7 @@ function ChatBubble({ msg }: { msg: ChatMessage }) {
       )}
       {!isUser && (
         <span className="text-[10px] text-violet-600/70 font-semibold tracking-widest px-1 mb-0.5">
-          FLEET AI {msg.fromStt && "🎙"}
+          플릿 AI {msg.fromStt && "🎙"}
         </span>
       )}
       <div className={`max-w-[92%] rounded-2xl px-3.5 py-2.5 text-xs leading-relaxed whitespace-pre-wrap break-words ${
@@ -616,11 +679,11 @@ function TaskCard({ task, onCancel }: { task: FmsTask; onCancel: () => void }) {
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-center gap-2.5">
           <div className={`w-1.5 h-1.5 rounded-full flex-none ${dotClass}`} />
-          <span className={`text-[10px] font-bold tracking-widest px-2 py-0.5 rounded border ${colorClass}`}>{task.type}</span>
+          <span className={`text-[10px] font-bold tracking-widest px-2 py-0.5 rounded border ${colorClass}`}>{taskTypeKo(task.type)}</span>
           <span className="text-xs text-white/[0.6] font-mono">→ {task.targetNode}</span>
         </div>
         {["PENDING", "ASSIGNED", "RUNNING"].includes(task.status) && (
-          <button onClick={onCancel} className="opacity-0 group-hover:opacity-100 text-white/[0.45] hover:text-rose-600 text-sm transition-all">✕</button>
+          <button onClick={onCancel} title="태스크 취소" className="opacity-0 group-hover:opacity-100 text-white/[0.45] hover:text-rose-600 text-sm transition-all">✕</button>
         )}
       </div>
       <div className="flex items-center justify-between text-[10px] text-white/[0.5]">
@@ -628,16 +691,127 @@ function TaskCard({ task, onCancel }: { task: FmsTask; onCancel: () => void }) {
           <span className={`font-semibold ${
             task.status === "RUNNING" ? "text-emerald-600" : task.status === "ASSIGNED" ? "text-sky-600" :
             task.status === "FAILED" ? "text-rose-600" : "text-amber-600"
-          }`}>{task.status}</span>
+          }`}>{taskStatusKo(task.status)}</span>
           {task.assignedRobotId && <span className="text-white/[0.55] font-mono">@ {task.assignedRobotId}</span>}
         </div>
         <div className="flex items-center gap-3">
-          {elapsed !== null && <span className="font-mono">{elapsed}s</span>}
-          <span>P{task.priority}</span>
+          {elapsed !== null && <span className="font-mono">{elapsed}초</span>}
+          <span>우선순위 {task.priority}</span>
           <span>{new Date(task.createdAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</span>
         </div>
       </div>
       {task.waitReason && <div className="mt-2 text-[10px] text-amber-600/60 italic">{task.waitReason}</div>}
+    </div>
+  );
+}
+
+// 로봇별 작업 묶음 — 현재 수행 / 대기(예정) / 최근 이력
+function RobotTaskGroup({
+  robotId, tasks, online, status, onCancel,
+}: {
+  robotId: string;
+  tasks: FmsTask[];
+  online: boolean;
+  status?: string;
+  onCancel: (taskId: string) => void;
+}) {
+  // 이 로봇에 연관된 태스크 분류
+  const mine = tasks.filter(t => t.assignedRobotId === robotId || t.preferredRobotId === robotId);
+  const current  = mine.filter(t => ["ASSIGNED", "RUNNING"].includes(t.status));
+  const upcoming = mine
+    .filter(t => t.status === "PENDING")
+    .sort((a, b) => a.priority - b.priority || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  const history  = mine
+    .filter(t => ["COMPLETED", "FAILED"].includes(t.status))
+    .sort((a, b) => new Date(b.completedAt ?? b.createdAt).getTime() - new Date(a.completedAt ?? a.createdAt).getTime())
+    .slice(0, 5);
+
+  const lbl = online ? robotStatusKo(status ?? "IDLE") : "오프라인";
+  const lblColor = !online ? "text-white/[0.4]"
+    : status === "ERROR" ? "text-rose-600"
+    : status === "MOVING" || status === "WORKING" ? "text-amber-600"
+    : "text-emerald-600";
+
+  return (
+    <div className="glass-card !bg-[#FFCE99]/32 border-white/[0.1] overflow-hidden">
+      {/* 로봇 헤더 */}
+      <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.08] bg-[#FFCE99]/14">
+        <div className="flex items-center gap-2">
+          <div className={`w-2 h-2 rounded-full ${online ? "bg-emerald-400" : "bg-[#521C0D]/30"}`} />
+          <span className="text-sm font-bold font-mono text-white/90">{robotId}</span>
+          <span className={`text-[10px] font-bold tracking-wide ${lblColor}`}>{lbl}</span>
+        </div>
+        <span className="text-[10px] text-white/[0.5]">총 {mine.length}건</span>
+      </div>
+
+      <div className="p-3 space-y-3">
+        {/* 현재 수행 중 */}
+        <RobotTaskSection title="현재 수행" emptyText="수행 중인 태스크 없음">
+          {current.map(t => (
+            <RobotTaskRow key={t._id} task={t} cancelable onCancel={() => onCancel(t._id)} />
+          ))}
+        </RobotTaskSection>
+
+        {/* 앞으로 할 태스크 (대기) */}
+        <RobotTaskSection title="대기 예정" count={upcoming.length} emptyText="예정된 태스크 없음">
+          {upcoming.map((t, i) => (
+            <RobotTaskRow key={t._id} task={t} order={i + 1} cancelable onCancel={() => onCancel(t._id)} />
+          ))}
+        </RobotTaskSection>
+
+        {/* 최근 이력 */}
+        {history.length > 0 && (
+          <RobotTaskSection title="최근 이력">
+            {history.map(t => (
+              <RobotTaskRow key={t._id} task={t} muted />
+            ))}
+          </RobotTaskSection>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function RobotTaskSection({
+  title, count, emptyText, children,
+}: {
+  title: string; count?: number; emptyText?: string; children: React.ReactNode;
+}) {
+  const hasChildren = Array.isArray(children) ? children.length > 0 : !!children;
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <span className="text-[10px] font-bold tracking-widest text-white/[0.5] uppercase">{title}</span>
+        {count != null && count > 0 && (
+          <span className="text-[9px] font-bold text-white/[0.45] bg-[#FFCE99]/32 rounded px-1">{count}</span>
+        )}
+      </div>
+      {hasChildren ? <div className="space-y-1.5">{children}</div>
+        : emptyText && <p className="text-[10px] text-white/[0.35] italic pl-0.5">{emptyText}</p>}
+    </div>
+  );
+}
+
+function RobotTaskRow({
+  task, order, muted, cancelable, onCancel,
+}: {
+  task: FmsTask; order?: number; muted?: boolean; cancelable?: boolean; onCancel?: () => void;
+}) {
+  const colorClass = TASK_COLORS[task.type] ?? "bg-[#FFCE99]/32 border-white/[0.12] text-white/[0.68]";
+  return (
+    <div className={`group flex items-center gap-2 rounded-lg border border-white/[0.08] px-2.5 py-1.5 ${muted ? "opacity-55" : "bg-[#FFCE99]/14"}`}>
+      {order != null && <span className="text-[10px] font-bold text-white/[0.4] w-4 text-center flex-none">{order}</span>}
+      <span className={`text-[9px] font-bold tracking-wide px-1.5 py-0.5 rounded border flex-none ${colorClass}`}>{taskTypeKo(task.type)}</span>
+      <span className="text-[11px] text-white/[0.7] font-mono truncate flex-1">→ {task.targetNode}</span>
+      <span className="text-[9px] text-white/[0.45] flex-none">우선 {task.priority}</span>
+      <span className={`text-[9px] font-semibold flex-none ${
+        task.status === "RUNNING" ? "text-emerald-600" : task.status === "ASSIGNED" ? "text-sky-600" :
+        task.status === "FAILED" ? "text-rose-600" : task.status === "COMPLETED" ? "text-white/[0.5]" : "text-amber-600"
+      }`}>{taskStatusKo(task.status)}</span>
+      {cancelable && onCancel && (
+        <button onClick={onCancel} title="태스크 취소"
+          className="opacity-0 group-hover:opacity-100 text-white/[0.4] hover:text-rose-600 text-xs flex-none transition-all">✕</button>
+      )}
     </div>
   );
 }

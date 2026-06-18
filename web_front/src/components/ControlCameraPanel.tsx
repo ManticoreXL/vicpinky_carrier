@@ -115,8 +115,8 @@ export default function ControlCameraPanel({ selectedRobot, socket }: Props) {
 
  {/* ── 하단 여백 (추후 PTZ 컨트롤 등 확장) ─────────────────────────── */}
  <div className="flex-1 flex items-center justify-center">
- <p className="text-xs text-[#1a1a1a] tracking-wide">
- PTZ CONTROL — 준비 중
+ <p className="text-xs text-white/[0.45] tracking-wide">
+ PTZ 제어 — 준비 중
  </p>
  </div>
 

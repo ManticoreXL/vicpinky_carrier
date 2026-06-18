@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import axios from 'axios';
 import { TaskManagerService } from '../fms/task-manager.service';
 import { FmsService } from '../fms/fms.service';
@@ -130,13 +130,40 @@ export interface AgentResult {
 }
 
 @Injectable()
-export class AgentService {
+export class AgentService implements OnModuleInit {
   private readonly logger    = new Logger(AgentService.name);
   private readonly ollamaUrl = process.env.OLLAMA_URL ?? 'http://127.0.0.1:11434';
-  
+
   // ── 하이브리드 모델 설정 ──
-  private readonly cmdModel = process.env.OLLAMA_NL_MODEL ?? 'qwen2.5:7b'; // 툴 전용
-  private readonly chatModel = 'exaone3.5:latest'; // 답변/조회 전용
+  //   cmdModel  : 도구(tool) 호출 전용 — Qwen 2.5 (function-calling 안정적)
+  //   chatModel : 답변/브리핑 전용     — EXAONE 3.5 (한국어 자연스러움)
+  // ⚠ 두 모델 역할이 섞이면 안 됨. cmd는 절대 OLLAMA_NL_MODEL(=ai.service 공용)에
+  //   끌려가지 않도록 독립 env(OLLAMA_CMD_MODEL/OLLAMA_CHAT_MODEL)로 분리한다.
+  private readonly cmdModel  = process.env.OLLAMA_CMD_MODEL  ?? 'qwen2.5:7b';
+  private readonly chatModel = process.env.OLLAMA_CHAT_MODEL ?? 'exaone3.5:latest';
+
+  // ── 시작 시 모델 적재 상태 검증 ──
+  async onModuleInit(): Promise<void> {
+    try {
+      const res = await axios.get(`${this.ollamaUrl}/api/tags`, { timeout: 5_000 });
+      const installed: string[] = (res.data?.models ?? []).map((m: { name: string }) => m.name);
+      const need = [
+        { role: '도구(cmd)', model: this.cmdModel },
+        { role: '답변(chat)', model: this.chatModel },
+      ];
+      for (const { role, model } of need) {
+        if (installed.includes(model)) {
+          this.logger.log(`[모델검증] ${role} = ${model} ✓ 설치됨`);
+        } else {
+          this.logger.error(
+            `[모델검증] ${role} = ${model} ✗ Ollama에 없음! 설치된 모델: [${installed.join(', ') || '없음'}] → "ollama pull ${model}" 필요`,
+          );
+        }
+      }
+    } catch (err: any) {
+      this.logger.error(`[모델검증] Ollama(${this.ollamaUrl}) 연결 실패: ${err.message}`);
+    }
+  }
 
   constructor(
     private readonly taskManager:         TaskManagerService,
@@ -244,19 +271,18 @@ export class AgentService {
 
   // ── 질문/대화 흐름 (EXAONE 3.5) ──────────────────────────────────────────
   private async executeChatFlow(userText: string, ragContext: string): Promise<string> {
-    const systemPrompt = `[언어 규칙 — 최우선 적용]
-반드시 한국어로만 답변하세요. 영어·중국어·일본어 등 다른 언어는 절대 사용하지 마세요.
+    const systemPrompt = `[최우선 규칙 — 반드시 준수]
+1. 반드시 한국어로만 답변하세요. 영어·중국어·일본어 등 다른 언어 절대 사용 금지.
+2. 아래 [현재 시스템 상태] 데이터에 있는 정보만 사용하세요. 데이터에 없는 내용은 절대 추측하거나 생성하지 마세요.
+3. 노드 ID는 반드시 [토폴로지 노드] 목록에 있는 실제 ID를 그대로 사용하세요.
+   "station1", "dock_main", "작업장" 등 목록에 없는 이름 절대 생성 금지.
+   로봇의 근접 노드는 [근접노드: XXX] 형태로 이미 제공됩니다 — 그 XXX 값을 그대로 쓰세요.
+4. JSON 출력 금지. 자연스러운 한국어 구어체 문장으로만 답하세요.
 
-당신은 로봇 관제 시스템(FMS) AI 어시스턴트 EXAONE입니다.
-아래 DB 현황을 기반으로 사용자의 질문에 정확하게 한국어로 답변하세요.
+당신은 로봇 관제 시스템(FMS) AI 어시스턴트입니다.
 
-[답변 규칙]
-- 로봇 위치는 반드시 근접 노드 ID로 표현하세요: "XXX 노드 근처" 또는 "XXX 노드에 위치"
-- 좌표(x, y)만 단독으로 나열하지 말고 노드 ID를 앞에 붙이세요.
-- 예시: "tb3_04는 현재 '중간 중단' 노드 근처(2.81, -6.02)에 있습니다."
-- JSON 형태 출력 금지. 자연스러운 한국어 문장으로만 답하세요.
-
-[현재 시스템 상태]\n${ragContext}`;
+[현재 시스템 상태]
+${ragContext}`;
 
     try {
       const res = await axios.post(`${this.ollamaUrl}/v1/chat/completions`, {
@@ -265,7 +291,7 @@ export class AgentService {
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userText }
         ],
-        options: { temperature: 0.3 },
+        options: { temperature: 0.1 },
         keep_alive: -1,
       });
       let content = res.data.choices[0].message.content ?? '답변을 생성하지 못했습니다.';
@@ -291,14 +317,18 @@ export class AgentService {
 
   // ── 최종 브리핑 생성 (EXAONE 3.5) ────────────────────────────────────────
   private async generateBriefing(userText: string, actions: AgentAction[], ragContext: string): Promise<string> {
-    const prompt = `[언어 규칙] 반드시 한국어로만 답변하세요. 다른 언어 절대 사용 금지.
+    const prompt = `[최우선 규칙]
+1. 반드시 한국어 구어체로만 답변하세요. 다른 언어 절대 사용 금지.
+2. 노드 ID는 아래 [현재 상태] 데이터에 있는 실제 ID만 사용하세요. 임의의 이름 생성 금지.
+3. JSON 출력 금지.
 
-사용자가 "${userText}"라고 명령했고, 시스템은 다음 작업들을 수행했습니다:
+사용자가 "${userText}"라고 요청했고, 시스템이 수행한 작업:
 ${JSON.stringify(actions, null, 2)}
 
-[현재 상태 참고]\n${ragContext}
+[현재 상태]
+${ragContext}
 
-이 결과를 한국어로 간결하게 보고하세요. 어떤 로봇/노드를 선택했는지 포함하세요.`;
+위 결과를 한국어로 간결하게 보고하세요. 어떤 로봇/노드를 선택했는지 포함하세요.`;
 
     try {
       const res = await axios.post(`${this.ollamaUrl}/v1/chat/completions`, {

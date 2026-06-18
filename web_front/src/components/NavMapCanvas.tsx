@@ -31,6 +31,8 @@ const NODE_COLOR: Record<string, string> = {
 };
 
 const ROBOT_COLORS = ["#f472b6", "#a78bfa", "#fb923c", "#34d399", "#f87171", "#38bdf8"];
+// 충전 임무 경로 전용 색 (충전소 노드와 동일 계열 녹색 — 일반 주행 경로와 구분)
+const CHARGE_PATH_COLOR = "#22c55e";
 
 // ── 좌표 변환 ─────────────────────────────────────────────────────────────────
 
@@ -282,8 +284,9 @@ export default function NavMapCanvas({
  const assigned = assignmentsRef.current[robotId];
  return !assigned || assigned === selectedMapRef.current;
  });
- filteredApaths.forEach(({ robotId }, i) => {
- robotColorMap[robotId] = ROBOT_COLORS[i % ROBOT_COLORS.length];
+ filteredApaths.forEach(({ robotId, taskType }, i) => {
+ // 충전 임무는 전용 색, 그 외는 로봇별 색 순환
+ robotColorMap[robotId] = taskType === "CHARGE" ? CHARGE_PATH_COLOR : ROBOT_COLORS[i % ROBOT_COLORS.length];
  });
 
  // ── 토폴로지 오버레이 ─────────────────────────────────────────────────

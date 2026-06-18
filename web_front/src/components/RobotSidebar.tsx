@@ -1,4 +1,5 @@
 import { useThrottled } from "../hooks/useThrottled";
+import { robotStatusKo } from "../utils/statusLabel";
 import type { RosMessage } from "../hooks/useNestSocket";
 import type { RobotInfo } from "../hooks/useNestSocket";
 
@@ -111,7 +112,7 @@ function RobotItem({
     </div>
     <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#FFCE99]/32
                       border border-white/[0.08] ${STATUS_COLOR[status] ?? "text-white/[0.45]"}`}>
-     {status}
+     {robotStatusKo(status)}
     </span>
    </div>
 

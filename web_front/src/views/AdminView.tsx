@@ -3,6 +3,7 @@ import { useNestSocket } from "../hooks/useNestSocket";
 import { BACKEND_URL } from "../config";
 import TopologyEditor from "./TopologyEditor";
 import TopologyMapView from "../components/TopologyMapView";
+import { robotStatusKo, taskStatusKo, ROBOT_STATUS_KO, TASK_STATUS_KO } from "../utils/statusLabel";
 
 // ── 타입 ─────────────────────────────────────────────────────────────────────
 
@@ -217,7 +218,7 @@ function RobotSection({ liveStatuses }: { liveStatuses: Record<string, string> }
  <td className={TD}>
  {isEdit
  ? <select className={SEL} value={editDraft.status} onChange={e => setEditDraft(d => ({ ...d, status: e.target.value as RobotStatus }))}>
- {(["IDLE","MOVING","WORKING","ERROR","OFFLINE"] as RobotStatus[]).map(s => <option key={s}>{s}</option>)}
+ {(["IDLE","MOVING","WORKING","ERROR","OFFLINE"] as RobotStatus[]).map(s => <option key={s} value={s}>{ROBOT_STATUS_KO[s] ?? s}</option>)}
  </select>
  : (() => {
  const live = liveStatuses[r.robot_id];
@@ -233,7 +234,7 @@ function RobotSection({ liveStatuses }: { liveStatuses: Record<string, string> }
  display === "WORKING" ? "bg-yellow-400": "bg-red-400"
  }`} title="실시간" />
  )}
- <span className={`font-bold ${STATUS_COLOR[display]}`}>{display}</span>
+ <span className={`font-bold ${STATUS_COLOR[display]}`}>{robotStatusKo(display)}</span>
  </span>
  );
  })()}
@@ -968,7 +969,7 @@ function TaskSection() {
  <SectionHeader title="태스크" count={tasks.length} onAdd={() => { setAdding(true); setErr(""); }} onRefresh={load} loading={loading} noMargin />
  <select className={`${SEL} w-40`} value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
  <option value="">전체 상태</option>
- {(["PENDING","ASSIGNED","RUNNING","COMPLETED","FAILED"] as TaskStatus[]).map(s => <option key={s} value={s}>{s}</option>)}
+ {(["PENDING","ASSIGNED","RUNNING","COMPLETED","FAILED"] as TaskStatus[]).map(s => <option key={s} value={s}>{TASK_STATUS_KO[s] ?? s}</option>)}
  </select>
  <select className={`${SEL} w-40`} value={mapPreview} onChange={e => setMapPreview(e.target.value)}>
  <option value="">맵 미리보기…</option>
@@ -991,7 +992,7 @@ function TaskSection() {
  {(["SUPPLY","PROCESS","CHARGE","MOVE"] as TaskType[]).map(t => <option key={t}>{t}</option>)}
  </select>
  </td>
- <td className={TD}><span className="text-white/90 text-xs">PENDING</span></td>
+ <td className={TD}><span className="text-white/90 text-xs">대기 중</span></td>
  <td className={TD}>
  <input className={`${INP} w-16`} type="number" min={1} max={10} value={addDraft.priority} onChange={e => setAddDraft(d => ({ ...d, priority: +e.target.value }))} />
  </td>
@@ -1015,7 +1016,7 @@ function TaskSection() {
  <tr key={t._id} className="border-b border-white/[0.1] hover:bg-white/10 transition-colors">
  <td className={`${TD} text-xs text-white/[0.68]`}>{t.task_id.slice(0, 18)}</td>
  <td className={TD}><span className={`px-1.5 py-0.5 text-xs font-bold border rounded ${TASK_TYPE_COLOR[t.type]}`}>{t.type}</span></td>
- <td className={TD}><span className={`font-bold text-xs ${TASK_STATUS_COLOR[t.status]}`}>{t.status}</span></td>
+ <td className={TD}><span className={`font-bold text-xs ${TASK_STATUS_COLOR[t.status]}`}>{taskStatusKo(t.status)}</span></td>
  <td className={TD}><span className="text-white/[0.75]">P{t.priority}</span></td>
  <td className={TD}>{t.targetNode}</td>
  <td className={TD}>{(t as any).assignedRobotId ?? <span className="text-white/[0.6]">—</span>}</td>

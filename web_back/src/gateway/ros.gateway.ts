@@ -106,15 +106,13 @@ export class RosGateway
   }
 
   handleDisconnect(client: Socket) {
-    // 로봇 소켓이면 오프라인 이벤트 발행
+    // 로봇 소켓이면 오프라인 이벤트만 발행 (UI 피드 갱신용).
+    // 카메라 연결은 수시로 끊길 수 있고 핵심 지표가 아니므로 경고 로그는 남기지 않는다.
+    // (로그가 RAG 컨텍스트에 섞여 AI가 카메라 문제를 과대 보고하는 것을 방지)
     for (const [botId, socketId] of this.robotSockets.entries()) {
       if (socketId === client.id) {
         this.robotSockets.delete(botId);
         this.server?.emit('robot_camera_offline', { botId });
-        void this.logsService.write({
-          level: 'warn', category: 'camera', botId,
-          message: '카메라 오프라인',
-        });
         break;
       }
     }

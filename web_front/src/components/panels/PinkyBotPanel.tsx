@@ -37,11 +37,11 @@ function quatToYaw(q: { x: number; y: number; z: number; w: number }) {
 type MotorState = "unknown" | "starting" | "running" | "stopping" | "stopped";
 
 const MOTOR_STYLE: Record<MotorState, { dot: string; text: string; label: string }> = {
- unknown: { dot: "bg-[#521C0D]/40", text: "text-white/[0.68]", label: "UNKNOWN" },
- starting: { dot: "bg-amber-400 animate-pulse", text: "text-white/90", label: "STARTING…" },
- running: { dot: "bg-green-500 animate-pulse", text: "text-white/90", label: "RUNNING" },
- stopping: { dot: "bg-red-400 animate-pulse", text: "text-white/90", label: "STOPPING…" },
- stopped: { dot: "bg-[#521C0D]/40", text: "text-white/[0.68]", label: "STOPPED" },
+ unknown: { dot: "bg-[#521C0D]/40", text: "text-white/[0.68]", label: "알 수 없음" },
+ starting: { dot: "bg-amber-400 animate-pulse", text: "text-white/90", label: "시작 중…" },
+ running: { dot: "bg-green-500 animate-pulse", text: "text-white/90", label: "구동 중" },
+ stopping: { dot: "bg-red-400 animate-pulse", text: "text-white/90", label: "정지 중…" },
+ stopped: { dot: "bg-[#521C0D]/40", text: "text-white/[0.68]", label: "정지" },
 };
 
 // ── Props ─────────────────────────────────────────────────────────────────────

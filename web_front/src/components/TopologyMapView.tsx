@@ -37,6 +37,7 @@ export interface ActivePath {
  pathQueue: string[]; // 남은 노드들 (pathQueue[0] = 다음 목적지)
  fullPath?: string[];  // 배정 시 확정된 전체 경로 (시각화용)
  fromNodeId?: string; // 현재 출발 노드 (robot.location)
+ taskType?: string;   // 태스크 유형 (CHARGE면 경로를 충전 색으로 표시)
 }
 
 export interface RobotPos {
