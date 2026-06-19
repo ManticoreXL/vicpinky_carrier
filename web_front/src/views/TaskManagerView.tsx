@@ -76,30 +76,17 @@ function isOnline(rosMessages: Record<string, RosMessage>, robotId: string): boo
 
 function uid() { return Math.random().toString(36).slice(2, 9); }
 
-function statusDot(online: boolean, status?: string): string {
-  if (!online) return "bg-[#521C0D]/40";
+// 로봇 상태 → 도트/라벨/텍스트 색 (오프라인 우선). RobotMonitorCard 전용.
+function robotVisual(online: boolean, status?: string): { dot: string; label: string; color: string } {
+  if (!online) return { dot: "bg-[#521C0D]/40", label: "오프라인", color: "text-slate-500" };
   switch (status) {
-    case "IDLE":                      return "bg-emerald-400";
-    case "MOVING": case "WORKING":
-    case "CHARGING":                  return "bg-amber-400 animate-pulse";
-    case "ERROR":                     return "bg-rose-500 animate-pulse";
-    default:                          return "bg-emerald-400";
-  }
-}
-
-function statusLabel(online: boolean, status?: string): string {
-  if (!online) return '오프라인';
-  return robotStatusKo(status ?? "IDLE");
-}
-
-function statusColor(online: boolean, status?: string): string {
-  if (!online) return "text-slate-500";
-  switch (status) {
-    case "IDLE":                      return "text-emerald-600";
-    case "MOVING": case "WORKING":
-    case "CHARGING":                  return "text-amber-600";
-    case "ERROR":                     return "text-rose-600";
-    default:                          return "text-emerald-600";
+    case "MOVING": case "WORKING": case "CHARGING":
+      return { dot: "bg-amber-400 animate-pulse", label: robotStatusKo(status), color: "text-amber-600" };
+    case "ERROR":
+      return { dot: "bg-rose-500 animate-pulse", label: robotStatusKo(status), color: "text-rose-600" };
+    case "IDLE":
+    default:
+      return { dot: "bg-emerald-400", label: robotStatusKo(status ?? "IDLE"), color: "text-emerald-600" };
   }
 }
 
@@ -492,9 +479,7 @@ function RobotMonitorCard({
   onClick: () => void;
 }) {
   const isLowBat = batPct !== null && batPct < 25;
-  const dot      = statusDot(online, status);
-  const lbl      = statusLabel(online, status);
-  const txtCol   = statusColor(online, status);
+  const { dot, label: lbl, color: txtCol } = robotVisual(online, status);
 
   return (
     <div
