@@ -82,7 +82,7 @@ TaskManagerView / FmsView  ──►  ros.gateway.ts          ──►  TaskMan
 | **A* 경로탐색** (비용함수·CHARGER 경유·잠금 반영) | `topology.service.ts:107` `findPath()` (비용 `1/weight` = line 159~, CHARGER 정책 145·154~) |
 | **노드 도착 판정 + 다음 goal 전송** | `task-manager.service.ts:630` `checkWaypointArrival()` |
 | **코너 회전** (정지→회전→yaw수렴 대기) | `task-manager.service.ts:704~726` (감지) + `:406` (수렴판정, `handleRosMessage` 내) |
-| **충돌 회피 판정(2칸 앞 예약)** | `collision-avoidance.service.ts:65` `evaluate()` (점유 탐색 104~) |
+| **충돌 회피 판정(1칸 앞 예약)** | `collision-avoidance.service.ts:65` `evaluate()` (점유 탐색 104~) |
 | 충돌 결정의 **실제 정지/재출발 실행** | `task-manager.service.ts:590` `checkNodeConflicts()` |
 | **전복 감지 → ERROR + 노드 잠금** | `task-manager.service.ts:372` `handleRosMessage()` 의 IMU 블록 (전복 쿨다운 30s) |
 | **오프라인 감지 → 태스크 FAILED** | `task-manager.service.ts:752` `syncOnlineStatus()` |
