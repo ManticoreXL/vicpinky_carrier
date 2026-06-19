@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Server } from 'socket.io';
 import { FmsService } from './fms.service';
-import { TaskStatus, TaskDocument } from './task.schema';
+import { TaskStatus } from './task.schema';
 import { RosService } from '../ros/ros.service';
 import { RobotService } from '../fleet/robot.service';
 import { TopologyService } from '../fleet/topology.service';
@@ -9,65 +9,13 @@ import { TelemetryService } from '../fleet/telemetry.service';
 import { CollisionAvoidanceService } from '../fleet/collision-avoidance.service';
 import { RobotDocument, RobotStatus } from '../fleet/robot.schema';
 import type { RosMessage } from '../ros/ros.types';
-
-// ── 상수 ─────────────────────────────────────────────────────────────────────
-
-const LOOP_MS          = 1_000;     // 오프라인/온라인 전환 반응 속도 (1s 주기 감시)
-const ONLINE_MS          = 5_000;
-// 하드웨어 OFF 시 빠른 오프라인 감지. 로봇은 odom/imu를 10~30Hz로 발행하므로
-// 6s 무수신이면 사실상 끊김. (과거 20s는 전환이 너무 느렸음)
-const OFFLINE_AFTER_MS   = 6_000;
-const AMCL_TIMEOUT_MS    = 60_000;  // nav2 TF 초기화 여유 — 60s 대기 후 판단
-const AMCL_RESUME_MS     = 30_000;  // AMCL 복구 후 이 시간 내 AMCL 수신 시 재시도 판단 기준
-const FALL_THRESH_RAD  = Math.PI / 4; // 45° 이상 기울면 전복 판정
-
-// 위치 감지 반경 (노드 위주 경로)
-const NODE_PASS_M   = 1.5;  // 중간 노드 통과 감지
-const NODE_ARRIVE_M = 0.5;  // 최종 목적지 도착 감지 (action result 백업)
-
-// ── 타입 ─────────────────────────────────────────────────────────────────────
-
-export interface TaskManagerAlert {
-  id: string;
-  type: 'fall' | 'robot_offline' | 'task_failed' | 'assigned' | 'completed' | 'info';
-  taskId?: string;
-  robotId?: string;
-  message: string;
-  requiresAction: boolean;
-  timestamp: number;
-}
-
-interface RobotCache {
-  lastSeen:       number;
-  batteryPct:     number | null;
-  posX:           number | null;
-  posY:           number | null;
-  yaw:            number | null;
-  lastAmclMs:     number | null; // amcl_pose 마지막 수신 시각
-  amclSuspended?: boolean;       // AMCL 타임아웃으로 태스크 일시정지 중
-}
-
-// ── 순수 헬퍼 ─────────────────────────────────────────────────────────────────
-
-/** 각도를 [-π, π] 범위로 정규화 */
-function normalizeAngle(a: number): number {
-  while (a >  Math.PI) a -= 2 * Math.PI;
-  while (a < -Math.PI) a += 2 * Math.PI;
-  return a;
-}
-
-/** 쿼터니언 → yaw(라디안) */
-function quatToYaw(ori: { x?: number; y?: number; z?: number; w?: number }): number {
-  return Math.atan2(
-    2 * ((ori.w ?? 1) * (ori.z ?? 0) + (ori.x ?? 0) * (ori.y ?? 0)),
-    1 - 2 * ((ori.y ?? 0) ** 2 + (ori.z ?? 0) ** 2),
-  );
-}
-
-/** RobotCache 기본값 (lastSeen만 지정) */
-function emptyCache(lastSeen: number): RobotCache {
-  return { lastSeen, batteryPct: null, posX: null, posY: null, yaw: null, lastAmclMs: null };
-}
+import {
+  LOOP_MS, ONLINE_MS, OFFLINE_AFTER_MS, AMCL_TIMEOUT_MS,
+  FALL_THRESH_RAD, NODE_PASS_M, NODE_ARRIVE_M,
+} from './task-manager.constants';
+import { TaskManagerAlert, RobotCache } from './task-manager.types';
+import { normalizeAngle, quatToYaw, emptyCache } from './task-manager.helpers';
+import { resolveDispatchPath, DispatchCtx } from './task-manager.dispatch';
 
 // ── 서비스 ────────────────────────────────────────────────────────────────────
 
@@ -849,94 +797,18 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
   // ── 디스패치 경로 해석 ────────────────────────────────────────────────────
   //
-  // 배정된 로봇·태스크에 대해 출발 노드를 정하고 A* 경로(pathQueue)를 반환한다.
-  // 출발 노드 우선순위: robot.location(현재 맵의 유효 노드) → AMCL 최근접 노드.
-  // 목적지 노드 없음 / 경로 없음이면 waitReason·FAILED 처리 후 null 반환(=스킵).
-  private async resolveDispatchPath(
-    robot: RobotDocument,
-    task: TaskDocument,
-    taskId: string,
-  ): Promise<string[] | null> {
-    const robotId = robot.robot_id;
-    let pathQueue: string[] = [];
-
-    // 목적지 노드 확인 (map_id 결정에 필요)
-    const targetNode = await this.topologyService.findNodeById(task.targetNode);
-    if (!targetNode) {
-      this.logger.warn(`[dispatch] 목적지 노드 "${task.targetNode}"가 DB에 없음`);
-      await this.fmsService.setWaitReason(taskId, `목적지 노드 없음: ${task.targetNode}`);
-      await this.fmsService.setStatus(taskId, TaskStatus.FAILED, this.server!);
-      return null;
-    }
-    const myMapId = targetNode.map_id;
-
-    // 출발 노드 결정: robot.location이 현재 맵의 실제 노드인지 검증
-    let startNodeId: string | null = null;
-    let startFromLocation = false;
-
-    if (robot.location && robot.location !== task.targetNode) {
-      const locNode = await this.topologyService.findNodeById(robot.location);
-      if (locNode && locNode.map_id === myMapId) {
-        startNodeId = robot.location;
-        startFromLocation = true;
-      }
-    }
-
-    // AMCL 캐시로 최근접 노드 탐색 (robot.location 무효 또는 null인 경우)
-    const getAmclNode = async (): Promise<string | null> => {
-      const cache2 = this.robotCache.get(robotId);
-      if (cache2?.posX != null && cache2.posY != null) {
-        return this.topologyService.findNearestNodeToPosition(cache2.posX, cache2.posY, myMapId);
-      }
-      return null;
+  // 실제 로직은 task-manager.dispatch.ts 의 resolveDispatchPath() 에 있다.
+  // 여기서는 협력자(ctx)만 모아 전달한다.
+  private dispatchCtx(): DispatchCtx {
+    return {
+      logger:          this.logger,
+      fmsService:      this.fmsService,
+      robotService:    this.robotService,
+      topologyService: this.topologyService,
+      robotCache:      this.robotCache,
+      server:          this.server,
+      emit:            (alert) => this.emit(alert),
     };
-
-    if (!startNodeId) {
-      const amclNode = await getAmclNode();
-      if (amclNode) {
-        startNodeId = amclNode;
-        await this.robotService.updateLocation(robotId, amclNode);
-      }
-    }
-
-    if (!startNodeId || startNodeId === task.targetNode) {
-      // 출발 노드가 없거나 이미 목적지
-      this.logger.log(`[dispatch] ${robotId} startNode=${startNodeId ?? 'null'} — 목적지 직행 [${task.targetNode}]`);
-      pathQueue = [task.targetNode];
-    } else {
-      let rawPath = await this.topologyService.findPath(startNodeId, task.targetNode, myMapId);
-
-      // location 노드로 경로 탐색 실패 시 AMCL 위치 기반으로 재시도
-      if (rawPath.length === 0 && startFromLocation) {
-        this.logger.warn(`[dispatch] location 노드 "${startNodeId}" 경로 없음 (엣지 없음?) — AMCL 위치 기반 재탐색`);
-        const amclNode = await getAmclNode();
-        if (amclNode && amclNode !== startNodeId) {
-          const retryPath = await this.topologyService.findPath(amclNode, task.targetNode, myMapId);
-          if (retryPath.length > 0) {
-            this.logger.log(`[dispatch] AMCL 재탐색 성공: ${amclNode} → ${task.targetNode}`);
-            startNodeId = amclNode;
-            rawPath = retryPath;
-            await this.robotService.updateLocation(robotId, amclNode);
-          }
-        }
-      }
-
-      if (rawPath.length === 0) {
-        this.logger.warn(`[dispatch] 경로 없음: ${startNodeId} → ${task.targetNode} (${robotId})`);
-        await this.fmsService.setWaitReason(taskId, `경로 없음: ${startNodeId} → ${task.targetNode}`);
-        this.emit({ type: 'task_failed', taskId, robotId, message: `경로를 찾을 수 없음: ${startNodeId} → ${task.targetNode}`, requiresAction: false });
-        await this.fmsService.setStatus(taskId, TaskStatus.FAILED, this.server!);
-        return null;
-      }
-      pathQueue = rawPath.slice(1);
-      // 각 노드 타입 확인 (station 중간 경유 진단용)
-      const nodeTypes = await Promise.all(
-        rawPath.map(id => this.topologyService.findNodeById(id).then(n => n ? `${id}(${n.type})` : `${id}(?)`)),
-      );
-      this.logger.log(`[dispatch] ${robotId} 경로 확정: [${nodeTypes.join('→')}] queue=[${pathQueue.join('→')}]`);
-    }
-
-    return pathQueue;
   }
 
   private async process() {
@@ -1003,7 +875,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
       );
 
       // ── 경로 탐색 (실패 시 null — waitReason/FAILED 처리는 내부에서 수행) ──
-      const pathQueue = await this.resolveDispatchPath(robot, task, taskId);
+      const pathQueue = await resolveDispatchPath(this.dispatchCtx(), robot, task, taskId);
       if (pathQueue === null) continue;
 
       this.activeTasks.set(robotId, taskId);

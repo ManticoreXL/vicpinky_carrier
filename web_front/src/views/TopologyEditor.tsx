@@ -1,90 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { BACKEND_URL } from "../config";
-
 import { snapNodes } from "../components/TopologyMapView";
-
-// ── 타입 ─────────────────────────────────────────────────────────────────────
-
-interface MapInfo {
- resolution: number;
- width: number;
- height: number;
- originX: number;
- originY: number;
- snapThreshold?: number;
-}
-
-interface FNode {
- node_id: string;
- map_id: string;
- type: "WAYPOINT" | "STATION" | "CHARGER";
- x: number;
- y: number;
- yaw: number;
-}
-
-interface FEdge {
- edge_id: string;
- map_id: string;
- startNode: string;
- endNode: string;
- direction: "ONE_WAY" | "BOTH_WAY";
- isLocked: boolean;
- weight?: number;
-}
-
-type Mode = "select" | "node" | "edge";
-
-// ── 좌표 변환 헬퍼 ────────────────────────────────────────────────────────────
-
-interface ViewState {
- scale: number;
- offX: number;
- offY: number;
- info: MapInfo;
-}
-
-function worldToCanvas(wx: number, wy: number, v: ViewState): [number, number] {
- const mapPx = (wx - v.info.originX) / v.info.resolution;
- const mapPy = v.info.height - (wy - v.info.originY) / v.info.resolution;
- return [mapPx * v.scale + v.offX, mapPy * v.scale + v.offY];
-}
-
-function canvasToWorld(cx: number, cy: number, v: ViewState): [number, number] {
- const mapPx = (cx - v.offX) / v.scale;
- const mapPy = (cy - v.offY) / v.scale;
- const wx = v.info.originX + mapPx * v.info.resolution;
- const wy = v.info.originY + (v.info.height - mapPy) * v.info.resolution;
- return [wx, wy];
-}
-
-// ── 색상 ─────────────────────────────────────────────────────────────────────
-
-const NODE_COLOR: Record<string, string> = {
- WAYPOINT: "#60a5fa",
- STATION: "#fbbf24",
- CHARGER: "#4ade80",
-};
-
-// ── API 헬퍼 ─────────────────────────────────────────────────────────────────
-
-async function api<T>(path: string, opts?: RequestInit): Promise<T> {
- const r = await fetch(`${BACKEND_URL}${path}`, {
-  headers: { "Content-Type": "application/json" },
-  ...opts,
- });
- if (!r.ok) throw new Error(`${r.status}`);
- if (r.status === 204) return undefined as T;
- const text = await r.text();
- if (!text) return undefined as T;
- return JSON.parse(text) as T;
-}
-
-// ── 스타일 상수 ───────────────────────────────────────────────────────────────
-
-const INP = "bg-[#FFCE99]/32 border border-white/[0.1] rounded px-2 py-1 text-xs text-white/90 w-full focus:outline-none focus:border-white/[0.08]";
-const SEL = `${INP} cursor-pointer`;
-const BTN = (c: string) => `px-2 py-1 text-xs font-bold tracking-wider rounded border transition-colors ${c}`;
+import type { MapInfo, FNode, FEdge, Mode, ViewState } from "./editor/types";
+import { worldToCanvas, canvasToWorld } from "./editor/geometry";
+import { NODE_COLOR, INP, SEL, BTN } from "./editor/constants";
+import { api } from "./editor/api";
+import { renderScene } from "./editor/renderScene";
+import { PanelSection, Field } from "./editor/common";
 
 // ── 메인 컴포넌트 ─────────────────────────────────────────────────────────────
 
@@ -158,156 +80,14 @@ export default function TopologyEditor() {
 
  const renderCanvas = useCallback(() => {
   const canvas = canvasRef.current;
-  const img = imgRef.current;
   if (!canvas || !mapInfo) return;
-
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
 
-  const W = canvas.width;
-  const H = canvas.height;
-  ctx.clearRect(0, 0, W, H);
-
-  ctx.fillStyle = "#241509";
-  ctx.fillRect(0, 0, W, H);
-
-  const scale = Math.min(W / mapInfo.width, H / mapInfo.height) * 0.95;
-  const offX = (W - mapInfo.width * scale) / 2;
-  const offY = (H - mapInfo.height * scale) / 2;
-  const view: ViewState = { scale, offX, offY, info: mapInfo };
-  viewRef.current = view;
-
-  if (img) {
-   ctx.drawImage(img, offX, offY, mapInfo.width * scale, mapInfo.height * scale);
-  } else {
-   ctx.fillStyle = "#3a2414";
-   ctx.fillRect(offX, offY, mapInfo.width * scale, mapInfo.height * scale);
-  }
-
-  // 엣지 렌더
-  edges.forEach(e => {
-   const sn = nodes.find(n => n.node_id === e.startNode);
-   const en = nodes.find(n => n.node_id === e.endNode);
-   if (!sn || !en) return;
-   const [sx, sy] = worldToCanvas(sn.x, sn.y, view);
-   const [ex, ey] = worldToCanvas(en.x, en.y, view);
-
-   ctx.beginPath();
-   ctx.moveTo(sx, sy);
-   ctx.lineTo(ex, ey);
-   const isSel = e.edge_id === selEdgeId;
-   ctx.strokeStyle = e.isLocked ? "#6b2424" : isSel ? "#f59e0b" : "#4b5563";
-   ctx.lineWidth = isSel ? 2.5 : 1.5;
-   ctx.stroke();
-
-   if (e.direction === "ONE_WAY") {
-    const angle = Math.atan2(ey - sy, ex - sx);
-    const mx = (sx + ex) / 2;
-    const my = (sy + ey) / 2;
-    const alen = 8;
-    ctx.beginPath();
-    ctx.moveTo(mx, my);
-    ctx.lineTo(mx - alen * Math.cos(angle - 0.4), my - alen * Math.sin(angle - 0.4));
-    ctx.lineTo(mx - alen * Math.cos(angle + 0.4), my - alen * Math.sin(angle + 0.4));
-    ctx.closePath();
-    ctx.fillStyle = ctx.strokeStyle;
-    ctx.fill();
-   }
+  viewRef.current = renderScene(ctx, canvas, imgRef.current, mapInfo, nodes, edges, {
+   selNodeId, selEdgeId, edgeStart, hover, hoverNode,
+   dragNodeId: dragNodeIdRef.current, hasDragged: hasDraggedRef.current,
   });
-
-  // 엣지 그리기 진행 중 선
-  if (edgeStart && hover) {
-   const sn = nodes.find(n => n.node_id === edgeStart);
-   if (sn) {
-    const [sx, sy] = worldToCanvas(sn.x, sn.y, view);
-    const [hx, hy] = worldToCanvas(hover[0], hover[1], view);
-    ctx.beginPath();
-    ctx.moveTo(sx, sy);
-    ctx.lineTo(hx, hy);
-    ctx.strokeStyle = "#f59e0b";
-    ctx.lineWidth = 1.5;
-    ctx.setLineDash([4, 4]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-   }
-  }
-
-  // 노드 렌더
-  nodes.forEach(n => {
-   const [cx, cy] = worldToCanvas(n.x, n.y, view);
-   const isDragTarget = n.node_id === dragNodeIdRef.current && hasDraggedRef.current;
-   const r = (n.node_id === selNodeId || isDragTarget) ? 9 : 7;
-   const isEdgeStartNode = n.node_id === edgeStart;
-
-   ctx.beginPath();
-   ctx.arc(cx, cy, r, 0, Math.PI * 2);
-   ctx.fillStyle = NODE_COLOR[n.type] ?? "#888";
-   if (isDragTarget) ctx.globalAlpha = 0.7;
-   ctx.fill();
-   ctx.globalAlpha = 1;
-   if (n.node_id === selNodeId || isEdgeStartNode || isDragTarget) {
-    ctx.strokeStyle = isDragTarget ? "#f59e0b" : "#fff";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-   }
-
-   const yawX = cx + Math.cos(n.yaw) * (r + 5);
-   const yawY = cy - Math.sin(n.yaw) * (r + 5);
-   ctx.beginPath();
-   ctx.moveTo(cx, cy);
-   ctx.lineTo(yawX, yawY);
-   ctx.strokeStyle = "#ffffff88";
-   ctx.lineWidth = 1.5;
-   ctx.stroke();
-
-   ctx.fillStyle = "#ffffffcc";
-   ctx.font = "bold 10px monospace";
-   ctx.textAlign = "left";
-   ctx.textBaseline = "bottom";
-   ctx.fillText(n.node_id, cx + r + 2, cy);
-  });
-
-  // 십자선 + 호버 툴팁
-  if (hover) {
-   const [hx, hy] = worldToCanvas(hover[0], hover[1], view);
-   ctx.strokeStyle = "#ffffff22";
-   ctx.lineWidth = 1;
-   ctx.beginPath(); ctx.moveTo(hx, 0); ctx.lineTo(hx, H); ctx.stroke();
-   ctx.beginPath(); ctx.moveTo(0, hy); ctx.lineTo(W, hy); ctx.stroke();
-
-   if (hoverNode) {
-    const lines = [
-     `x ${hoverNode.x.toFixed(3)}`,
-     `y ${hoverNode.y.toFixed(3)}`,
-     `yaw ${hoverNode.yaw.toFixed(3)} rad`,
-    ];
-    const pad = 7;
-    const lh = 14;
-    const bw = 148;
-    const bh = pad * 2 + lh * (lines.length + 1);
-    let tx = hx + 16;
-    let ty = hy - bh / 2;
-    if (tx + bw > W) tx = hx - bw - 16;
-    if (ty < 2) ty = 2;
-    if (ty + bh > H - 2) ty = H - bh - 2;
-
-    ctx.fillStyle = "rgba(8,8,8,0.88)";
-    ctx.fillRect(tx, ty, bw, bh);
-    ctx.strokeStyle = "#2a2a2a";
-    ctx.lineWidth = 1;
-    ctx.strokeRect(tx, ty, bw, bh);
-    ctx.font = "bold 10px monospace";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "top";
-    ctx.fillStyle = NODE_COLOR[hoverNode.type] ?? "#888";
-    ctx.fillText(hoverNode.node_id, tx + pad, ty + pad);
-    ctx.font = "10px monospace";
-    ctx.fillStyle = "#aaaaaa";
-    lines.forEach((line, i) => {
-     ctx.fillText(line, tx + pad, ty + pad + lh * (i + 1));
-    });
-   }
-  }
  }, [mapInfo, nodes, edges, selNodeId, selEdgeId, edgeStart, hover, hoverNode]);
 
  useEffect(() => { renderCallbackRef.current = renderCanvas; }, [renderCanvas]);
@@ -855,26 +635,6 @@ export default function TopologyEditor() {
      </div>
     )}
    </div>
-  </div>
- );
-}
-
-// ── 공통 소형 컴포넌트 ────────────────────────────────────────────────────────
-
-function PanelSection({ title, children }: { title: string; children: React.ReactNode }) {
- return (
-  <div className="border-b border-white/[0.1] px-3 py-3">
-   <div className="text-xs text-white/[0.68] tracking-wide mb-2">{title}</div>
-   {children}
-  </div>
- );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
- return (
-  <div className="mb-1.5">
-   <div className="text-xs text-white/[0.6] mb-0.5 tracking-wider">{label}</div>
-   {children}
   </div>
  );
 }
