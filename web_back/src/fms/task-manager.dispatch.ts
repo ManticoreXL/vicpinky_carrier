@@ -35,6 +35,7 @@ export async function resolveDispatchPath(
   let pathQueue: string[] = [];
 
   // 목적지 노드 확인 (map_id 결정에 필요)
+  // 타겟 노드를 아이디 중심으초 찾음
   const targetNode = await ctx.topologyService.findNodeById(task.targetNode);
   if (!targetNode) {
     ctx.logger.warn(`[dispatch] 목적지 노드 "${task.targetNode}"가 DB에 없음`);
@@ -42,9 +43,11 @@ export async function resolveDispatchPath(
     await ctx.fmsService.setStatus(taskId, TaskStatus.FAILED, ctx.server!);
     return null;
   }
+  // 타겟 노드의 map_id를 가져옴
   const myMapId = targetNode.map_id;
 
   // 출발 노드 결정: robot.location이 현재 맵의 실제 노드인지 검증
+  
   let startNodeId: string | null = null;
   let startFromLocation = false;
 
@@ -98,7 +101,8 @@ export async function resolveDispatchPath(
     if (rawPath.length === 0) {
       ctx.logger.warn(`[dispatch] 경로 없음: ${startNodeId} → ${task.targetNode} (${robotId})`);
       await ctx.fmsService.setWaitReason(taskId, `경로 없음: ${startNodeId} → ${task.targetNode}`);
-      ctx.emit({ type: 'task_failed', taskId, robotId, message: `경로를 찾을 수 없음: ${startNodeId} → ${task.targetNode}`, requiresAction: false });
+      // 노드 폐쇄 등으로 수행 불가 → 수동제어 전환을 유도하는 알림 (requiresAction)
+      ctx.emit({ type: 'no_path', taskId, robotId, message: `경로를 찾을 수 없음: ${startNodeId} → ${task.targetNode} — 수동제어가 필요합니다`, requiresAction: true });
       await ctx.fmsService.setStatus(taskId, TaskStatus.FAILED, ctx.server!);
       return null;
     }

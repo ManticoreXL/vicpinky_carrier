@@ -16,6 +16,9 @@ export class RosService implements OnModuleInit, OnModuleDestroy {
   private ws: WebSocket;
   private connected = false;
   private messageHandlers: ((msg: RosMessage) => void)[] = [];
+  // 발행 가로채기 — 가상 로봇(TEST-BOT) 등 rosbridge를 거치지 않는 대상 처리용.
+  // 핸들러가 true를 반환하면 해당 발행은 rosbridge로 전송하지 않는다.
+  private publishInterceptors: ((payload: TopicPublishPayload) => boolean)[] = [];
   private serviceCallbacks: Map<string, (res: unknown) => void> = new Map();
   private actionCallbacks: Map<string, {
     onFeedback?: (msg: ActionFeedbackMsg) => void;
@@ -137,7 +140,12 @@ export class RosService implements OnModuleInit, OnModuleDestroy {
   }
 
   // ── 토픽 발행 ───────────────────────────────────────────────────────────
-  publish({ topicName, messageType, message }: TopicPublishPayload) {
+  publish(payload: TopicPublishPayload) {
+    // 가상 로봇 등 가로채기 대상이면 rosbridge로 보내지 않고 종료
+    for (const intercept of this.publishInterceptors) {
+      if (intercept(payload)) return;
+    }
+    const { topicName, messageType, message } = payload;
     this.send({
       op: 'publish',
       topic: topicName,
@@ -145,6 +153,18 @@ export class RosService implements OnModuleInit, OnModuleDestroy {
       msg: message,
     });
     this.logger.debug(`publish → ${topicName}`);
+  }
+
+  // ── 발행 가로채기 등록 (가상 로봇 시뮬레이터용) ──────────────────────────
+  onPublish(handler: (payload: TopicPublishPayload) => boolean) {
+    this.publishInterceptors.push(handler);
+  }
+
+  // ── 메시지 주입 (가상 로봇 시뮬레이터용) ─────────────────────────────────
+  // rosbridge 수신 메시지와 동일하게 모든 핸들러(게이트웨이/텔레메트리/태스크매니저)에
+  // 전달한다. 이를 통해 가상 로봇이 실제 로봇과 똑같은 코드 경로를 타게 된다.
+  injectMessage(msg: RosMessage) {
+    this.messageHandlers.forEach((h) => h(msg));
   }
 
   // ── 서비스 호출 ─────────────────────────────────────────────────────────

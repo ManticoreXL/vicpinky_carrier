@@ -75,7 +75,7 @@ export interface RobotInfo {
 }
 
 // ── FMS 타입 ─────────────────────────────────────────────────────────────────
-export type TaskStatus = 'PENDING' | 'ASSIGNED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
+export type TaskStatus = 'DRAFT' | 'PENDING' | 'ASSIGNED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
 export type TaskType = 'SUPPLY' | 'PROCESS' | 'CHARGE' | 'MOVE';
 
 export interface FmsTask {
@@ -106,7 +106,7 @@ export interface FmsDispatchPayload {
 
 export interface TaskManagerAlert {
  id: string;
- type: 'fall' | 'robot_offline' | 'task_failed' | 'assigned' | 'completed' | 'info';
+ type: 'fall' | 'robot_offline' | 'task_failed' | 'no_path' | 'assigned' | 'completed' | 'info';
  taskId?: string;
  robotId?: string;
  message: string;
@@ -332,6 +332,16 @@ export function useNestSocket() {
  socketRef.current?.emit("fms_cancel_task", { taskId });
  }, []);
 
+ // 등록만 (배차 X) — DRAFT 태스크 생성
+ const emitFmsRegister = useCallback((payload: FmsDispatchPayload) => {
+ socketRef.current?.emit("fms_register_task", payload);
+ }, []);
+
+ // DRAFT 태스크를 배차 큐에 투입
+ const emitFmsRelease = useCallback((taskId: string) => {
+ socketRef.current?.emit("fms_release_task", { taskId });
+ }, []);
+
  const emitNavInitialPose = useCallback((robotId: string, x: number, y: number, yaw: number, mapId?: string) => {
  socketRef.current?.emit("nav_set_initialpose", { robotId, x, y, yaw, mapId });
  }, []);
@@ -347,7 +357,7 @@ export function useNestSocket() {
 
  return {
  emitCmdVel, emitPublish, emitAction, cancelAction, callService,
- emitFmsDispatch, emitFmsCancel, emitNodeLock,
+ emitFmsDispatch, emitFmsCancel, emitFmsRegister, emitFmsRelease, emitNodeLock,
  emitNavInitialPose,
  ackTmAlert, setRobotHome,
  nestConnected, rosMessages, socket,

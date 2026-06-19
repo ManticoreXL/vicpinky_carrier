@@ -13,11 +13,21 @@ const ROBOTS = [
  { id: "tb3_03",   domain: 43, type: "tb3" },
  { id: "tb3_04",   domain: 44, type: "tb3" },
  { id: "omx",      domain: 45, type: "arm" },
+ // rosbridge 미경유 가상 테스트봇 4대 (항상 성공)
+ { id: "TEST-BOT1", domain: 99,  type: "test" },
+ { id: "TEST-BOT2", domain: 100, type: "test" },
+ { id: "TEST-BOT3", domain: 101, type: "test" },
+ { id: "TEST-BOT4", domain: 102, type: "test" },
 ] as const;
 
 const TASK_LABELS: Record<TaskType, string> = {
- SUPPLY: "공급", PROCESS: "공정", CHARGE: "충전", MOVE: "이동"
+ SUPPLY: "공급", PROCESS: "구호", CHARGE: "충전", MOVE: "이동"
 };
+
+// 공급(SUPPLY)은 omx(로봇팔) 전용 — 목적지 노드 대신 보급 품목을 선택
+const SUPPLY_ROBOT_ID = "omx";
+const SUPPLY_ITEMS = ["물", "약"] as const;
+type SupplyItem = typeof SUPPLY_ITEMS[number];
 
 const ONLINE_THRESHOLD_MS = 5000;
 
@@ -30,6 +40,8 @@ interface Props {
  socket: Socket | null;
  emitFmsDispatch: (p: FmsDispatchPayload) => void;
  emitFmsCancel: (taskId: string) => void;
+ emitFmsRegister: (p: FmsDispatchPayload) => void;
+ emitFmsRelease: (taskId: string) => void;
  emitNavInitialPose: (robotId: string, x: number, y: number, yaw: number, mapId?: string) => void;
  ackTmAlert: (alertId: string) => void;
  setRobotHome: (robotId: string, x: number, y: number, yaw: number) => void;
@@ -60,7 +72,7 @@ function isOnline(rosMessages: Record<string, RosMessage>, robotId: string): boo
 
 export default function FmsView({
  rosMessages, fmsTasks, tmAlerts, socket,
- emitFmsDispatch, emitFmsCancel,
+ emitFmsDispatch, emitFmsCancel, emitFmsRegister, emitFmsRelease,
  emitNavInitialPose,
  ackTmAlert, setRobotHome,
  lockedNodes = new Set(),
@@ -72,12 +84,19 @@ export default function FmsView({
  const [contentTab, setContentTab] = useState<"fleet" | "map">("map");
  const [mapAssignments, setMapAssignments] = useState<Record<string, string>>({});
  const [topoNodes, setTopoNodes] = useState<TopoNode[]>([]);
- const [form, setForm] = useState({ type: "SUPPLY" as TaskType, targetNode: "", priority: 5, preferredRobotId: focusRobotId ?? "" });
+ const [form, setForm] = useState({ type: "SUPPLY" as TaskType, targetNode: "", priority: 5, preferredRobotId: focusRobotId ?? "", supplyItem: "물" as SupplyItem });
 
- // TaskManager에서 로봇 선택 시 dispatch form 동기화
+ const isSupply = form.type === "SUPPLY";
+
+ // TaskManager에서 로봇 선택 시 dispatch form 동기화 (공급은 omx 고정이라 무시)
  useEffect(() => {
-  if (focusRobotId) setForm(f => ({ ...f, preferredRobotId: focusRobotId }));
- }, [focusRobotId]);
+  if (focusRobotId && !isSupply) setForm(f => ({ ...f, preferredRobotId: focusRobotId }));
+ }, [focusRobotId, isSupply]);
+
+ // 공급(SUPPLY)은 omx 전용 — 선택 시 지정 로봇을 omx로 고정
+ useEffect(() => {
+  if (isSupply) setForm(f => (f.preferredRobotId === SUPPLY_ROBOT_ID ? f : { ...f, preferredRobotId: SUPPLY_ROBOT_ID }));
+ }, [isSupply]);
 
  // 목적지가 충전소로 바뀌면 태스크 유형을 CHARGE로 자동 인식 (이후 수동 변경은 허용)
  useEffect(() => {
@@ -200,6 +219,24 @@ export default function FmsView({
 
  const topPick = recommendations.find(r => r.score >= 0) ?? null;
 
+ // 특정 로봇을 지정했는데 오프라인이면 등록/할당 불가 (자동 배정은 항상 허용)
+ // 공급은 omx 고정이므로 omx 온라인 여부로 판단.
+ const preferredId = isSupply ? SUPPLY_ROBOT_ID : form.preferredRobotId;
+ const preferredOffline = preferredId !== "" && !isOnline(rosMessages, preferredId);
+ const hasTarget = isSupply ? !!form.supplyItem : !!form.targetNode;
+ const canSubmit = hasTarget && !preferredOffline;
+
+ // 전송 페이로드 — 공급은 목적지 노드 대신 품목(물/약)을 targetNode로 전달, omx 고정
+ const buildPayload = (): FmsDispatchPayload => isSupply
+  ? { type: "SUPPLY", targetNode: form.supplyItem, priority: form.priority, preferredRobotId: SUPPLY_ROBOT_ID }
+  : { type: form.type, targetNode: form.targetNode, priority: form.priority, preferredRobotId: form.preferredRobotId || undefined };
+
+ const submit = (emit: (p: FmsDispatchPayload) => void) => {
+  if (!canSubmit) return;
+  emit(buildPayload());
+  setForm(f => ({ ...f, targetNode: "" }));
+ };
+
  return (
  <div className="flex flex-col h-full bg-transparent overflow-hidden">
  
@@ -220,7 +257,10 @@ export default function FmsView({
     className="bg-[#FFCE99]/14 border border-white/[0.1] rounded-lg px-2 py-1 text-xs text-white/[0.75] appearance-none focus:outline-none focus:border-white/[0.08]"
    >
     <option value="">전체 로봇</option>
-    {ROBOTS.map(r => <option key={r.id} value={r.id}>{r.id}</option>)}
+    {ROBOTS.map(r => {
+     const online = isOnline(rosMessages, r.id);
+     return <option key={r.id} value={r.id} disabled={!online}>{r.id}{online ? "" : " (오프라인)"}</option>;
+    })}
    </select>
   </div>
   <div className="bg-[#FFCE99]/32 p-1 rounded-xl border border-white/[0.1] flex">
@@ -260,14 +300,14 @@ export default function FmsView({
 
  <div className="flex-1 overflow-y-auto">
  <div className="flex bg-[#FFCE99]/32 mx-6 mt-4 p-1 rounded-lg border border-white/[0.1]">
- {([['all', '전체'], ['active', '진행 중']] as [string, string][]).map(([val, label]) => (
+ {([['all', '전체'], ['active', '진행 중'], ['DRAFT', '등록됨']] as [string, string][]).map(([val, label]) => (
  <button key={val} onClick={() => setFilterTab(val)} className={`flex-1 py-1 text-xs font-semibold tracking-wide rounded transition-all ${filterTab === val ? 'bg-white/10 text-white shadow-md' : 'text-white/[0.45] hover:text-white/[0.6]'}`}>{label}</button>
  ))}
  </div>
  <div className="p-4 space-y-2">
  {filtered.length === 0
   ? <p className="text-center text-xs text-white/[0.4] py-6">표시할 태스크가 없습니다</p>
-  : filtered.map(t => <TaskItem key={t._id} task={t} onCancel={() => emitFmsCancel(t._id)} />)}
+  : filtered.map(t => <TaskItem key={t._id} task={t} onCancel={() => emitFmsCancel(t._id)} onRelease={() => emitFmsRelease(t._id)} />)}
  </div>
  </div>
 
@@ -288,10 +328,26 @@ export default function FmsView({
  ))}
  </div>
  </div>
+ {isSupply ? (
+ <div>
+ <span className="sub-label">보급 품목 <span className="text-white/[0.4] normal-case">(omx 전용 · 하나 선택)</span></span>
+ <div className="grid grid-cols-2 gap-1 mt-1">
+ {SUPPLY_ITEMS.map(item => (
+ <button
+  key={item}
+  onClick={() => setForm(f => ({ ...f, supplyItem: item }))}
+  className={`py-2 text-sm font-bold tracking-wide rounded-lg border transition-all ${form.supplyItem === item ? 'bg-sky-600/40 text-sky-800 border-sky-500/60' : 'bg-[#FFCE99]/32 text-white/[0.6] border-white/[0.1] hover:text-white/[0.85]'}`}>
+  {item === "물" ? "💧 물" : "💊 약"}
+ </button>
+ ))}
+ </div>
+ </div>
+ ) : (
  <div>
  <span className="sub-label">목적지 노드</span>
  <input value={form.targetNode} onChange={e => setForm(f => ({ ...f, targetNode: e.target.value }))} className="w-full bg-[#FFCE99]/14 border border-white/[0.1] rounded-xl px-3 py-2 text-sm text-white placeholder:text-white/[0.4] focus:outline-none focus:border-white/[0.1]" placeholder="예: 401_7 (지도에서 노드 클릭)" />
  </div>
+ )}
 
  {/* 우선순위 */}
  <div>
@@ -304,7 +360,13 @@ export default function FmsView({
  </div>
  </div>
 
- {/* 추천 로봇 (우선순위순) — 클릭해 지정, 사람이 최종 할당 */}
+ {/* 추천 로봇 (우선순위순) — 클릭해 지정, 사람이 최종 할당. 공급은 omx 고정이라 숨김 */}
+ {isSupply ? (
+ <div className="flex items-center gap-2 px-2.5 py-2 rounded-lg border border-sky-500/40 bg-sky-600/15 text-xs">
+  <span className="font-mono font-bold text-sky-700">omx</span>
+  <span className="text-white/[0.6]">로봇팔 고정 — 공급 전용</span>
+ </div>
+ ) : (
  <div>
  <span className="sub-label">추천 로봇 {form.targetNode ? "(목적지 기준)" : "(가용성·배터리순)"}</span>
  <div className="space-y-1 mt-1">
@@ -343,13 +405,28 @@ export default function FmsView({
  })}
  </div>
  </div>
+ )}
 
+ {preferredOffline && (
+ <p className="text-[10px] text-rose-500 font-semibold text-center -mt-1">
+  {preferredId} 오프라인 — 등록/할당 불가
+ </p>
+ )}
+ <div className="grid grid-cols-2 gap-2">
  <button
-  onClick={() => { if (form.targetNode) { emitFmsDispatch(form); setForm(f => ({ ...f, targetNode: "" })); } }}
-  disabled={!form.targetNode}
-  className="w-full glass-button !bg-sky-600 hover:!bg-sky-500 !text-xs !font-semibold !tracking-wide !py-2.5 !rounded-xl shadow-xl disabled:opacity-40 disabled:cursor-not-allowed">
-  {form.preferredRobotId ? `${form.preferredRobotId} 에 할당` : "자동 배정으로 할당"}
+  onClick={() => submit(emitFmsRegister)}
+  disabled={!canSubmit}
+  title="배차하지 않고 등록만 — 목록에서 나중에 '배차' 버튼으로 할당"
+  className="w-full glass-button !bg-violet-600 hover:!bg-violet-500 !text-xs !font-semibold !tracking-wide !py-2.5 !rounded-xl shadow-xl disabled:opacity-40 disabled:cursor-not-allowed">
+  등록만
  </button>
+ <button
+  onClick={() => submit(emitFmsDispatch)}
+  disabled={!canSubmit}
+  className="w-full glass-button !bg-sky-600 hover:!bg-sky-500 !text-xs !font-semibold !tracking-wide !py-2.5 !rounded-xl shadow-xl disabled:opacity-40 disabled:cursor-not-allowed">
+  {isSupply ? "omx 공급" : form.preferredRobotId ? `${form.preferredRobotId} 할당` : "자동 할당"}
+ </button>
+ </div>
  </div>
  </div>
  </aside>
@@ -419,20 +496,35 @@ function RobotStatusCard({ robot, rosMessages, fmsTasks, mapAssignment }: any) {
  );
 }
 
-function TaskItem({ task, onCancel }: any) {
+function TaskItem({ task, onCancel, onRelease }: any) {
+ const isDraft = task.status === 'DRAFT';
+ const dotColor = isDraft ? 'bg-violet-400' : task.status === 'RUNNING' ? 'bg-sky-400 animate-pulse' : 'bg-amber-400';
+ const badgeColor = isDraft ? 'text-white/90 border-white/[0.1] bg-violet-500/10'
+  : task.status === 'RUNNING' ? 'text-white/90 border-white/[0.1] bg-sky-500/5'
+  : 'text-white/90 border-white/[0.1] bg-amber-500/5';
  return (
  <div className="glass-card !bg-[#FFCE99]/32 border-white/[0.1] p-4 hover:border-white/[0.1] transition-colors group">
  <div className="flex justify-between items-start mb-2">
  <div className="flex items-center gap-2">
- <div className={`w-1.5 h-1.5 rounded-full ${task.status === 'RUNNING' ? 'bg-sky-400 animate-pulse' : 'bg-amber-400'}`} />
+ <div className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
  <span className="text-xs font-semibold text-white/80 ">{taskTypeKo(task.type)}</span>
+ {isDraft && task.preferredRobotId && (
+  <span className="text-[10px] font-mono text-white/[0.5]">→ {task.preferredRobotId}</span>
+ )}
  </div>
  <button onClick={onCancel} title="태스크 취소" className="text-white/[0.4] hover:text-white/90 transition-colors text-sm leading-none opacity-0 group-hover:opacity-100">✕</button>
  </div>
  <div className="flex justify-between items-end">
  <div className="text-xs text-white/[0.55] tracking-wide">목적지: {task.targetNode}</div>
- <span className={`text-xs font-semibold px-1.5 py-0.5 rounded border ${task.status === 'RUNNING' ? 'text-white/90 border-white/[0.1] bg-sky-500/5' : 'text-white/90 border-white/[0.1] bg-amber-500/5'}`}>{taskStatusKo(task.status)}</span>
+ <span className={`text-xs font-semibold px-1.5 py-0.5 rounded border ${badgeColor}`}>{taskStatusKo(task.status)}</span>
  </div>
+ {isDraft && (
+ <button
+  onClick={onRelease}
+  className="mt-3 w-full glass-button !bg-sky-600 hover:!bg-sky-500 !text-[11px] !font-semibold !tracking-wide !py-1.5 !rounded-lg shadow-lg">
+  배차 (할당 시작)
+ </button>
+ )}
  </div>
  );
 }

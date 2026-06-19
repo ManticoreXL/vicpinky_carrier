@@ -63,6 +63,33 @@ export class FmsService {
     return task;
   }
 
+  // ── TaskManager용: 등록만(배차 X) — DRAFT 상태로 생성 ─────────────────────
+  //
+  // createQueued와 달리 status=DRAFT 로 만들어 자동 배차 루프(process)가 건드리지
+  // 않게 한다. 관제가 나중에 release()로 PENDING 전환하면 그때 배차된다.
+  async createDraft(dto: CreateTaskDto): Promise<TaskDocument> {
+    const task = await this.taskModel.create({
+      task_id:          dto.task_id ?? genTaskId(),
+      type:             dto.type,
+      targetNode:       dto.targetNode,
+      priority:         dto.priority ?? 5,
+      status:           TaskStatus.DRAFT,
+      preferredRobotId: dto.preferredRobotId ?? null,
+    });
+    const robotLabel = dto.preferredRobotId ? ` → ${dto.preferredRobotId}` : '';
+    this.logger.log(`태스크 등록(미배차): ${task.task_id} [${dto.type}→${dto.targetNode}] P${dto.priority ?? 5}${robotLabel}`);
+    return task;
+  }
+
+  // ── TaskManager용: DRAFT → PENDING 배차 큐 투입 ──────────────────────────
+  async release(taskId: string, server: Server | null): Promise<TaskDocument | null> {
+    const task = await this.taskModel.findById(taskId);
+    if (!task || task.status !== TaskStatus.DRAFT) return null;
+    await this.setStatus(taskId, TaskStatus.PENDING, server);
+    this.logger.log(`태스크 배차: ${task.task_id} [${task.type}→${task.targetNode}] DRAFT → PENDING`);
+    return task;
+  }
+
   // ── TaskManager용: 우선순위순 PENDING 태스크 ──────────────────────────────
   async getPendingTasks(limit = 20): Promise<TaskDocument[]> {
     return this.taskModel

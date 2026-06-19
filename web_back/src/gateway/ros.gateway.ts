@@ -298,6 +298,22 @@ export class RosGateway
     await this.taskManager.enqueue(payload);
   }
 
+  /** 등록만 — 배차하지 않고 DRAFT 상태로 보관 (관제가 나중에 수동 배차) */
+  @SubscribeMessage('fms_register_task')
+  async handleFmsRegister(
+    @MessageBody() payload: CreateTaskDto,
+  ) {
+    await this.taskManager.register(payload);
+  }
+
+  /** DRAFT 태스크를 배차 큐에 투입 (PENDING 전환 → 자동 배정) */
+  @SubscribeMessage('fms_release_task')
+  async handleFmsRelease(
+    @MessageBody() { taskId }: { taskId: string },
+  ) {
+    await this.taskManager.releaseTask(taskId);
+  }
+
   /** 관제 작업자: 알림 확인 */
   @SubscribeMessage('task_manager_ack')
   handleTmAck(@MessageBody() { alertId }: { alertId: string }) {

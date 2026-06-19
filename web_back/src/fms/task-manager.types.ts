@@ -2,7 +2,7 @@
 
 export interface TaskManagerAlert {
   id: string;
-  type: 'fall' | 'robot_offline' | 'task_failed' | 'assigned' | 'completed' | 'info';
+  type: 'fall' | 'robot_offline' | 'task_failed' | 'no_path' | 'assigned' | 'completed' | 'info';
   taskId?: string;
   robotId?: string;
   message: string;

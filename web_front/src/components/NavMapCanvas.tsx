@@ -6,7 +6,7 @@ import CameraFeed from "./CameraFeed";
 import { snapNodes } from "./TopologyMapView";
 import type { FNode, FEdge, ActivePath, RobotPos } from "./TopologyMapView";
 import type { StaticMapInfo, DragState } from "./navmap/types";
-import { TB3_ROBOTS, NODE_COLOR } from "./navmap/constants";
+import { TB3_ROBOTS, SELECTABLE_ROBOTS, NODE_COLOR } from "./navmap/constants";
 import { worldToCanvas, canvasToWorld, distToSegment, quatToYaw } from "./navmap/geometry";
 import { drawPreviewMarker } from "./navmap/markers";
 import { drawPlanPaths, drawTopologyOverlay, drawActivePaths, drawTb3Markers, buildActivePathColors } from "./navmap/renderers";
@@ -417,19 +417,19 @@ export default function NavMapCanvas({
  <div className="flex">
  <button
  onClick={() => {
- const allIds = TB3_ROBOTS.map((r) => r.id);
+ const allIds = SELECTABLE_ROBOTS.map((r) => r.id);
  const allSelected = allIds.every((id) => selectedBots.has(id));
  setSelectedBots(allSelected ? new Set() : new Set(allIds));
  }}
  className={`px-2 py-0.5 text-xs font-bold border-r border-white/[0.1] transition-all ${
- TB3_ROBOTS.every((r) => selectedBots.has(r.id))
+ SELECTABLE_ROBOTS.every((r) => selectedBots.has(r.id))
  ? "bg-[#521C0D] text-[#F4E7E1]"
  : "text-white/[0.68] hover:text-white/90"
  }`}
  >
  ALL
  </button>
- {TB3_ROBOTS.map((r) => {
+ {SELECTABLE_ROBOTS.map((r) => {
  const isOn = selectedBots.has(r.id);
  const hasPos = rosMessages[`/${r.id}/amcl_pose`]?.data != null;
  const hasPlan = ((rosMessages[`/${r.id}/plan`]?.data as { poses?: unknown[] } | undefined)?.poses?.length ?? 0) > 0;
@@ -616,7 +616,7 @@ export default function NavMapCanvas({
  {/* 범례 (좌상단) */}
  {canvasReady && (
  <div className="absolute top-2 left-2 flex flex-col gap-1 bg-[#FFCE99]/14 backdrop-blur-xl/90 px-2 py-1.5 border border-[#521C0D]/10">
- {TB3_ROBOTS.map((r) => {
+ {SELECTABLE_ROBOTS.map((r) => {
  const isOn = selectedBots.has(r.id);
  const hasPos = rosMessages[`/${r.id}/amcl_pose`]?.data != null;
  const hasPlan = ((rosMessages[`/${r.id}/plan`]?.data as { poses?: unknown[] } | undefined)?.poses?.length ?? 0) > 0;

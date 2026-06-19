@@ -16,6 +16,7 @@ import FlowView from "./views/FlowView";
 import AdminView from "./views/AdminView";
 import BatteryAlertModal from "./components/BatteryAlertModal";
 import FallAlertModal from "./components/FallAlertModal";
+import NoPathAlertModal from "./components/NoPathAlertModal";
 import ControlCameraPanel from "./components/ControlCameraPanel";
 import { useBatteryAlerts } from "./hooks/useBatteryAlerts";
 import { useThrottled } from "./hooks/useThrottled";
@@ -28,7 +29,7 @@ export default function App() {
  const { connected, error, subscribe, publish } = useRos();
  const {
  emitCmdVel, emitPublish, emitAction, cancelAction, callService,
- emitFmsDispatch, emitFmsCancel, emitNodeLock,
+ emitFmsDispatch, emitFmsCancel, emitFmsRegister, emitFmsRelease, emitNodeLock,
  emitNavInitialPose,
  nestConnected, rosMessages, socket,
  activeGoals, actionFeedbacks, actionResults,
@@ -152,6 +153,8 @@ export default function App() {
  socket={socket}
  emitFmsDispatch={emitFmsDispatch}
  emitFmsCancel={emitFmsCancel}
+ emitFmsRegister={emitFmsRegister}
+ emitFmsRelease={emitFmsRelease}
  emitNavInitialPose={emitNavInitialPose}
  tmAlerts={tmAlerts}
  ackTmAlert={ackTmAlert}
@@ -258,6 +261,15 @@ export default function App() {
 
  <BatteryAlertModal notifications={notifications} onConfirm={confirmNotification} />
  <FallAlertModal alerts={tmAlerts} onConfirm={ackTmAlert} />
+ <NoPathAlertModal
+ alerts={tmAlerts}
+ onSwitchManual={(robotId, alertId) => {
+ if (robotId) setSelectedRobot(robotId);
+ setAppMode("control");
+ ackTmAlert(alertId);
+ }}
+ onDismiss={ackTmAlert}
+ />
  <AiAssistant socket={socket} />
 
  {/* ── Footer ────────────────────────────────────────────────────────── */}

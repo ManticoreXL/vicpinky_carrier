@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Server } from 'socket.io';
 import { FmsService } from './fms.service';
-import { TaskStatus } from './task.schema';
+import { TaskStatus, TaskType } from './task.schema';
 import { RosService } from '../ros/ros.service';
 import { RobotService } from '../fleet/robot.service';
 import { TopologyService } from '../fleet/topology.service';
@@ -117,6 +117,18 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     const task = await this.fmsService.createQueued(dto);
     this.server?.emit('fms_task_created', task);
     return task;
+  }
+
+  // 등록만 — DRAFT 상태로 생성 (자동 배차 안 함)
+  async register(dto: Parameters<FmsService['createDraft']>[0]) {
+    const task = await this.fmsService.createDraft(dto);
+    this.server?.emit('fms_task_created', task);
+    return task;
+  }
+
+  // DRAFT 태스크를 배차 큐(PENDING)에 투입 → 다음 tick에서 자동 배정
+  async releaseTask(taskId: string) {
+    return this.fmsService.release(taskId, this.server);
   }
 
   setHomePosition(robotId: string, x: number, y: number, yaw: number) {
@@ -612,9 +624,26 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
         return;
       }
 
-      const isFinal   = remaining.length === 1;
-      const threshold = isFinal ? NODE_ARRIVE_M : NODE_PASS_M;
-      const dist      = Math.hypot(x - node.x, y - node.y);
+      const isFinal = remaining.length === 1;
+      const dist    = Math.hypot(x - node.x, y - node.y);
+
+      // 적응형 통과 임계값 — 노드 간격이 NODE_PASS_M보다 좁은 맵(예: 401)에서, 직전
+      // 노드에 머무는 동안 다음 노드가 이미 고정 임계 반경(1.5m) 안에 들어와 노드를
+      // 통째로 건너뛰고 다다음 노드를 찾는 문제를 방지한다. 직전 노드(robot.location)
+      // → 다음 노드 거리의 절반을 임계값으로 쓰되 NODE_PASS_M로 상한을 둔다.
+      // (segLen/2 < segLen 이므로 직전 노드 위치에서는 절대 오발동하지 않는다)
+      let threshold = isFinal ? NODE_ARRIVE_M : NODE_PASS_M;
+      if (!isFinal) {
+        const robot  = await this.robotService.findById(robotId);
+        const fromId = robot?.location;
+        if (fromId && fromId !== nextId) {
+          const fromNode = await this.topologyService.findNodeById(fromId);
+          if (fromNode) {
+            const segLen = Math.hypot(fromNode.x - node.x, fromNode.y - node.y);
+            threshold = Math.min(NODE_PASS_M, Math.max(0.15, segLen * 0.5));
+          }
+        }
+      }
 
       this.logger.log(
         `[웨이포인트] ${robotId} pos=(${x.toFixed(2)},${y.toFixed(2)}) → next=${nextId}(${node.type})` +
@@ -864,6 +893,25 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
         this.logger.warn(`[dispatch] ${robotId} 오프라인 — 건너뜀`);
         await this.fmsService.setWaitReason(taskId, '로봇 오프라인 — 재연결 대기');
         freeRobots.unshift(robot);
+        continue;
+      }
+
+      // ── 공급(SUPPLY) — omx 로봇팔 전용, 내비게이션 없이 즉시 보급 수행 ──────
+      // targetNode는 목적지 노드가 아니라 보급 품목(물/약)이다. omx는 고정형이라
+      // 경로 탐색·이동 단계를 건너뛰고 바로 완료 처리한다. (실제 로봇팔 액션 연동 지점)
+      if (task.type === TaskType.SUPPLY) {
+        await this.fmsService.setStatus(taskId, TaskStatus.COMPLETED, this.server, {
+          assignedRobotId: robotId,
+          startedAt:   new Date(),
+          completedAt: new Date(),
+        });
+        await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
+        this.emit({
+          type: 'completed', taskId, robotId,
+          message: `${robotId} 보급 완료 — ${task.targetNode}`,
+          requiresAction: false,
+        });
+        this.logger.log(`[보급] ${robotId} → ${task.targetNode} 공급 완료 (task: ${taskId})`);
         continue;
       }
 

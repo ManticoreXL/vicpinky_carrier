@@ -7,8 +7,9 @@ import { Edge, EdgeDocument, EdgeDirection } from './edge.schema';
 import { Robot, RobotDocument } from './robot.schema';
 import { Task, TaskDocument } from '../fms/task.schema';
 
-// 이 임계값 이하인 엣지는 진입 불가 (비메인 도로 차단용)
-const MIN_WEIGHT = 0.1;
+// 이 값 이하(0 또는 음수)인 weight는 비활성/차단 간선으로 간주하여 제외.
+// (표준 다익스트라는 양수 비용을 요구 — 0.01 같은 작은 양수는 정상적인 저비용 간선이다)
+const MIN_WEIGHT = 0;
 
 @Injectable()
 export class TopologyService {
@@ -86,8 +87,8 @@ export class TopologyService {
   //
   // 정책:
   //   - isLocked=true 엣지 → 완전 제외
-  //   - weight <= MIN_WEIGHT(0.1) → 진입 불가 (비메인 도로 차단)
-  //   - 비용 = 1/weight: 가중치 높을수록(메인 도로) 우선 선택
+  //   - weight <= 0 → 비활성/차단 간선으로 제외
+  //   - 비용 = weight: 표준 다익스트라(가중치 낮을수록 우선 선택)
 
   async setNodeLocked(node_id: string, isLocked: boolean): Promise<void> {
     await this.nodeModel.updateOne({ node_id }, { isLocked });
@@ -104,7 +105,7 @@ export class TopologyService {
     return locked.map(n => n.node_id);
   }
 
-  async findPath(
+async findPath(
     startNodeId: string,
     endNodeId: string,
     map_id: string,
@@ -118,30 +119,17 @@ export class TopologyService {
     ]);
 
     if (edges.length === 0) {
-      this.logger.warn(`[A*] map_id="${map_id}" 사용 가능한 엣지 없음`);
+      this.logger.warn(`[PathFind] map_id="${map_id}" 사용 가능한 엣지 없음`);
       return [];
     }
 
-    // 노드 위치·타입 맵 (휴리스틱 + CHARGER 경유 제외용)
-    const nodePos  = new Map<string, { x: number; y: number }>();
+    // 💡 물리적 좌표(nodePos)는 무시하고, 충전소 판별을 위한 타입(nodeType)만 저장
     const nodeType = new Map<string, string>();
     for (const n of allNodes) {
-      nodePos.set(n.node_id, { x: n.x, y: n.y });
       nodeType.set(n.node_id, n.type);
     }
 
-    const goalPos = nodePos.get(endNodeId);
-    const h = (nodeId: string): number => {
-      if (!goalPos) return 0;
-      const pos = nodePos.get(nodeId);
-      if (!pos) return 0;
-      return Math.hypot(pos.x - goalPos.x, pos.y - goalPos.y);
-    };
-
-    // 인접 리스트 구성
     const adj = new Map<string, { to: string; cost: number }[]>();
-
-    // 출발이 CHARGER이면 (충전소에서 출발) 주변 CHARGER 경유 허용
     const startIsCharger = nodeType.get(startNodeId) === NodeType.CHARGER;
 
     for (const edge of edges) {
@@ -149,17 +137,19 @@ export class TopologyService {
       const endLocked   = lockedNodes.has(edge.endNode)   && edge.endNode   !== endNodeId;
       if (startLocked || endLocked) continue;
 
-      // CHARGER 노드는 출발·목적지가 아닌 이상 경유 불가 (충전 전용 노드)
-      // 단, 출발 자체가 CHARGER인 경우엔 탈출 경로 확보를 위해 CHARGER 경유 허용
+      // 💡 weight ≤ 0 (비활성/차단 간선)만 제외 — 0.01 등 작은 양수는 유효한 저비용 간선
+      if (edge.weight != null && edge.weight <= MIN_WEIGHT) continue;
+
+      // CHARGER 경유 차단 로직
       if (!startIsCharger) {
         if (nodeType.get(edge.startNode) === NodeType.CHARGER && edge.startNode !== startNodeId && edge.startNode !== endNodeId) continue;
         if (nodeType.get(edge.endNode)   === NodeType.CHARGER && edge.endNode   !== startNodeId && edge.endNode   !== endNodeId) continue;
       }
 
-      const w    = Math.max(edge.weight ?? 1, 0.01);
-      const cost = 1 / w;
+      // 💡 fleet_edges의 weight를 간선 비용으로 그대로 사용 (표준 다익스트라: weight가 낮을수록 우선).
+      //    weight 미지정 시 1로 간주. (weight ≤ MIN_WEIGHT 간선은 위에서 이미 제외되어 cost > 0 보장)
+      const cost = edge.weight ?? 1;
 
-      // 모든 엣지를 양방향으로 처리 (direction 필드 무시)
       if (!adj.has(edge.startNode)) adj.set(edge.startNode, []);
       adj.get(edge.startNode)!.push({ to: edge.endNode, cost });
 
@@ -168,36 +158,47 @@ export class TopologyService {
     }
 
     if (!adj.has(startNodeId)) {
-      this.logger.warn(`[A*] 출발노드 "${startNodeId}" 엣지 없음`);
+      this.logger.warn(`[PathFind] 출발노드 "${startNodeId}" 엣지 없음`);
     }
 
-    // A* 탐색
+    // 💡 A*에서 휴리스틱을 뺀 다익스트라(Dijkstra) 방식으로 탐색
     const gCost  = new Map<string, number>();
     const parent = new Map<string, string>();
-    const pq: { id: string; f: number }[] = [];
+    const closed = new Set<string>(); // 방문 완료 노드 추적 (무한 루프 방지)
+
+    // 우선순위 큐 (순수 누적 비용 gCost 기준으로만 정렬)
+    const pq: { id: string; cost: number }[] = [];
+
     gCost.set(startNodeId, 0);
-    pq.push({ id: startNodeId, f: h(startNodeId) });
+    pq.push({ id: startNodeId, cost: 0 });
 
     while (pq.length > 0) {
-      pq.sort((a, b) => a.f - b.f);
-      const { id: u } = pq.shift()!;
+      pq.sort((a, b) => a.cost - b.cost);
+      const { id: u, cost: currentG } = pq.shift()!;
 
+      // 이미 확정된(더 짧은 경로로 방문한) 노드면 스킵
+      if (closed.has(u)) continue;
+      closed.add(u);
+
+      // 목적지 도착!
       if (u === endNodeId) {
         return this.reconstructPath(parent, startNodeId, endNodeId);
       }
 
-      const gU = gCost.get(u) ?? Infinity;
-      for (const { to: v, cost } of adj.get(u) ?? []) {
-        const tentativeG = gU + cost;
+      // 인접 노드 탐색
+      for (const { to: v, cost: edgeCost } of adj.get(u) ?? []) {
+        if (closed.has(v)) continue;
+
+        const tentativeG = currentG + edgeCost;
         if (tentativeG < (gCost.get(v) ?? Infinity)) {
           gCost.set(v, tentativeG);
           parent.set(v, u);
-          pq.push({ id: v, f: tentativeG + h(v) });
+          pq.push({ id: v, cost: tentativeG });
         }
       }
     }
 
-    this.logger.warn(`[A*] 경로 없음: ${startNodeId} → ${endNodeId}`);
+    this.logger.warn(`[PathFind] 경로 없음: ${startNodeId} → ${endNodeId}`);
     return [];
   }
 

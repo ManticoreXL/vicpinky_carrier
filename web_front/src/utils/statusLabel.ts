@@ -8,6 +8,7 @@ export const ROBOT_STATUS_KO: Record<string, string> = {
 };
 
 export const TASK_STATUS_KO: Record<string, string> = {
+  DRAFT:     '등록됨',
   PENDING:   '대기 중',
   ASSIGNED:  '배정됨',
   RUNNING:   '진행 중',
@@ -18,7 +19,7 @@ export const TASK_STATUS_KO: Record<string, string> = {
 
 export const TASK_TYPE_KO: Record<string, string> = {
   SUPPLY:      '공급',
-  PROCESS:     '공정',
+  PROCESS:     '구호',
   CHARGE:      '충전',
   MOVE:        '이동',
   DISTRIBUTE:  '배포',

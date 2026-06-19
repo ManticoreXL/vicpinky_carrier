@@ -1,0 +1,73 @@
+name: domain_bridge_pinky_02
+topics:
+
+  # ── UPLINK: 로봇(pinky) 상태를 관제탑 웹 UI로 전송 ──
+  /battery/percent: # 배터리 잔량 (필수)
+    type: std_msgs/msg/Float32
+    from_domain: 47
+    to_domain: 49
+    remap: /pinky/battery/percent
+
+  /battery/voltage: # 배터리 전압 상태
+    type: std_msgs/msg/Float32
+    from_domain: 47
+    to_domain: 49
+    remap: /pinky/battery/voltage
+
+  /odom: # 오도메트리 위치 정보 (필수)
+    type: nav_msgs/msg/Odometry
+    from_domain: 47
+    to_domain: 49
+    remap: /pinky/odom
+
+  /scan: # 라이다 스캔 데이터 (장애물 감지 및 매핑용)
+    type: sensor_msgs/msg/LaserScan
+    from_domain: 47
+    to_domain: 49
+    remap: /pinky/scan
+
+  /joint_states: # 로봇 바퀴/관절 상태
+    type: sensor_msgs/msg/JointState
+    from_domain: 47
+    to_domain: 49
+    remap: /pinky/joint_states
+
+  /robot_description: # 로봇 URDF 모델 구조
+    type: std_msgs/msg/String
+    from_domain: 47
+    to_domain: 49
+    remap: /pinky/robot_description
+
+  # /tf: # 동적 좌표 변환 (관제탑에서 로봇 시각화 시 필요)
+  #   type: tf2_msgs/msg/TFMessage
+  #   from_domain: 47
+  #   to_domain: 49
+  #   remap: /pinky/tf
+
+  # /tf_static: # 정적 좌표 변환
+  #   type: tf2_msgs/msg/TFMessage
+  #   from_domain: 47
+  #   to_domain: 49
+  #   remap: /pinky/tf_static
+
+  # ── DOWNLINK: 관제탑에서 로봇(pinky)으로 명령 전송 ──
+  /pinky/cmd_vel: # 조이스틱 및 수동 속도 제어용
+    type: geometry_msgs/msg/Twist  # (주의: 기존 예시의 TwistStamped가 아님)
+    from_domain: 47
+    to_domain: 49
+    remap: /cmd_vel
+    qos:
+      reliability: reliable
+
+  # ── 시스템 내부용 (일반적으로 브릿징하지 않아 주석 처리) ──
+  # /rosout: # 로그 출력
+  #   type: rcl_interfaces/msg/Log
+  #   from_domain: 47
+  #   to_domain: 49
+  #   remap: /pinky/rosout
+  #
+  # /parameter_events: # 파라미터 변경 이벤트
+  #   type: rcl_interfaces/msg/ParameterEvent
+  #   from_domain: 47
+  #   to_domain: 49
+  #   remap: /pinky/parameter_events

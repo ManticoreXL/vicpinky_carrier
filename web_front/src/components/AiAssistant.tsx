@@ -37,6 +37,42 @@ const TOOL_LABELS: Record<string, string> = {
 
 const uid = () => Math.random().toString(36).slice(2);
 
+// ── 응답 속도 표시 헬퍼 ───────────────────────────────────────────────────────
+
+const fmtMs = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(1)}s` : `${ms}ms`);
+
+// 상황별 상태바 스타일 — 시안성 위해 색으로 구분
+function respBarStyle(
+  status: "idle" | "thinking" | "done" | "error",
+  lastMs: number | null,
+  elapsedMs: number,
+): { wrap: string; dot: string; label: string; time: string } {
+  if (status === "thinking") {
+    return {
+      wrap: "border-indigo-500/30 bg-indigo-500/10 text-indigo-300",
+      dot:  "bg-indigo-400 animate-pulse",
+      label: "응답 생성 중…",
+      time: fmtMs(elapsedMs),
+    };
+  }
+  if (status === "error") {
+    return {
+      wrap: "border-rose-500/30 bg-rose-500/10 text-rose-400",
+      dot:  "bg-rose-500",
+      label: "응답 실패",
+      time: lastMs != null ? fmtMs(lastMs) : "—",
+    };
+  }
+  if (status === "done" && lastMs != null) {
+    // 속도 등급: 빠름(<3s) · 보통(<8s) · 느림(≥8s)
+    if (lastMs < 3000) return { wrap: "border-emerald-500/30 bg-emerald-500/10 text-emerald-400", dot: "bg-emerald-400", label: "응답 완료 · 빠름", time: fmtMs(lastMs) };
+    if (lastMs < 8000) return { wrap: "border-amber-500/30 bg-amber-500/10 text-amber-400",   dot: "bg-amber-400",   label: "응답 완료 · 보통", time: fmtMs(lastMs) };
+    return { wrap: "border-rose-500/30 bg-rose-500/10 text-rose-400", dot: "bg-rose-500", label: "응답 완료 · 느림", time: fmtMs(lastMs) };
+  }
+  // idle
+  return { wrap: "border-white/[0.1] bg-[#FFCE99]/20 text-white/[0.5]", dot: "bg-white/30", label: "대기 중", time: "—" };
+}
+
 // ── 컴포넌트 ──────────────────────────────────────────────────────────────────
 
 export default function AiAssistant({ socket }: Props) {
@@ -45,6 +81,19 @@ export default function AiAssistant({ socket }: Props) {
   const [input,     setInput]     = useState("");
   const [recording, setRecording] = useState(false);
   const [interim,   setInterim]   = useState("");
+
+  // ── 응답 속도(레이턴시) 추적 ──────────────────────────────────────────────
+  const [respStatus, setRespStatus] = useState<"idle" | "thinking" | "done" | "error">("idle");
+  const [lastMs,     setLastMs]     = useState<number | null>(null); // 마지막 응답 소요(ms)
+  const [elapsedMs,  setElapsedMs]  = useState(0);                   // 생성 중 실시간 경과(ms)
+  const startRef = useRef(0);
+
+  // 생성 중일 때만 실시간 경과 카운터 가동
+  useEffect(() => {
+    if (respStatus !== "thinking") return;
+    const id = setInterval(() => setElapsedMs(Date.now() - startRef.current), 100);
+    return () => clearInterval(id);
+  }, [respStatus]);
 
   const mediaRef    = useRef<MediaRecorder | null>(null);
   const chunksRef   = useRef<Blob[]>([]);
@@ -71,6 +120,11 @@ export default function AiAssistant({ socket }: Props) {
     ]);
     setInput("");
 
+    // 응답 속도 측정 시작
+    startRef.current = Date.now();
+    setElapsedMs(0);
+    setRespStatus("thinking");
+
     try {
       const res = await fetch(`${BACKEND_URL}/ai/agent`, {
         method:  "POST",
@@ -82,6 +136,8 @@ export default function AiAssistant({ socket }: Props) {
 
       const data = (await res.json()) as { reply: string; actions: AgentAction[] };
 
+      setLastMs(Date.now() - startRef.current);
+      setRespStatus("done");
       setMessages(prev => prev.map(m =>
         m.id === agentMsgId
           ? { ...m, text: data.reply, actions: data.actions, loading: false }
@@ -89,6 +145,8 @@ export default function AiAssistant({ socket }: Props) {
       ));
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "에이전트 호출 실패";
+      setLastMs(Date.now() - startRef.current);
+      setRespStatus("error");
       setMessages(prev => prev.map(m =>
         m.id === agentMsgId
           ? { ...m, text: msg, loading: false, error: true }
@@ -244,6 +302,21 @@ export default function AiAssistant({ socket }: Props) {
             )}
             <div ref={bottomRef} />
           </div>
+
+          {/* 응답 속도 상태바 (항상 표시 · 상황별 색 구분) */}
+          {(() => {
+            const s = respBarStyle(respStatus, lastMs, elapsedMs);
+            return (
+              <div className={`flex-none flex items-center justify-between px-4 py-2 border-t
+                text-[11px] font-semibold tracking-wide transition-colors duration-300 ${s.wrap}`}>
+                <span className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full ${s.dot}`} />
+                  {s.label}
+                </span>
+                <span className="font-mono tabular-nums">⚡ {s.time}</span>
+              </div>
+            );
+          })()}
 
           {/* 입력 */}
           <div className="flex-none p-3 border-t border-white/[0.1] bg-[#FFCE99]/32">

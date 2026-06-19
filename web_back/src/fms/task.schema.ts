@@ -9,6 +9,7 @@ export enum TaskType {
 }
 
 export enum TaskStatus {
+  DRAFT     = 'DRAFT',     // 등록만 된 상태 — 자동 배차 대상 아님 (관제가 수동 배차)
   PENDING   = 'PENDING',
   ASSIGNED  = 'ASSIGNED',
   RUNNING   = 'RUNNING',

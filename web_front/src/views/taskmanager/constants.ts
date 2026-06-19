@@ -7,6 +7,11 @@ export const ROBOTS = [
   { id: "tb3_03",   domain: 43, type: "tb3" },
   { id: "tb3_04",   domain: 44, type: "tb3" },
   { id: "omx",      domain: 45, type: "arm" },
+  // rosbridge 미경유 가상 테스트봇 4대 (항상 성공)
+  { id: "TEST-BOT1", domain: 99,  type: "test" },
+  { id: "TEST-BOT2", domain: 100, type: "test" },
+  { id: "TEST-BOT3", domain: 101, type: "test" },
+  { id: "TEST-BOT4", domain: 102, type: "test" },
 ] as const;
 
 export const TASK_COLORS: Record<string, string> = {
