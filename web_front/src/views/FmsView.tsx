@@ -24,6 +24,13 @@ const TASK_LABELS: Record<TaskType, string> = {
  SUPPLY: "공급", PROCESS: "구호", CHARGE: "충전", MOVE: "이동"
 };
 
+const TASK_PRIORITIES: Record<TaskType, number> = {
+ SUPPLY: 1,    // 공급 1
+ CHARGE: 1,    // 충전 1
+ MOVE: 2,      // 이동 2
+ PROCESS: 3    // 구호(작업) 3
+};
+
 // 공급(SUPPLY)은 omx(로봇팔) 전용 — 목적지 노드 대신 보급 품목을 선택
 const SUPPLY_ROBOT_ID = "omx";
 const SUPPLY_ITEMS = ["물", "약"] as const;
@@ -84,7 +91,7 @@ export default function FmsView({
  const [contentTab, setContentTab] = useState<"fleet" | "map">("map");
  const [mapAssignments, setMapAssignments] = useState<Record<string, string>>({});
  const [topoNodes, setTopoNodes] = useState<TopoNode[]>([]);
- const [form, setForm] = useState({ type: "SUPPLY" as TaskType, targetNode: "", priority: 5, preferredRobotId: focusRobotId ?? "", supplyItem: "물" as SupplyItem });
+ const [form, setForm] = useState({ type: "SUPPLY" as TaskType, targetNode: "", priority: 1, preferredRobotId: focusRobotId ?? "", supplyItem: "물" as SupplyItem });
 
  const isSupply = form.type === "SUPPLY";
 
@@ -102,7 +109,7 @@ export default function FmsView({
  useEffect(() => {
   const node = topoNodes.find(n => n.node_id === form.targetNode);
   if (node?.type === "CHARGER") {
-   setForm(f => f.type === "CHARGE" ? f : { ...f, type: "CHARGE" });
+    setForm(f => f.type === "CHARGE" ? f : { ...f, type: "CHARGE", priority: TASK_PRIORITIES["CHARGE"] });
   }
  }, [form.targetNode, topoNodes]);
 
@@ -320,7 +327,7 @@ export default function FmsView({
  {(Object.keys(TASK_LABELS) as TaskType[]).map(t => (
  <button
  key={t}
- onClick={() => setForm(f => ({ ...f, type: t }))}
+ onClick={() => setForm(f => ({ ...f, type: t, priority: TASK_PRIORITIES[t] }))}
  className={`py-1 text-[10px] font-bold tracking-wide rounded border transition-all ${form.type === t ? 'bg-sky-600/40 text-sky-800 border-sky-500/60' : 'bg-[#FFCE99]/32 text-white/[0.55] border-white/[0.1] hover:text-white/[0.75]'}`}
  >
  {TASK_LABELS[t]}
