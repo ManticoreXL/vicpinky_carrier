@@ -47,10 +47,11 @@ export async function resolveDispatchPath(
   const myMapId = targetNode.map_id;
 
   // 출발 노드 결정: robot.location이 현재 맵의 실제 노드인지 검증
-  
+
   let startNodeId: string | null = null;
   let startFromLocation = false;
 
+  // 현재 위치가 보이고 로봇의 현재 위치가 
   if (robot.location && robot.location !== task.targetNode) {
     const locNode = await ctx.topologyService.findNodeById(robot.location);
     if (locNode && locNode.map_id === myMapId) {
@@ -75,9 +76,8 @@ export async function resolveDispatchPath(
       await ctx.robotService.updateLocation(robotId, amclNode);
     }
   }
-
-  if (!startNodeId || startNodeId === task.targetNode) {
-    // 출발 노드가 없거나 이미 목적지
+  // 출발 노드가 없거나 이미 목적지 라면 
+  if (!startNodeId || startNodeId === task.targetNode) {    
     ctx.logger.log(`[dispatch] ${robotId} startNode=${startNodeId ?? 'null'} — 목적지 직행 [${task.targetNode}]`);
     pathQueue = [task.targetNode];
   } else {

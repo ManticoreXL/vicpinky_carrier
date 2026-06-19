@@ -89,6 +89,8 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
           // 태스크는 있는데 서버가 재시작되어 activeTasks 잃음 → FAILED 처리
           this.logger.warn(`[복구] 서버 재시작으로 인한 태스크 중단: ${taskId} (${robotId}) → FAILED`);
           await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
+
+          
           if (this.server) {
             await this.fmsService.setStatus(taskId, TaskStatus.FAILED, this.server, { completedAt: new Date() });
           } else {
@@ -175,7 +177,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     const task = await this.fmsService.getTask(taskId);
     if (!task) return;
     if (task.status === TaskStatus.COMPLETED || task.status === TaskStatus.FAILED) return;
-
+    await this.lockNode(task.targetNode, false);
     const robotId = task.assignedRobotId;
 
     if (robotId) {
@@ -640,7 +642,12 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
           const fromNode = await this.topologyService.findNodeById(fromId);
           if (fromNode) {
             const segLen = Math.hypot(fromNode.x - node.x, fromNode.y - node.y);
-            threshold = Math.min(NODE_PASS_M, Math.max(0.15, segLen * 0.5));
+            if (robotId.startsWith("TEST")) {
+              threshold = Math.min(NODE_PASS_M, Math.max(0.01, segLen * 0.01));
+            } else {
+              threshold = Math.min(NODE_PASS_M, Math.max(0.15, segLen * 0.15));
+            }
+            
           }
         }
       }
@@ -663,6 +670,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
           assignedRobotId: robotId,
         });
         await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
+        await this.lockNode(nextId, false);
         this.emit({ type: 'completed', taskId, robotId, message: `${robotId} 태스크 완료 (${task.targetNode})`, requiresAction: false });
         this.fmsService.publishInitialPose(robotId, x, y, yaw);
         this.returnHome(robotId);
@@ -757,7 +765,10 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
         const activeTaskId = this.activeTasks.get(robotId);
         if (activeTaskId) {
           this.activeTasks.delete(robotId);
-
+          const task = await this.fmsService.getTask(activeTaskId);
+          if (task) {
+            await this.lockNode(task.targetNode, false);
+          }
           // 태스크 FAILED 처리 (서버가 살아있는 경우)
           if (this.server) {
             await this.fmsService.setStatus(activeTaskId, TaskStatus.FAILED, this.server, {
@@ -930,6 +941,8 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
 
       await this.fmsService.assignToRobot(taskId, robotId, pathQueue, this.server!);
       await this.robotService.updateStatus(robotId, RobotStatus.MOVING);
+      await this.lockNode(task.targetNode, true);
+      
 
       const firstGoalId = pathQueue[0] ?? task.targetNode;
       await this.sendNodeActionGoal(robotId, firstGoalId);
