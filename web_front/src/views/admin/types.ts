@@ -27,6 +27,8 @@ export interface FleetNode {
   y: number;
   yaw: number;
   isLocked?: boolean;
+  /** 충전소 점유 로봇 ID (CHARGER 노드 한정) — 점유 중이면 robot_id, 아니면 null */
+  isLockedBy?: string | null;
 }
 
 export interface FleetEdge {

@@ -95,7 +95,7 @@ export function NodeSection() {
  <TableWrap>
  <thead>
  <tr className="border-b border-white/[0.1]">
- {["node_id","map_id","타입","x","y","yaw","잠금",""].map(h => <th key={h} className={TH}>{h}</th>)}
+ {["node_id","map_id","타입","x","y","yaw","잠금","점유(isLockedBy)",""].map(h => <th key={h} className={TH}>{h}</th>)}
  </tr>
  </thead>
  <tbody>
@@ -120,6 +120,7 @@ export function NodeSection() {
  </div>
  </td>
  <td className={TD} />
+ <td className={TD} />
  <td className={TD}>
  <div className="flex gap-1">
  <button className={BTN("bg-green-900/40 text-white/[0.82] border-white/[0.1]")} onClick={add}>저장</button>
@@ -129,7 +130,7 @@ export function NodeSection() {
  </tr>
  )}
  {displayed.length === 0 && !adding && (
- <tr><td colSpan={8} className="px-3 py-6 text-center text-white/[0.55] text-xs">노드 없음</td></tr>
+ <tr><td colSpan={9} className="px-3 py-6 text-center text-white/[0.55] text-xs">노드 없음</td></tr>
  )}
  {displayed.map(n => {
  const isEdit = editId === n.node_id;
@@ -162,6 +163,11 @@ export function NodeSection() {
  <td className={TD}>
  <button className={`px-2 py-0.5 text-xs font-bold rounded border transition-colors ${n.isLocked ? "bg-red-900/40 text-white/[0.82] border-white/[0.1] hover:bg-red-800/50" : "bg-[#FFCE99]/32 text-white/[0.68] border-white/[0.1] hover:text-white/90"}`}
  onClick={() => toggleNodeLock(n)}>{n.isLocked ? "잠김" : "열림"}</button>
+ </td>
+ <td className={TD}>
+ {n.isLockedBy
+  ? <span className="px-2 py-0.5 text-xs font-bold rounded border bg-emerald-900/40 text-white/[0.82] border-white/[0.1] whitespace-nowrap">⚡ {n.isLockedBy}</span>
+  : <span className="text-white/[0.4]">—</span>}
  </td>
  <td className={TD}>
  {delConfirm === n.node_id ? (

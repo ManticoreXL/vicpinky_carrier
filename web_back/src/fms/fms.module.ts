@@ -9,6 +9,7 @@ import { RobotStateService } from '../fms-state/robot-state.service';
 import { RobotTaskQueueService } from '../fms-state/robot-task-queue.service';
 import { RotationStateService } from '../fms-state/rotation-state.service';
 import { GlobalTaskQueueService } from './queue/global-task-queue.service';
+import { ChargingService } from './charging/charging.service';
 import { NavGoalService } from './navigation/nav-goal.service';
 import { NodeLockService } from './node-lock/node-lock.service';
 import { NavRecoveryService } from './navigation/nav-recovery.service';
@@ -41,6 +42,8 @@ import { AiModule } from '../ai/ai.module';
     RotationStateService,
     // 큐
     GlobalTaskQueueService,
+    // 자동충전
+    ChargingService,
     // 주행/경로
     NavGoalService,
     NodeLockService,

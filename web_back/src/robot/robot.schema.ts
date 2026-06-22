@@ -5,6 +5,7 @@ export enum RobotStatus {
   IDLE     = 'IDLE',
   MOVING   = 'MOVING',
   WORKING  = 'WORKING',
+  CHARGING = 'CHARGING',
   ERROR    = 'ERROR',
   OFFLINE  = 'OFFLINE',
 }

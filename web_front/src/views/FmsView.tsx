@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import type { Socket } from "socket.io-client";
 import { RosMessage, FmsTask, FmsDispatchPayload, TaskType, TaskManagerAlert, RobotInfo } from "../hooks/useNestSocket";
 import NavMapCanvas from "../components/NavMapCanvas";
@@ -47,6 +47,7 @@ interface Props {
  socket: Socket | null;
  emitFmsDispatch: (p: FmsDispatchPayload) => void;
  emitFmsCancel: (taskId: string) => void;
+ emitFmsAutoCharge: (robotId: string) => void;
  emitFmsRegister: (p: FmsDispatchPayload) => void;
  emitFmsRelease: (taskId: string) => void;
  emitNavInitialPose: (robotId: string, x: number, y: number, yaw: number, mapId?: string) => void;
@@ -80,7 +81,7 @@ function isOnline(rosMessages: Record<string, RosMessage>, robotId: string): boo
 
 export default function FmsView({
  rosMessages, fmsTasks, tmAlerts, socket,
- emitFmsDispatch, emitFmsCancel, emitFmsRegister, emitFmsRelease,
+ emitFmsDispatch, emitFmsCancel, emitFmsAutoCharge, emitFmsRegister, emitFmsRelease,
  emitNavInitialPose,
  ackTmAlert, setRobotHome,
  emitNodeLock,
@@ -98,6 +99,8 @@ export default function FmsView({
  const [form, setForm] = useState({ type: "SUPPLY" as TaskType, targetNode: "", priority: 1, preferredRobotId: focusRobotId ?? "", supplyItem: "물" as SupplyItem });
 
  const isSupply = form.type === "SUPPLY";
+ // 충전: 사람은 로봇만 고르고, 목적지(충전소)는 백엔드가 자동 결정 → autoCharge 경로로 전송
+ const isCharge = form.type === "CHARGE";
 
  // TaskManager에서 로봇 선택 시 dispatch form 동기화 (공급은 omx 고정이라 무시)
  useEffect(() => {
@@ -108,14 +111,6 @@ export default function FmsView({
  useEffect(() => {
   if (isSupply) setForm(f => (f.preferredRobotId === SUPPLY_ROBOT_ID ? f : { ...f, preferredRobotId: SUPPLY_ROBOT_ID }));
  }, [isSupply]);
-
- // 목적지가 충전소로 바뀌면 태스크 유형을 CHARGE로 자동 인식 (이후 수동 변경은 허용)
- useEffect(() => {
-  const node = topoNodes.find(n => n.node_id === form.targetNode);
-  if (node?.type === "CHARGER") {
-    setForm(f => f.type === "CHARGE" ? f : { ...f, type: "CHARGE", priority: TASK_PRIORITIES["CHARGE"] });
-  }
- }, [form.targetNode, topoNodes]);
 
  // rosMessages가 안 바뀌어도 isOnline() 재계산을 위해 주기적 리렌더
  const [, setTick] = useState(0);
@@ -145,7 +140,7 @@ export default function FmsView({
  return fmsTasks.filter(t => t.status === filterTab);
  }, [fmsTasks, filterTab]);
 
- // 충전소 노드 id 집합 (목적지가 충전소면 CHARGE로 인식 + 경로 색 구분)
+ // 충전소 노드 id 집합 (진행 경로를 충전 색으로 구분하는 용도)
  const chargerNodeIds = useMemo(
   () => new Set(topoNodes.filter(n => n.type === "CHARGER").map(n => n.node_id)),
   [topoNodes],
@@ -181,6 +176,11 @@ export default function FmsView({
  });
  return result;
  }, [rosMessages]);
+
+ // ── 자동충전 — robotId만 백엔드로 전송. 최근접 충전소 선택/점유 검사/배차는 모두 백엔드가 수행 ──
+ const handleCharge = useCallback((robotId: string) => {
+  emitFmsAutoCharge(robotId);
+ }, [emitFmsAutoCharge]);
 
  // ── 추천 로봇 순위 산정 ──────────────────────────────────────────────────────
  // 점수 = 가용성(대기/비번) 50 + 배터리 0~30 + 목적지 근접 0~20. 오프라인은 제외.
@@ -235,8 +235,15 @@ export default function FmsView({
  // 공급은 omx 고정이므로 omx 온라인 여부로 판단.
  const preferredId = isSupply ? SUPPLY_ROBOT_ID : form.preferredRobotId;
  const preferredOffline = preferredId !== "" && !isOnline(rosMessages, preferredId);
- const hasTarget = isSupply ? !!form.supplyItem : !!form.targetNode;
+ // 충전은 목적지가 없고 특정 로봇 1대만 지정해야 함(백엔드가 그 로봇 기준 최근접 충전소 계산)
+ const hasTarget = isSupply ? !!form.supplyItem : isCharge ? !!form.preferredRobotId : !!form.targetNode;
  const canSubmit = hasTarget && !preferredOffline;
+
+ // 충전 전송 — robotId만 백엔드로. 충전소 선택/점유 검사/배차는 백엔드가 수행.
+ const submitCharge = () => {
+  if (!form.preferredRobotId || preferredOffline) return;
+  emitFmsAutoCharge(form.preferredRobotId);
+ };
 
  // 전송 페이로드 — 공급은 목적지 노드 대신 품목(물/약)을 targetNode로 전달, omx 고정
  const buildPayload = (): FmsDispatchPayload => isSupply
@@ -319,7 +326,7 @@ export default function FmsView({
  <div className="p-8 overflow-y-auto">
  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
  {ROBOTS.map(r => (
- <RobotStatusCard key={r.id} robot={r} rosMessages={rosMessages} fmsTasks={fmsTasks} mapAssignment={mapAssignments[r.id]} />
+ <RobotStatusCard key={r.id} robot={r} rosMessages={rosMessages} fmsTasks={fmsTasks} mapAssignment={mapAssignments[r.id]} onCharge={() => handleCharge(r.id)} />
  ))}
  </div>
  </div>
@@ -355,7 +362,7 @@ export default function FmsView({
  {(Object.keys(TASK_LABELS) as TaskType[]).map(t => (
  <button
  key={t}
- onClick={() => setForm(f => ({ ...f, type: t, priority: TASK_PRIORITIES[t] }))}
+ onClick={() => setForm(f => ({ ...f, type: t, priority: TASK_PRIORITIES[t], targetNode: "" }))}
  className={`py-1 text-[10px] font-bold tracking-wide rounded border transition-all ${form.type === t ? 'bg-sky-600/40 text-sky-800 border-sky-500/60' : 'bg-[#FFCE99]/32 text-white/[0.55] border-white/[0.1] hover:text-white/[0.75]'}`}
  >
  {TASK_LABELS[t]}
@@ -377,6 +384,13 @@ export default function FmsView({
  ))}
  </div>
  </div>
+ ) : isCharge ? (
+ <div>
+ <span className="sub-label">충전소 목적지</span>
+ <div className="mt-1 px-3 py-2 rounded-xl border border-emerald-500/30 bg-emerald-600/10 text-[11px] text-emerald-700 leading-relaxed">
+  ⚡ 목적지는 지정하지 않습니다. 선택한 로봇 위치 기준 <b>최근접·미점유 충전소</b>를 백엔드가 자동 선택합니다.
+ </div>
+ </div>
  ) : (
  <div>
  <span className="sub-label">목적지 노드</span>
@@ -384,7 +398,8 @@ export default function FmsView({
  </div>
  )}
 
- {/* 우선순위 */}
+ {/* 우선순위 — 충전은 백엔드가 고정 우선순위로 처리하므로 숨김 */}
+ {!isCharge && (
  <div>
  <span className="sub-label">우선순위 <span className="text-white/[0.4] normal-case">(1=긴급 ~ 10=낮음)</span></span>
  <div className="flex items-center gap-2 mt-1">
@@ -394,6 +409,7 @@ export default function FmsView({
  <span className="text-xs font-bold text-white/80 font-mono w-6 text-center">{form.priority}</span>
  </div>
  </div>
+ )}
 
  {/* 추천 로봇 (우선순위순) — 클릭해 지정, 사람이 최종 할당. 공급은 omx 고정이라 숨김 */}
  {isSupply ? (
@@ -403,9 +419,10 @@ export default function FmsView({
  </div>
  ) : (
  <div>
- <span className="sub-label">추천 로봇 {form.targetNode ? "(목적지 기준)" : "(가용성·배터리순)"}</span>
+ <span className="sub-label">{isCharge ? "충전할 로봇 (1대 지정)" : `추천 로봇 ${form.targetNode ? "(목적지 기준)" : "(가용성·배터리순)"}`}</span>
  <div className="space-y-1 mt-1">
- {/* 자동 배정 옵션 */}
+ {/* 자동 배정 옵션 — 충전은 특정 로봇 1대를 골라야 하므로 숨김 */}
+ {!isCharge && (
  <button onClick={() => setForm(f => ({ ...f, preferredRobotId: "" }))}
   className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg border text-xs transition-all ${
    form.preferredRobotId === "" ? "bg-sky-600/20 border-sky-500/50 text-sky-700" : "bg-[#FFCE99]/14 border-white/[0.1] text-white/[0.6] hover:text-white/80"
@@ -413,6 +430,7 @@ export default function FmsView({
   <span className="font-semibold">자동 배정</span>
   <span className="text-[9px] text-white/[0.4]">시스템이 선택</span>
  </button>
+ )}
  {recommendations.map((rec, i) => {
   const selectable = rec.score >= 0;
   const isTop = topPick?.robotId === rec.robotId;
@@ -447,8 +465,8 @@ export default function FmsView({
   {preferredId} 오프라인 — 등록/할당 불가
  </p>
  )}
- {/* 경로 미리보기 → 진행 (이동형 태스크 전용) */}
- {!isSupply && (
+ {/* 경로 미리보기 → 진행 (이동형 태스크 전용 · 충전 제외) */}
+ {!isSupply && !isCharge && (
   previewPath.length > 0 ? (
    <div className="space-y-2 p-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10">
     <div className="text-[10px] text-amber-700 font-semibold">미리보기 경로 ({previewRobotId})</div>
@@ -468,6 +486,15 @@ export default function FmsView({
    </button>
   )
  )}
+ {isCharge ? (
+ <button
+  onClick={submitCharge}
+  disabled={!canSubmit}
+  title="선택한 로봇을 최근접 충전소로 자동 충전 (목적지는 백엔드가 결정)"
+  className="w-full glass-button !bg-emerald-600 hover:!bg-emerald-500 !text-xs !font-bold !tracking-wide !py-2.5 !rounded-xl shadow-xl disabled:opacity-40 disabled:cursor-not-allowed">
+  {form.preferredRobotId ? `⚡ ${form.preferredRobotId} 충전 보내기` : "충전할 로봇을 선택하세요"}
+ </button>
+ ) : (
  <div className="grid grid-cols-2 gap-2">
  <button
   onClick={() => submit(emitFmsRegister)}
@@ -483,6 +510,7 @@ export default function FmsView({
   {isSupply ? "omx 공급" : form.preferredRobotId ? `${form.preferredRobotId} 할당` : "자동 할당"}
  </button>
  </div>
+ )}
  </div>
  </div>
  </aside>
@@ -500,11 +528,12 @@ function Stat({ label, value, color }: any) {
  );
 }
 
-function RobotStatusCard({ robot, rosMessages, fmsTasks, mapAssignment }: any) {
+function RobotStatusCard({ robot, rosMessages, fmsTasks, mapAssignment, onCharge }: any) {
  const online = isOnline(rosMessages, robot.id);
  const task = fmsTasks.find((t: any) => t.assignedRobotId === robot.id && ["ASSIGNED", "RUNNING"].includes(t.status));
  const bat = (rosMessages[`/${robot.id}/battery_state`]?.data as any)?.percentage;
  const batPct = bat != null ? Math.round(bat > 1 ? bat : bat * 100) : null;
+ const isLowBat = batPct !== null && batPct < 25;
 
  return (
  <div className={`glass-card p-5 transition-all duration-700 ${online ? 'opacity-100 scale-100 shadow-xl' : 'opacity-40 scale-[0.98]'}`}>
@@ -542,6 +571,15 @@ function RobotStatusCard({ robot, rosMessages, fmsTasks, mapAssignment }: any) {
  <span className="text-xs font-semibold text-white/[0.4] tracking-wide ">대기 중</span>
  </div>
  )}
+ {/* 자동충전 — 누르면 가장 가까운 충전소로 스스로 이동 */}
+ <button
+  onClick={e => { e.stopPropagation(); onCharge?.(); }}
+  title="가장 가까운 충전소로 자동 이동"
+  className={`w-full glass-button !text-xs !font-bold !tracking-wide !py-2 !rounded-xl shadow-lg ${
+   isLowBat ? "!bg-rose-600 hover:!bg-rose-500" : "!bg-emerald-600 hover:!bg-emerald-500"
+  }`}>
+  ⚡ 자동충전
+ </button>
  </div>
  ) : (
  <div className="py-8 text-center">

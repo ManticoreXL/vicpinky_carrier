@@ -29,7 +29,7 @@ export default function App() {
  const { connected, error, subscribe, publish } = useRos();
  const {
  emitCmdVel, emitPublish, emitAction, cancelAction, callService,
- emitFmsDispatch, emitFmsCancel, emitFmsRegister, emitFmsRelease, emitNodeLock,
+ emitFmsDispatch, emitFmsCancel, emitFmsAutoCharge, emitFmsRegister, emitFmsRelease, emitNodeLock,
  emitNavInitialPose,
  nestConnected, rosMessages, socket,
  activeGoals, actionFeedbacks, actionResults,
@@ -135,6 +135,7 @@ export default function App() {
  socket={socket}
  emitFmsDispatch={emitFmsDispatch}
  emitFmsCancel={emitFmsCancel}
+ emitFmsAutoCharge={emitFmsAutoCharge}
  emitFmsRegister={emitFmsRegister}
  emitFmsRelease={emitFmsRelease}
  robotStatuses={robotStatuses}
@@ -155,6 +156,7 @@ export default function App() {
  socket={socket}
  emitFmsDispatch={emitFmsDispatch}
  emitFmsCancel={emitFmsCancel}
+ emitFmsAutoCharge={emitFmsAutoCharge}
  emitFmsRegister={emitFmsRegister}
  emitFmsRelease={emitFmsRelease}
  emitNavInitialPose={emitNavInitialPose}

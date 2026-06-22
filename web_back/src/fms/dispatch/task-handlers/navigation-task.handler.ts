@@ -11,6 +11,7 @@ import { TaskManagerEventsService } from '../../../fms-events/task-manager-event
 import { Alert } from '../../../fms-events/alert';
 import { NavGoalService } from '../../navigation/nav-goal.service';
 import { NodeLockService } from '../../node-lock/node-lock.service';
+import { ChargingService } from '../../charging/charging.service';
 import { TaskHandler } from './task-handler.interface';
 
 /**
@@ -34,6 +35,7 @@ export class NavigationTaskHandler implements TaskHandler {
     private readonly events:       TaskManagerEventsService,
     private readonly navGoal:      NavGoalService,
     private readonly nodeLock:     NodeLockService,
+    private readonly charging:     ChargingService,
   ) {}
 
   async handle(robot: RobotDocument, task: TaskDocument, taskId: string): Promise<boolean> {
@@ -50,6 +52,10 @@ export class NavigationTaskHandler implements TaskHandler {
     if (pathQueue === null) return false;
 
     this.robotTasks.setActive(robotId, taskId);
+
+    // 새 태스크로 출발 → 이전에 점유하던 충전소(isLockedBy) 해제.
+    // 단, 이번 목적지가 충전소(autoCharge가 이미 예약함)면 그 예약은 보존한다.
+    await this.charging.releaseChargersHeldBy(robotId, task.targetNode);
 
     await this.fmsService.assignToRobot(taskId, robotId, pathQueue, this.events.server!);
     await this.robotService.updateStatus(robotId, RobotStatus.MOVING);

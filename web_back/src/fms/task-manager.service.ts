@@ -15,6 +15,7 @@ import { RobotStateService } from '../fms-state/robot-state.service';
 import { RobotTaskQueueService } from '../fms-state/robot-task-queue.service';
 import { RotationStateService } from '../fms-state/rotation-state.service';
 import { GlobalTaskQueueService } from './queue/global-task-queue.service';
+import { ChargingService } from './charging/charging.service';
 import { NavGoalService } from './navigation/nav-goal.service';
 import { NodeLockService } from './node-lock/node-lock.service';
 import { NavRecoveryService } from './navigation/nav-recovery.service';
@@ -57,6 +58,7 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     private readonly robotTasks:    RobotTaskQueueService,
     private readonly rotationState: RotationStateService,
     private readonly globalQueue:   GlobalTaskQueueService,
+    private readonly charging:      ChargingService,
     private readonly navGoal:       NavGoalService,
     private readonly nodeLock:      NodeLockService,
     private readonly navRecovery:   NavRecoveryService,
@@ -104,6 +106,16 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
   /** 등록만 — DRAFT 상태로 생성 (자동 배차 안 함) */
   async register(dto: CreateTaskDto) {
     return this.globalQueue.register(dto);
+  }
+
+  /** 자동충전 — 프론트는 robotId만 보낸다. 충전소 선택/점유 검사/배차는 백엔드(ChargingService)가 수행. */
+  async autoCharge(robotId: string) {
+    return this.charging.autoCharge(robotId);
+  }
+
+  /** 충전소에 머무는 로봇 정보(id + 배터리) 조회 */
+  async getChargerOccupants(mapId: string) {
+    return this.charging.getChargerOccupantsInfo(mapId);
   }
 
   /** DRAFT 태스크를 배차 큐(PENDING)에 투입 → 다음 tick에서 자동 배정 */

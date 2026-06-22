@@ -4,6 +4,7 @@ import { TaskStatus } from '../task.schema';
 import { RobotService } from '../../robot/robot.service';
 import { RobotStatus } from '../../robot/robot.schema';
 import { TopologyService } from '../../topology/topology.service';
+import { NodeType } from '../../topology/node.schema';
 import { NodeOccupancyService } from '../../node-occupancy/node-occupancy.service';
 import { CollisionAvoidanceService, RobotPathState } from '../../collision-avoidance/collision-avoidance.service';
 import { RobotStateService } from '../../fms-state/robot-state.service';
@@ -154,7 +155,8 @@ export class NavigationService {
       this.occupancy.occupy(robotId, nextId); // 웨이포인트 도달 → 노드 점유 갱신
 
       if (isFinal) {
-        await this.completeTask(robotId, taskId, task.targetNode, nextId, x, y, yaw);
+        // 충전소에 도착했으면 로봇 상태를 CHARGING으로 (그 외는 IDLE). isLockedBy는 배차 시점에 이미 예약됨.
+        await this.completeTask(robotId, taskId, task.targetNode, nextId, x, y, yaw, node.type === NodeType.CHARGER);
         return;
       }
 
@@ -182,7 +184,7 @@ export class NavigationService {
   // ── 최종 노드 도착 → 태스크 완료 + per-robot queue 다음 태스크 / 홈 복귀 ─────
   private async completeTask(
     robotId: string, taskId: string, targetNode: string, arrivedNode: string,
-    x: number, y: number, yaw: number,
+    x: number, y: number, yaw: number, atCharger = false,
   ): Promise<void> {
     this.robotTasks.clearActive(robotId);
 
@@ -190,11 +192,15 @@ export class NavigationService {
       completedAt: new Date(),
       assignedRobotId: robotId,
     });
-    await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
+    // 충전소 도착이면 CHARGING, 그 외는 IDLE
+    await this.robotService.updateStatus(robotId, atCharger ? RobotStatus.CHARGING : RobotStatus.IDLE);
     await this.nodeLock.lockNode(arrivedNode, false);
     this.occupancy.release(robotId); // 태스크 완료 — 점유 해제
     this.events.emit(Alert.completed(taskId, robotId, `${robotId} 태스크 완료 (${targetNode})`));
     this.fmsService.publishInitialPose(robotId, x, y, yaw);
+
+    // 충전소 도착이면 그대로 충전 상태로 대기 (홈 복귀/다음 태스크 진행 안 함)
+    if (atCharger) return;
 
     // 대기열에 다음 태스크가 있으면 이어서 실행, 없으면 홈 복귀
     const started = await this.dispatch.dispatchNext(robotId);

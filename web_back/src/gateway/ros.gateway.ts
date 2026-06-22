@@ -298,6 +298,27 @@ export class RosGateway
     await this.taskManager.enqueue(payload);
   }
 
+  /** 자동충전 — 프론트는 robotId만 보낸다. 충전소 선택/점유 검사/배차는 백엔드가 수행 */
+  @SubscribeMessage('fms_auto_charge')
+  async handleFmsAutoCharge(
+    @MessageBody() { robotId }: { robotId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const result = await this.taskManager.autoCharge(robotId);
+    client.emit('fms_auto_charge_result', { robotId, ...result });
+  }
+
+  /** 충전소에 머무는 로봇 정보(id + 배터리) 조회 — mapId 미지정 시 첫 배정 맵 사용 */
+  @SubscribeMessage('fms_get_charger_status')
+  async handleChargerStatus(
+    @MessageBody() { mapId }: { mapId?: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const targetMap = mapId ?? Object.values(this.mapService.getAssignments())[0];
+    const occupants = targetMap ? await this.taskManager.getChargerOccupants(targetMap) : [];
+    client.emit('fms_charger_status', occupants);
+  }
+
   /** 등록만 — 배차하지 않고 DRAFT 상태로 보관 (관제가 나중에 수동 배차) */
   @SubscribeMessage('fms_register_task')
   async handleFmsRegister(

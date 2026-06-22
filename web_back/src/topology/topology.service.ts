@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, OnModuleInit } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import type { Server } from 'socket.io';
@@ -8,7 +8,7 @@ import { Robot, RobotDocument } from '../robot/robot.schema';
 import { Task, TaskDocument } from '../fms/task.schema';
 
 @Injectable()
-export class TopologyService {
+export class TopologyService implements OnModuleInit {
   private readonly logger = new Logger(TopologyService.name);
   private server: Server | null = null;
 
@@ -18,6 +18,16 @@ export class TopologyService {
     @InjectModel(Robot.name) private readonly robotModel: Model<RobotDocument>,
     @InjectModel(Task.name)  private readonly taskModel:  Model<TaskDocument>,
   ) {}
+
+  // 스키마에 isLockedBy를 추가한 뒤, 그 필드가 없는 기존 노드 문서에 null을 백필한다.
+  // (Mongoose의 default는 신규 생성/저장 시에만 적용되므로 기존 문서엔 컬럼이 없다)
+  async onModuleInit(): Promise<void> {
+    const res = await this.nodeModel.updateMany(
+      { isLockedBy: { $exists: false } },
+      { $set: { isLockedBy: null } },
+    );
+    if (res.modifiedCount) this.logger.log(`[migration] isLockedBy 백필 — 노드 ${res.modifiedCount}개`);
+  }
 
   setServer(server: Server) { this.server = server; }
 
@@ -48,6 +58,21 @@ export class TopologyService {
 
   async findNodesByType(map_id: string, type: NodeType): Promise<NodeDocument[]> {
     return this.nodeModel.find({ map_id, type }).exec();
+  }
+
+  // ── 충전소 점유(isLockedBy) ──────────────────────────────────────────────────
+  // 로봇이 충전소에 도착하면 robot_id 기록, 떠날 때 null로 해제.
+
+  async setChargerLockedBy(node_id: string, robotId: string | null): Promise<void> {
+    await this.nodeModel.updateOne({ node_id }, { isLockedBy: robotId });
+  }
+
+  /** 해당 로봇이 점유 중이던 충전소를 해제 (새 태스크로 출발할 때).
+   *  exceptNodeId를 주면 그 노드는 해제하지 않는다(이번 충전 목적지 예약 보존용). */
+  async releaseChargersLockedBy(robotId: string, exceptNodeId?: string): Promise<void> {
+    const filter: Record<string, unknown> = { isLockedBy: robotId };
+    if (exceptNodeId) filter.node_id = { $ne: exceptNodeId };
+    await this.nodeModel.updateMany(filter, { isLockedBy: null });
   }
 
   // ── Edge CRUD ─────────────────────────────────────────────────────────────

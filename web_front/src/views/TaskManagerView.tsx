@@ -14,6 +14,7 @@ interface Props {
   socket: Socket | null;
   emitFmsDispatch: (p: FmsDispatchPayload) => void;
   emitFmsCancel: (taskId: string) => void;
+  emitFmsAutoCharge: (robotId: string) => void;
   emitFmsRegister: (p: FmsDispatchPayload) => void;
   emitFmsRelease: (taskId: string) => void;
   robotStatuses: Record<string, string>;
@@ -32,7 +33,7 @@ const SUPPLY_ROBOT_ID = "omx";
 // ── 메인 컴포넌트 ──────────────────────────────────────────────────────────────
 
 export default function TaskManagerView({
-  rosMessages, fmsTasks, emitFmsDispatch, emitFmsCancel, emitFmsRegister, emitFmsRelease,
+  rosMessages, fmsTasks, emitFmsDispatch, emitFmsCancel, emitFmsAutoCharge, emitFmsRegister, emitFmsRelease,
   robotStatuses, tmAlerts, ackTmAlert, robots, onSelectRobotInFleet,
 }: Props) {
 
@@ -49,19 +50,21 @@ export default function TaskManagerView({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const [topoNodes, setTopoNodes] = useState<TopoNode[]>([]);
-  // 노드 타입은 대문자(CHARGER). 충전소 노드 목록.
-  const chargerNodes = useMemo(() => topoNodes.filter(n => n.type === "CHARGER"), [topoNodes]);
 
   // ── 태스크 생성(등록/배차) 폼 ────────────────────────────────────────────────
   const [showCreate, setShowCreate] = useState(true);
   const [form, setForm] = useState({ type: "MOVE" as TaskType, targetNode: "", preferredRobotId: "", supplyItem: "물" as typeof SUPPLY_ITEMS[number] });
   const isSupply = form.type === "SUPPLY";
+  // 충전: 사람은 로봇만 고르고 목적지(충전소)는 백엔드가 자동 결정 → autoCharge 경로로 전송
+  const isCharge = form.type === "CHARGE";
   const buildPayload = (): FmsDispatchPayload => isSupply
     ? { type: "SUPPLY", targetNode: form.supplyItem, priority: 1, preferredRobotId: SUPPLY_ROBOT_ID }
     : { type: form.type, targetNode: form.targetNode, priority: TASK_PRIORITIES[form.type], preferredRobotId: form.preferredRobotId || undefined };
-  const canCreate = isSupply ? !!form.supplyItem : !!form.targetNode;
+  const canCreate = isSupply ? !!form.supplyItem : isCharge ? !!form.preferredRobotId : !!form.targetNode;
   const submitCreate = (emit: (p: FmsDispatchPayload) => void) => {
     if (!canCreate) return;
+    // 충전은 robotId만 백엔드로 — 충전소 선택/점유 검사/배차는 백엔드가 수행
+    if (isCharge) { emitFmsAutoCharge(form.preferredRobotId); return; }
     emit(buildPayload());
     setForm(f => ({ ...f, targetNode: "" }));
   };
@@ -95,31 +98,10 @@ export default function TaskManagerView({
     return fmsTasks.filter(t => t.status === filterStatus);
   }, [fmsTasks, filterStatus]);
 
-  // 충전 버튼 — 무조건 현재 위치에서 가장 가까운 충전소로 이동
+  // 자동충전 — robotId만 백엔드로 전송. 최근접 충전소 선택/점유 검사/배차는 모두 백엔드가 수행.
   const handleCharge = useCallback((robotId: string) => {
-    if (chargerNodes.length === 0) {
-      alert("등록된 충전소 노드가 없습니다. 토폴로지에서 CHARGER 노드를 먼저 등록하세요.");
-      return;
-    }
-    // 로봇 현재 위치 (AMCL 우선 → odom → DB 값)
-    const amcl = (rosMessages[`/${robotId}/amcl_pose`]?.data as any)?.pose?.pose?.position;
-    const odom = (rosMessages[`/${robotId}/odom`]?.data as any)?.pose?.pose?.position;
-    const dbInfo = robots.find(r => r.robot_id === robotId);
-    const x = amcl?.x ?? odom?.x ?? dbInfo?.pose_x ?? null;
-    const y = amcl?.y ?? odom?.y ?? dbInfo?.pose_y ?? null;
-
-    // 위치를 알면 최근접 충전소, 모르면 첫 충전소로 폴백
-    let target = chargerNodes[0].node_id;
-    if (x != null && y != null) {
-      let best = chargerNodes[0], bestD = Math.hypot(best.x - x, best.y - y);
-      for (const n of chargerNodes) {
-        const d = Math.hypot(n.x - x, n.y - y);
-        if (d < bestD) { bestD = d; best = n; }
-      }
-      target = best.node_id;
-    }
-    emitFmsDispatch({ type: "CHARGE", targetNode: target, preferredRobotId: robotId, priority: 3 });
-  }, [chargerNodes, rosMessages, robots, emitFmsDispatch]);
+    emitFmsAutoCharge(robotId);
+  }, [emitFmsAutoCharge]);
 
   // ── AI 에이전트 호출 (/ai/agent — 자동 디스패치) ──────────────────────────
 
@@ -341,10 +323,10 @@ export default function TaskManagerView({
             </button>
             {showCreate && (
             <div className="px-5 pb-4 space-y-2.5">
-              {/* 유형 4종 */}
+              {/* 유형 4종 (충전은 목적지 없이 로봇만 지정 — 백엔드가 충전소 자동 선택) */}
               <div className="grid grid-cols-4 gap-1">
                 {(Object.keys(TASK_LABELS) as TaskType[]).map(t => (
-                  <button key={t} onClick={() => setForm(f => ({ ...f, type: t }))}
+                  <button key={t} onClick={() => setForm(f => ({ ...f, type: t, targetNode: "" }))}
                     className={`py-1 text-[10px] font-bold rounded border transition-all ${form.type === t ? "bg-sky-600/40 text-sky-800 border-sky-500/60" : "bg-[#FFCE99]/32 text-white/[0.55] border-white/[0.1] hover:text-white/[0.75]"}`}>
                     {TASK_LABELS[t]}
                   </button>
@@ -360,6 +342,10 @@ export default function TaskManagerView({
                     </button>
                   ))}
                 </div>
+              ) : isCharge ? (
+                <div className="px-2.5 py-1.5 rounded-lg border border-emerald-500/30 bg-emerald-600/10 text-[10px] text-emerald-700 leading-relaxed">
+                  ⚡ 목적지 없음 — 선택한 로봇의 최근접·미점유 충전소를 백엔드가 자동 선택합니다.
+                </div>
               ) : (
                 <select value={form.targetNode} onChange={e => setForm(f => ({ ...f, targetNode: e.target.value }))}
                   className="w-full bg-[#FFCE99]/14 border border-white/[0.1] rounded-lg px-2 py-1.5 text-xs text-white/85 focus:outline-none focus:border-white/[0.2]">
@@ -367,15 +353,22 @@ export default function TaskManagerView({
                   {topoNodes.map(n => <option key={n.node_id} value={n.node_id}>{n.node_id} ({n.type})</option>)}
                 </select>
               )}
-              {/* 지정 로봇 (공급은 omx 고정) */}
+              {/* 지정 로봇 (공급은 omx 고정 / 충전은 반드시 1대 지정) */}
               {!isSupply && (
                 <select value={form.preferredRobotId} onChange={e => setForm(f => ({ ...f, preferredRobotId: e.target.value }))}
                   className="w-full bg-[#FFCE99]/14 border border-white/[0.1] rounded-lg px-2 py-1.5 text-xs text-white/75 focus:outline-none focus:border-white/[0.2]">
-                  <option value="">자동 배정</option>
+                  <option value="">{isCharge ? "충전할 로봇 선택…" : "자동 배정"}</option>
                   {ROBOTS.map(r => <option key={r.id} value={r.id}>{r.id}</option>)}
                 </select>
               )}
-              {/* 등록만(DRAFT) / 즉시 배차 */}
+              {/* 충전: 단일 버튼(로봇만 지정) / 그 외: 등록만(DRAFT) · 즉시 배차 */}
+              {isCharge ? (
+                <button onClick={() => submitCreate(emitFmsDispatch)} disabled={!canCreate}
+                  title="선택한 로봇을 최근접 충전소로 자동 충전 (목적지는 백엔드가 결정)"
+                  className="w-full py-2 text-[11px] font-bold rounded-lg border border-emerald-500/50 bg-emerald-600/30 text-emerald-100 hover:bg-emerald-600/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
+                  {form.preferredRobotId ? `⚡ ${form.preferredRobotId} 충전 보내기` : "충전할 로봇을 선택하세요"}
+                </button>
+              ) : (
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={() => submitCreate(emitFmsRegister)} disabled={!canCreate}
                   title="글로벌 큐에 등록만 (DRAFT) — 목록에서 '배차'로 할당"
@@ -387,6 +380,7 @@ export default function TaskManagerView({
                   {isSupply ? "omx 공급" : "즉시 배차"}
                 </button>
               </div>
+              )}
             </div>
             )}
           </div>

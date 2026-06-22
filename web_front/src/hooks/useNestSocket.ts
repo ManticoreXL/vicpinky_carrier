@@ -332,6 +332,11 @@ export function useNestSocket() {
  socketRef.current?.emit("fms_cancel_task", { taskId });
  }, []);
 
+ // 자동충전 — 충전소 선택/점유 검사/배차는 모두 백엔드가 수행. 프론트는 robotId만 전송.
+ const emitFmsAutoCharge = useCallback((robotId: string) => {
+ socketRef.current?.emit("fms_auto_charge", { robotId });
+ }, []);
+
  // 등록만 (배차 X) — DRAFT 태스크 생성
  const emitFmsRegister = useCallback((payload: FmsDispatchPayload) => {
  socketRef.current?.emit("fms_register_task", payload);
@@ -357,7 +362,7 @@ export function useNestSocket() {
 
  return {
  emitCmdVel, emitPublish, emitAction, cancelAction, callService,
- emitFmsDispatch, emitFmsCancel, emitFmsRegister, emitFmsRelease, emitNodeLock,
+ emitFmsDispatch, emitFmsCancel, emitFmsAutoCharge, emitFmsRegister, emitFmsRelease, emitNodeLock,
  emitNavInitialPose,
  ackTmAlert, setRobotHome,
  nestConnected, rosMessages, socket,
