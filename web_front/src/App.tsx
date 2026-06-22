@@ -135,6 +135,8 @@ export default function App() {
  socket={socket}
  emitFmsDispatch={emitFmsDispatch}
  emitFmsCancel={emitFmsCancel}
+ emitFmsRegister={emitFmsRegister}
+ emitFmsRelease={emitFmsRelease}
  robotStatuses={robotStatuses}
  tmAlerts={tmAlerts}
  ackTmAlert={ackTmAlert}
@@ -159,6 +161,7 @@ export default function App() {
  tmAlerts={tmAlerts}
  ackTmAlert={ackTmAlert}
  setRobotHome={setRobotHome}
+ emitNodeLock={emitNodeLock}
  lockedNodes={lockedNodes}
  focusRobotId={selectedRobot}
  robots={robots}

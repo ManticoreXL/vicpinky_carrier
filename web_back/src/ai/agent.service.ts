@@ -2,10 +2,10 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import axios from 'axios';
 import { TaskManagerService } from '../fms/task-manager.service';
 import { FmsService } from '../fms/fms.service';
-import { TopologyService } from '../fleet/topology.service';
-import { RobotService } from '../fleet/robot.service';
-import { TelemetryService } from '../fleet/telemetry.service';
-import { DomainBridgeService } from '../ros/domain-bridge.service';
+import { TopologyService } from '../topology/topology.service';
+import { RobotService } from '../robot/robot.service';
+import { TelemetryService } from '../telemetry/telemetry.service';
+import { DomainBridgeService } from '../ros/domain-bridge/domain-bridge.service';
 import { RagService } from './rag.service';
 import { TaskType, TaskStatus } from '../fms/task.schema';
 

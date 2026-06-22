@@ -5,11 +5,11 @@ import { AiService } from './ai.service';
 import { AgentService } from './agent.service';
 import { RagService } from './rag.service';
 import { Task, TaskSchema } from '../fms/task.schema';
-import { Robot, RobotSchema } from '../fleet/robot.schema';
-import { Node, NodeSchema } from '../fleet/node.schema';
+import { Robot, RobotSchema } from '../robot/robot.schema';
+import { Node, NodeSchema } from '../topology/node.schema';
 import { Log, LogSchema } from '../logs/log.schema';
 import { FmsModule } from '../fms/fms.module';
-import { FleetModule } from '../fleet/fleet.module';
+import { FleetModule } from '../fleet.module';
 import { RosModule } from '../ros/ros.module';
 
 @Module({

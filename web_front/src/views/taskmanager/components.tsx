@@ -195,10 +195,11 @@ export function MicIcon({ className }: { className?: string }) {
   );
 }
 
-export function TaskCard({ task, onCancel }: { task: FmsTask; onCancel: () => void }) {
+export function TaskCard({ task, onCancel, onRelease }: { task: FmsTask; onCancel: () => void; onRelease?: () => void }) {
   const colorClass = TASK_COLORS[task.type] ?? "bg-[#FFCE99]/32 border-white/[0.12] text-white/[0.68]";
-  const dotClass   = STATUS_DOT[task.status] ?? "bg-white/20";
+  const dotClass   = task.status === "DRAFT" ? "bg-violet-400" : (STATUS_DOT[task.status] ?? "bg-white/20");
   const elapsed    = task.startedAt ? Math.floor((Date.now() - new Date(task.startedAt).getTime()) / 1000) : null;
+  const isDraft    = task.status === "DRAFT";
   return (
     <div className="glass-card !bg-[#FFCE99]/32 border-white/[0.1] p-4 hover:border-white/[0.12] transition-all group">
       <div className="flex items-start justify-between gap-3 mb-3">
@@ -207,8 +208,8 @@ export function TaskCard({ task, onCancel }: { task: FmsTask; onCancel: () => vo
           <span className={`text-[10px] font-bold tracking-widest px-2 py-0.5 rounded border ${colorClass}`}>{taskTypeKo(task.type)}</span>
           <span className="text-xs text-white/[0.6] font-mono">→ {task.targetNode}</span>
         </div>
-        {["PENDING", "ASSIGNED", "RUNNING"].includes(task.status) && (
-          <button onClick={onCancel} title="태스크 취소" className="opacity-0 group-hover:opacity-100 text-white/[0.45] hover:text-rose-600 text-sm transition-all">✕</button>
+        {["PENDING", "ASSIGNED", "RUNNING", "DRAFT"].includes(task.status) && (
+          <button onClick={onCancel} title={isDraft ? "등록 취소" : "태스크 취소"} className="opacity-0 group-hover:opacity-100 text-white/[0.45] hover:text-rose-600 text-sm transition-all">✕</button>
         )}
       </div>
       <div className="flex items-center justify-between text-[10px] text-white/[0.5]">
@@ -226,6 +227,12 @@ export function TaskCard({ task, onCancel }: { task: FmsTask; onCancel: () => vo
         </div>
       </div>
       {task.waitReason && <div className="mt-2 text-[10px] text-amber-600/60 italic">{task.waitReason}</div>}
+      {isDraft && onRelease && (
+        <button onClick={onRelease}
+          className="mt-3 w-full py-1.5 text-[11px] font-bold rounded-lg border border-sky-500/50 bg-sky-600/30 text-sky-100 hover:bg-sky-600/50 transition-all">
+          배차 (할당 시작)
+        </button>
+      )}
     </div>
   );
 }

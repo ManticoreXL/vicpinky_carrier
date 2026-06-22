@@ -1,8 +1,9 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import type { Server } from 'socket.io';
 import { RosService } from '../ros/ros.service';
-import { RobotService } from './robot.service';
+import { RobotService } from '../robot/robot.service';
 import type { RosMessage } from '../ros/ros.types';
+import { Quaternion } from '../geometry/pose';
 
 // ── 상수 ─────────────────────────────────────────────────────────────────────
 
@@ -99,7 +100,7 @@ export class TelemetryService implements OnModuleInit {
       const pose = (msg.data as any)?.pose?.pose;
       const pos  = pose?.position;
       if (pos?.x != null) {
-        this.applyPose(id, pos.x, pos.y ?? 0, this.quatToYaw(pose?.orientation), 'amcl', now);
+        this.applyPose(id, pos.x, pos.y ?? 0, Quaternion.from(pose?.orientation).yaw, 'amcl', now);
       }
       return;
     }
@@ -117,7 +118,7 @@ export class TelemetryService implements OnModuleInit {
       const pose = (msg.data as any)?.pose?.pose;
       const pos  = pose?.position;
       if (pos?.x != null) {
-        this.applyPose(id, pos.x, pos.y ?? 0, this.quatToYaw(pose?.orientation), 'odom', now);
+        this.applyPose(id, pos.x, pos.y ?? 0, Quaternion.from(pose?.orientation).yaw, 'odom', now);
       }
       return;
     }
@@ -225,11 +226,4 @@ export class TelemetryService implements OnModuleInit {
     this.server.emit('robot_telemetry', tel);
   }
 
-  // ── 헬퍼 ─────────────────────────────────────────────────────────────────
-
-  private quatToYaw(ori: { x?: number; y?: number; z?: number; w?: number } | undefined): number {
-    if (!ori) return 0;
-    const x = ori.x ?? 0, y = ori.y ?? 0, z = ori.z ?? 0, w = ori.w ?? 1;
-    return Math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z));
-  }
 }

@@ -1,11 +1,15 @@
 import { Controller, Get, Post, Patch, Delete, Param, Body, Query, HttpCode } from '@nestjs/common';
 import { TopologyService } from './topology.service';
+import { PathfindingService } from '../pathfinding/pathfinding.service';
 import { Node, NodeType } from './node.schema';
 import { Edge } from './edge.schema';
 
 @Controller('api/fleet/topology')
 export class TopologyController {
-  constructor(private readonly topologyService: TopologyService) {}
+  constructor(
+    private readonly topologyService:    TopologyService,
+    private readonly pathfindingService: PathfindingService,
+  ) {}
 
   // ── Nodes ────────────────────────────────────────────────────────────────
 
@@ -85,6 +89,6 @@ export class TopologyController {
     @Query('end') end: string,
     @Query('map_id') map_id: string,
   ) {
-    return this.topologyService.findPath(start, end, map_id);
+    return this.pathfindingService.findPath(start, end, map_id);
   }
 }

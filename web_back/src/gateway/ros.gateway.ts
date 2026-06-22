@@ -18,8 +18,8 @@ import { FmsService } from '../fms/fms.service';
 import type { CreateTaskDto } from '../fms/fms.service';
 import { TaskManagerService } from '../fms/task-manager.service';
 import { AiService } from '../ai/ai.service';
-import { TelemetryService } from '../fleet/telemetry.service';
-import { RobotService } from '../fleet/robot.service';
+import { TelemetryService } from '../telemetry/telemetry.service';
+import { RobotService } from '../robot/robot.service';
 import type {
   ServiceCallPayload,
   TopicPublishPayload,

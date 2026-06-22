@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { TopologyService } from './topology.service';
+import { TopologyService } from '../topology/topology.service';
 
 // ── 상수 ─────────────────────────────────────────────────────────────────────
 
@@ -8,12 +8,14 @@ const NODE_PASS_M = 1.5;
 
 // ── 타입 ─────────────────────────────────────────────────────────────────────
 
-/** 충돌 평가 입력 — 활성 로봇의 경로 + 현재 위치 */
+/** 충돌 평가 입력 — 활성 로봇의 경로 + 현재 위치 + 양보 우선순위 */
 export interface RobotPathState {
   robotId:   string;
   pathQueue: string[];
   posX:      number | null;
   posY:      number | null;
+  priority:  number; // 태스크 우선순위 (낮을수록 먼저 — 1=긴급)
+  order:     number; // TASK 받은 시각(ms). 우선순위 같을 때 이른 쪽이 먼저
 }
 
 /** 충돌 평가 결과 — 호출자(TaskManager)가 실제 정지/재출발을 수행 */
@@ -26,9 +28,10 @@ export interface CollisionDecision {
 
 // ── 서비스 ────────────────────────────────────────────────────────────────────
 //
-// "2-ahead 노드 예약" 방식의 충돌 회피.
-// 각 로봇의 2칸 앞 노드(pathQueue[1])에 다른 로봇이 NODE_PASS_M 안으로 들어와 있으면
-// 그 로봇을 미리 정지시키고, 노드가 비워지면 재출발 결정을 반환한다.
+// 우선순위 기반 양보 충돌 회피 (경로 계획은 점유를 무시하고, 충돌은 여기서 해결).
+// 어떤 로봇 me 의 '다음 노드'(pathQueue[0])를 다른 로봇이 점유 중이거나 같은 노드를
+// 노리고 있으면, 두 로봇의 우선순위(priority↑ → order↑ → robotId)를 비교해 **더 낮은
+// 쪽만 양보(정지)**시킨다. 비교가 완전순서라 항상 한 쪽만 멈춰 정면 교착이 없다.
 //
 // 부수효과(cmd_vel 정지 발행, goal 재전송)는 호출자에서 수행하고,
 // 이 서비스는 "정지/재출발 결정"과 그 상태(stoppedForNode)만 책임진다 (순수 의사결정).
@@ -71,56 +74,52 @@ export class CollisionAvoidanceService {
       if (!activeIds.has(id)) this.stoppedForNode.delete(id);
     }
 
-    // 2-ahead 노드 좌표 일괄 조회 (중복 제거)
-    const twoAheadIds = new Set<string>();
-    for (const r of robots) {
-      if (r.pathQueue.length >= 2) twoAheadIds.add(r.pathQueue[1]);
-    }
+    // 각 로봇의 '다음 노드'(pathQueue[0]) 좌표 일괄 조회
+    const nextIds = new Set<string>();
+    for (const r of robots) if (r.pathQueue.length > 0) nextIds.add(r.pathQueue[0]);
     const nodePos = new Map<string, { x: number; y: number }>();
     await Promise.all(
-      [...twoAheadIds].map(async (nodeId) => {
+      [...nextIds].map(async (nodeId) => {
         const node = await this.topologyService.findNodeById(nodeId);
         if (node) nodePos.set(nodeId, { x: node.x, y: node.y });
       }),
     );
 
+    // 완전순서: 우선순위(작을수록 먼저) → TASK 받은 시각(이를수록 먼저) → robotId
+    const goesFirst = (a: RobotPathState, b: RobotPathState): boolean =>
+      a.priority !== b.priority ? a.priority < b.priority
+      : a.order !== b.order     ? a.order < b.order
+      : a.robotId < b.robotId;
+
     for (const me of robots) {
-      // 경로가 1칸 이하 남음 → 정지 해제 후 남은 노드로 재출발
-      if (me.pathQueue.length < 2) {
-        if (this.stoppedForNode.has(me.robotId)) {
-          this.stoppedForNode.delete(me.robotId);
-          if (me.pathQueue.length > 0) {
-            decisions.push({ robotId: me.robotId, action: 'resume' });
-          }
-        }
+      if (me.pathQueue.length === 0) {
+        this.stoppedForNode.delete(me.robotId); // 도착/경로없음 — 정지 표시 정리
         continue;
       }
 
-      const twoAheadId   = me.pathQueue[1];
-      const twoAheadNode = nodePos.get(twoAheadId);
+      const nextId = me.pathQueue[0];
+      const np     = nodePos.get(nextId);
 
-      // 2칸 앞 노드를 점유 중인 다른 로봇 탐색
+      // 다음 노드를 점유 중이거나(근접) 같은 노드를 노리는 '더 우선'인 다른 로봇 탐색
       let blockerId: string | null = null;
-      if (twoAheadNode) {
-        for (const other of robots) {
-          if (other.robotId === me.robotId) continue;
-          if (other.posX == null || other.posY == null) continue;
-          const dist = Math.hypot(other.posX - twoAheadNode.x, other.posY - twoAheadNode.y);
-          if (dist < NODE_PASS_M) { blockerId = other.robotId; break; }
-        }
+      for (const other of robots) {
+        if (other.robotId === me.robotId) continue;
+        const nearMyNext = !!np && other.posX != null && other.posY != null
+          && Math.hypot(other.posX - np.x, other.posY - np.y) < NODE_PASS_M;
+        const sameTarget = other.pathQueue[0] === nextId;
+        if (!nearMyNext && !sameTarget) continue;
+        if (goesFirst(other, me)) { blockerId = other.robotId; break; } // 상대가 우선 → 내가 양보
       }
 
       if (blockerId) {
-        // 새로 막힌 경우에만 정지 결정 (중복 발행 방지)
-        if (!this.stoppedForNode.has(me.robotId)) {
-          this.stoppedForNode.set(me.robotId, twoAheadId);
-          this.logger.log(`[충돌] ${me.robotId} 정지 — ${twoAheadId} 점유 중 (${blockerId})`);
-          decisions.push({ robotId: me.robotId, action: 'stop', conflictNode: twoAheadId, blockerId });
+        if (this.stoppedForNode.get(me.robotId) !== nextId) {
+          this.stoppedForNode.set(me.robotId, nextId);
+          this.logger.log(`[충돌] ${me.robotId} 양보 정지 — ${nextId} (우선: ${blockerId})`);
+          decisions.push({ robotId: me.robotId, action: 'stop', conflictNode: nextId, blockerId });
         }
-      } else if (this.stoppedForNode.get(me.robotId) === twoAheadId) {
-        // 막았던 노드가 비워짐 → 재출발
+      } else if (this.stoppedForNode.has(me.robotId)) {
         this.stoppedForNode.delete(me.robotId);
-        this.logger.log(`[충돌] ${me.robotId} 재출발 — ${twoAheadId} 비워짐`);
+        this.logger.log(`[충돌] ${me.robotId} 재출발 — ${nextId} 우선권 확보`);
         decisions.push({ robotId: me.robotId, action: 'resume' });
       }
     }

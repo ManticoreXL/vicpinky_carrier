@@ -21,14 +21,18 @@ interface Props {
  activePaths?: ActivePath[];
  robotPositions?: Record<string, RobotPos>;
  onNodeClick?: (nodeId: string) => void;
+ /** 선택된 노드 정보 패널에서 잠금/해제 토글 (소켓 node_lock → 우회 재경로 트리거) */
+ onNodeLockToggle?: (nodeId: string) => void;
  lockedNodes?: Set<string>;
+ /** 배차 전 미리보기 경로 (노드 ID 순서) — 점선으로 표시 */
+ previewPath?: string[];
 }
 
 // ── 컴포넌트 ──────────────────────────────────────────────────────────────────
 
 export default function NavMapCanvas({
  rosMessages, socket, onSetInitialPose, onSetHome,
- activePaths = [], robotPositions = {}, onNodeClick, lockedNodes = new Set(),
+ activePaths = [], robotPositions = {}, onNodeClick, onNodeLockToggle, lockedNodes = new Set(), previewPath = [],
 }: Props) {
  const canvasRef = useRef<HTMLCanvasElement>(null);
  const wrapRef = useRef<HTMLDivElement>(null);
@@ -43,7 +47,9 @@ export default function NavMapCanvas({
  const activePathsRef = useRef<ActivePath[]>(activePaths);
  const robotPosRef = useRef<Record<string, RobotPos>>(robotPositions);
  const onNodeClickRef = useRef(onNodeClick);
+ const onNodeLockToggleRef = useRef(onNodeLockToggle);
  const lockedNodesRef = useRef<Set<string>>(lockedNodes);
+ const previewPathRef = useRef<string[]>(previewPath);
  const assignmentsRef = useRef<Record<string, string>>({});
  const selectedMapRef = useRef<string>("");
  const drawRef = useRef<() => void>(() => {});
@@ -61,6 +67,7 @@ export default function NavMapCanvas({
  const [showTopology, setShowTopology] = useState(true);
  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
+ const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
  const [topoStats, setTopoStats] = useState({ n: 0, e: 0 });
 
  const base = BACKEND_URL.replace(/\/$/, "");
@@ -69,6 +76,8 @@ export default function NavMapCanvas({
  useEffect(() => { activePathsRef.current = activePaths; drawRef.current(); }, [activePaths]);
  useEffect(() => { robotPosRef.current = robotPositions; }, [robotPositions]);
  useEffect(() => { onNodeClickRef.current = onNodeClick; }, [onNodeClick]);
+ useEffect(() => { onNodeLockToggleRef.current = onNodeLockToggle; }, [onNodeLockToggle]);
+ useEffect(() => { previewPathRef.current = previewPath; drawRef.current(); }, [previewPath]);
  useEffect(() => { lockedNodesRef.current = lockedNodes; drawRef.current(); }, [lockedNodes]);
  useEffect(() => { assignmentsRef.current = assignments; }, [assignments]);
  useEffect(() => { selectedMapRef.current = selectedMap; }, [selectedMap]);
@@ -214,6 +223,24 @@ export default function NavMapCanvas({
  topoNodes: topoNodesRef.current,
  });
 
+ // 배차 전 경로 미리보기 (노란 점선)
+ const preview = previewPathRef.current;
+ if (showTopology && preview.length > 1) {
+ const pts = preview
+ .map(id => topoNodesRef.current.find(n => n.node_id === id))
+ .filter((n): n is FNode => !!n)
+ .map(n => worldToCanvas(n.x, n.y, info, scale));
+ if (pts.length > 1) {
+ ctx.save();
+ ctx.strokeStyle = "#fbbf24"; ctx.lineWidth = 3; ctx.setLineDash([9, 6]);
+ ctx.beginPath(); ctx.moveTo(pts[0].cx, pts[0].cy);
+ for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].cx, pts[i].cy);
+ ctx.stroke(); ctx.setLineDash([]);
+ for (const p of pts) { ctx.beginPath(); ctx.arc(p.cx, p.cy, 5, 0, Math.PI * 2); ctx.fillStyle = "#fbbf24"; ctx.fill(); }
+ ctx.restore();
+ }
+ }
+
  // TB3 로봇 마커 (amcl_pose, 현재 맵 배정 로봇만)
  drawTb3Markers(ctx, canvas, info, scale, rosMessages, assignments, selectedMap, selectedBots);
 
@@ -248,12 +275,13 @@ export default function NavMapCanvas({
  const info = infoRef.current;
  const scale = scaleRef.current;
 
- // 좌클릭 시 노드 클릭 우선 처리
- if (e.button === 0 && showTopology && onNodeClickRef.current && info) {
+ // 좌클릭 시 노드 선택(정보 패널) + 태스크 목표 지정
+ if (e.button === 0 && showTopology && info) {
  for (const n of topoNodesRef.current) {
  const { cx, cy } = worldToCanvas(n.x, n.y, info, scale);
  if (Math.hypot(x - cx, y - cy) <= 12) {
- onNodeClickRef.current(n.node_id);
+ setSelectedNodeId(n.node_id);
+ onNodeClickRef.current?.(n.node_id);
  return;
  }
  }
@@ -351,7 +379,8 @@ export default function NavMapCanvas({
  if (hoveredNodeId) setHoveredNodeId(null);
  draw();
  };
- const onContextMenu = (e: React.MouseEvent) => e.preventDefault();
+ // 우클릭은 위치추정(pose)/홈 지정 전용 — 기본 컨텍스트 메뉴만 막는다
+ const onContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => e.preventDefault();
 
  const cameraBot = TB3_ROBOTS.find((r) => selectedBots.has(r.id))?.id ?? "tb3_01";
  const cameraRobotMeta = TB3_ROBOTS.find((r) => r.id === cameraBot);
@@ -363,6 +392,8 @@ export default function NavMapCanvas({
  // hover 중인 노드/엣지 정보
  const hNode = hoveredNodeId ? topoNodesRef.current.find(n => n.node_id === hoveredNodeId) : null;
  const hEdge = hoveredEdgeId && !hNode ? topoEdgesRef.current.find(e => e.edge_id === hoveredEdgeId) : null;
+ // 좌클릭으로 선택된 노드 (정보 패널 + 잠금/해제 버튼)
+ const selNode = selectedNodeId ? topoNodesRef.current.find(n => n.node_id === selectedNodeId) : null;
 
  return (
  <div className="flex flex-col h-full bg-[#FFCE99]/14 backdrop-blur-xl">
@@ -563,8 +594,34 @@ export default function NavMapCanvas({
  />
  )}
 
- {/* hover 노드 정보 */}
- {hNode && (
+ {/* 선택된 노드 정보 + 잠금/해제 (좌클릭으로 선택) */}
+ {selNode && (
+ <div className="absolute top-2 right-2 bg-[#FFCE99]/14 border border-white/[0.1] px-3 py-2 shadow-lg z-20 min-w-[150px]">
+ <div className="flex items-center justify-between gap-3">
+ <span className="text-xs font-bold" style={{ color: NODE_COLOR[selNode.type] ?? "#888" }}>{selNode.node_id}</span>
+ <button onClick={() => setSelectedNodeId(null)} className="text-white/[0.45] hover:text-white/80 text-sm leading-none">✕</button>
+ </div>
+ <div className="text-xs text-white/[0.75] mt-1">x={selNode.x.toFixed(3)} y={selNode.y.toFixed(3)}</div>
+ <div className="text-xs text-white/[0.75]">yaw={selNode.yaw.toFixed(3)} <span style={{ color: NODE_COLOR[selNode.type] }}>{selNode.type}</span></div>
+ {lockedNodes.has(selNode.node_id) && (
+ <div className="text-xs font-bold text-red-400 mt-1">🔒 잠김 (경로 우회)</div>
+ )}
+ {onNodeLockToggle && (
+ <button
+ onClick={() => onNodeLockToggle(selNode.node_id)}
+ className={`mt-2 w-full text-xs font-bold py-1.5 rounded border transition-colors ${
+ lockedNodes.has(selNode.node_id)
+ ? "bg-emerald-700/40 text-emerald-200 border-emerald-500/40 hover:bg-emerald-600/50"
+ : "bg-red-900/40 text-red-200 border-red-500/40 hover:bg-red-800/50"
+ }`}>
+ {lockedNodes.has(selNode.node_id) ? "🔓 잠금 해제" : "🔒 노드 잠금 (우회)"}
+ </button>
+ )}
+ </div>
+ )}
+
+ {/* hover 노드 정보 (노드 미선택 시에만 표시) */}
+ {hNode && !selNode && (
  <div className="absolute top-2 right-2 bg-[#FFCE99]/14 border border-white/[0.1] px-2 py-1.5 pointer-events-none">
  <div className="text-xs font-bold" style={{ color: NODE_COLOR[hNode.type] ?? "#888" }}>
  {hNode.node_id}
@@ -576,7 +633,7 @@ export default function NavMapCanvas({
  yaw={hNode.yaw.toFixed(3)} <span style={{ color: NODE_COLOR[hNode.type] }}>{hNode.type}</span>
  </div>
  {onNodeClick && (
- <div className="text-xs text-white/90/70 mt-0.5">클릭하여 태스크 목표 선택</div>
+ <div className="text-xs text-white/90/70 mt-0.5">클릭하여 선택 · 태스크 목표 지정</div>
  )}
  </div>
  )}

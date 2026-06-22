@@ -52,6 +52,7 @@ interface Props {
  emitNavInitialPose: (robotId: string, x: number, y: number, yaw: number, mapId?: string) => void;
  ackTmAlert: (alertId: string) => void;
  setRobotHome: (robotId: string, x: number, y: number, yaw: number) => void;
+ emitNodeLock: (nodeId: string, isLocked: boolean) => void;
  lockedNodes?: Set<string>;
  focusRobotId?: string;
  robots?: RobotInfo[];
@@ -82,6 +83,7 @@ export default function FmsView({
  emitFmsDispatch, emitFmsCancel, emitFmsRegister, emitFmsRelease,
  emitNavInitialPose,
  ackTmAlert, setRobotHome,
+ emitNodeLock,
  lockedNodes = new Set(),
  focusRobotId,
  robots = [],
@@ -90,6 +92,8 @@ export default function FmsView({
  const [filterTab, setFilterTab] = useState<string>("all");
  const [contentTab, setContentTab] = useState<"fleet" | "map">("map");
  const [mapAssignments, setMapAssignments] = useState<Record<string, string>>({});
+ const [mapId, setMapId] = useState("");
+ const [previewPath, setPreviewPath] = useState<string[]>([]);
  const [topoNodes, setTopoNodes] = useState<TopoNode[]>([]);
  const [form, setForm] = useState({ type: "SUPPLY" as TaskType, targetNode: "", priority: 1, preferredRobotId: focusRobotId ?? "", supplyItem: "물" as SupplyItem });
 
@@ -123,9 +127,10 @@ export default function FmsView({
  useEffect(() => {
  fetch(`${BACKEND_URL}/api/map/assignments`).then(r => r.json()).then((d: Record<string, string>) => {
   setMapAssignments(d);
-  const mapId = Object.values(d)[0];
-  if (mapId) {
-   fetch(`${BACKEND_URL}/api/fleet/topology/nodes?map_id=${mapId}`)
+  const m = Object.values(d)[0];
+  if (m) {
+   setMapId(m);
+   fetch(`${BACKEND_URL}/api/fleet/topology/nodes?map_id=${m}`)
     .then(r => r.json()).then(setTopoNodes).catch(() => {});
   }
  }).catch(() => {});
@@ -244,6 +249,27 @@ export default function FmsView({
   setForm(f => ({ ...f, targetNode: "" }));
  };
 
+ // ── 경로 미리보기 (배차 전, 로봇 현재 위치 → 목적지를 엣지 기반으로 계산) ──────
+ const previewRobotId = isSupply ? "" : (form.preferredRobotId || topPick?.robotId || "");
+ const nearestNodeId = (x: number, y: number): string | null => {
+  let best: string | null = null, bestD = Infinity;
+  for (const n of topoNodes) { const d = Math.hypot(n.x - x, n.y - y); if (d < bestD) { bestD = d; best = n.node_id; } }
+  return best;
+ };
+ const handlePreview = async () => {
+  if (isSupply || !form.targetNode || !previewRobotId || !mapId) return;
+  const pos = robotPositions[previewRobotId];
+  const start = pos ? nearestNodeId(pos.x, pos.y) : null;
+  if (!start) { setPreviewPath([]); return; }
+  try {
+   const res = await fetch(`${BACKEND_URL}/api/fleet/topology/path?start=${encodeURIComponent(start)}&end=${encodeURIComponent(form.targetNode)}&map_id=${encodeURIComponent(mapId)}`);
+   const path = await res.json();
+   setPreviewPath(Array.isArray(path) ? path as string[] : []);
+  } catch { setPreviewPath([]); }
+ };
+ // 목적지/로봇/유형이 바뀌면 미리보기 무효화
+ useEffect(() => { setPreviewPath([]); }, [form.targetNode, form.preferredRobotId, form.type]);
+
  return (
  <div className="flex flex-col h-full bg-transparent overflow-hidden">
  
@@ -286,6 +312,8 @@ export default function FmsView({
  rosMessages={rosMessages} socket={socket} onSetInitialPose={emitNavInitialPose} onSetHome={setRobotHome}
  activePaths={activePaths} robotPositions={robotPositions} lockedNodes={lockedNodes}
  onNodeClick={n => setForm(f => ({ ...f, targetNode: n }))}
+ onNodeLockToggle={n => emitNodeLock(n, !lockedNodes.has(n))}
+ previewPath={previewPath}
  />
  ) : (
  <div className="p-8 overflow-y-auto">
@@ -418,6 +446,27 @@ export default function FmsView({
  <p className="text-[10px] text-rose-500 font-semibold text-center -mt-1">
   {preferredId} 오프라인 — 등록/할당 불가
  </p>
+ )}
+ {/* 경로 미리보기 → 진행 (이동형 태스크 전용) */}
+ {!isSupply && (
+  previewPath.length > 0 ? (
+   <div className="space-y-2 p-2.5 rounded-xl border border-amber-500/40 bg-amber-500/10">
+    <div className="text-[10px] text-amber-700 font-semibold">미리보기 경로 ({previewRobotId})</div>
+    <div className="text-[11px] text-white/80 font-mono break-words leading-relaxed">{previewPath.join(" → ")}</div>
+    <div className="grid grid-cols-2 gap-2">
+     <button onClick={() => setPreviewPath([])}
+      className="w-full glass-button !bg-[#FFCE99]/40 hover:!bg-[#FFCE99]/55 !text-xs !font-semibold !py-2 !rounded-lg">취소</button>
+     <button onClick={() => { submit(emitFmsDispatch); setPreviewPath([]); }}
+      className="w-full glass-button !bg-emerald-600 hover:!bg-emerald-500 !text-xs !font-bold !py-2 !rounded-lg shadow-lg">진행 ▶</button>
+    </div>
+   </div>
+  ) : (
+   <button onClick={handlePreview} disabled={!canSubmit || !previewRobotId}
+    title="배차 전에 로봇 현재 위치에서 목적지까지 경로만 계산해 지도에 표시"
+    className="w-full glass-button !bg-amber-600/80 hover:!bg-amber-500 !text-xs !font-semibold !tracking-wide !py-2 !rounded-xl shadow-lg disabled:opacity-40 disabled:cursor-not-allowed">
+    경로 미리보기
+   </button>
+  )
  )}
  <div className="grid grid-cols-2 gap-2">
  <button

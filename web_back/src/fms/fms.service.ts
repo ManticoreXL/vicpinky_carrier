@@ -4,9 +4,10 @@ import { Model } from 'mongoose';
 import { Server } from 'socket.io';
 import { Task, TaskDocument, TaskStatus, TaskType } from './task.schema';
 import { RosService } from '../ros/ros.service';
-import { DomainBridgeService } from '../ros/domain-bridge.service';
+import { DomainBridgeService } from '../ros/domain-bridge/domain-bridge.service';
+import { Quaternion } from '../geometry/pose';
 
-export interface CreateTaskDto {
+export class CreateTaskDto {
   task_id?: string;
   type: TaskType;
   targetNode: string;
@@ -178,7 +179,7 @@ export class FmsService {
         header: { stamp: { sec: Math.floor(now), nanosec: 0 }, frame_id: 'map' },
         pose: {
           position:    { x, y, z: 0 },
-          orientation: { x: 0, y: 0, z: Math.sin(yaw / 2), w: Math.cos(yaw / 2) },
+          orientation: Quaternion.fromYaw(yaw).toObject(),
         },
       },
     });
@@ -212,7 +213,7 @@ export class FmsService {
         pose: {
           pose: {
             position:    { x, y, z: 0 },
-            orientation: { x: 0, y: 0, z: Math.sin(yaw / 2), w: Math.cos(yaw / 2) },
+            orientation: Quaternion.fromYaw(yaw).toObject(),
           },
           covariance: [
             0.25, 0.0, 0.0, 0.0, 0.0, 0.0,

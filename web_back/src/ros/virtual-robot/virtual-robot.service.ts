@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { RosService } from './ros.service';
-import type { RosMessage, TopicPublishPayload } from './ros.types';
+import { RosService } from '../ros.service';
+import type { RosMessage, TopicPublishPayload } from '../ros.types';
+import { Quaternion } from '../../geometry/pose';
 
 // ── 가상 테스트 로봇 (TEST-BOT1 ~ TEST-BOT4) ───────────────────────────────────
 //
@@ -78,7 +79,7 @@ export class VirtualRobotService implements OnModuleInit, OnModuleDestroy {
       const pos = msg?.pose?.position;
       const ori = msg?.pose?.orientation;
       if (pos?.x != null) {
-        bot.goal   = { x: pos.x, y: pos.y ?? 0, yaw: quatToYaw(ori) };
+        bot.goal   = { x: pos.x, y: pos.y ?? 0, yaw: Quaternion.from(ori).yaw };
         bot.moving = true;
         this.logger.log(`${id} goal_pose → (${pos.x.toFixed(2)}, ${(pos.y ?? 0).toFixed(2)})`);
       }
@@ -86,7 +87,7 @@ export class VirtualRobotService implements OnModuleInit, OnModuleDestroy {
       const pos = msg?.pose?.pose?.position;
       const ori = msg?.pose?.pose?.orientation;
       if (pos?.x != null) {
-        bot.pose = { x: pos.x, y: pos.y ?? 0, yaw: quatToYaw(ori) };
+        bot.pose = { x: pos.x, y: pos.y ?? 0, yaw: Quaternion.from(ori).yaw };
         this.emitOne(id, bot, Date.now()); // 초기위치 즉시 반영
       }
     } else if (/cmd_vel$/.test(sub)) {
@@ -148,7 +149,7 @@ export class VirtualRobotService implements OnModuleInit, OnModuleDestroy {
         pose: {
           pose: {
             position:    { x, y, z: 0 },
-            orientation: yawToQuat(yaw),
+            orientation: Quaternion.fromYaw(yaw).toObject(),
           },
         },
       },
@@ -157,13 +158,3 @@ export class VirtualRobotService implements OnModuleInit, OnModuleDestroy {
   }
 }
 
-// ── 쿼터니언 ↔ yaw 헬퍼 ───────────────────────────────────────────────────────
-function quatToYaw(ori: { x?: number; y?: number; z?: number; w?: number } | undefined): number {
-  if (!ori) return 0;
-  const x = ori.x ?? 0, y = ori.y ?? 0, z = ori.z ?? 0, w = ori.w ?? 1;
-  return Math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z));
-}
-
-function yawToQuat(yaw: number) {
-  return { x: 0, y: 0, z: Math.sin(yaw / 2), w: Math.cos(yaw / 2) };
-}

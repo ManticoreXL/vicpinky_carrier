@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import type { Socket } from "socket.io-client";
-import type { RosMessage, FmsTask, FmsDispatchPayload, TaskManagerAlert, RobotInfo } from "../hooks/useNestSocket";
+import type { RosMessage, FmsTask, FmsDispatchPayload, TaskType, TaskManagerAlert, RobotInfo } from "../hooks/useNestSocket";
 import { BACKEND_URL } from "../config";
 import { ROBOTS } from "./taskmanager/constants";
 import type { AgentAction, ChatMessage, TopoNode } from "./taskmanager/types";
@@ -14,6 +14,8 @@ interface Props {
   socket: Socket | null;
   emitFmsDispatch: (p: FmsDispatchPayload) => void;
   emitFmsCancel: (taskId: string) => void;
+  emitFmsRegister: (p: FmsDispatchPayload) => void;
+  emitFmsRelease: (taskId: string) => void;
   robotStatuses: Record<string, string>;
   tmAlerts: TaskManagerAlert[];
   ackTmAlert: (alertId: string) => void;
@@ -21,10 +23,16 @@ interface Props {
   onSelectRobotInFleet: (robotId: string) => void;
 }
 
+// 태스크 생성 폼 상수 (4종)
+const TASK_LABELS: Record<TaskType, string> = { SUPPLY: "공급", PROCESS: "구호", CHARGE: "충전", MOVE: "이동" };
+const TASK_PRIORITIES: Record<TaskType, number> = { SUPPLY: 1, CHARGE: 1, MOVE: 2, PROCESS: 3 };
+const SUPPLY_ITEMS = ["물", "약"] as const;
+const SUPPLY_ROBOT_ID = "omx";
+
 // ── 메인 컴포넌트 ──────────────────────────────────────────────────────────────
 
 export default function TaskManagerView({
-  rosMessages, fmsTasks, emitFmsDispatch, emitFmsCancel,
+  rosMessages, fmsTasks, emitFmsDispatch, emitFmsCancel, emitFmsRegister, emitFmsRelease,
   robotStatuses, tmAlerts, ackTmAlert, robots, onSelectRobotInFleet,
 }: Props) {
 
@@ -43,6 +51,20 @@ export default function TaskManagerView({
   const [topoNodes, setTopoNodes] = useState<TopoNode[]>([]);
   // 노드 타입은 대문자(CHARGER). 충전소 노드 목록.
   const chargerNodes = useMemo(() => topoNodes.filter(n => n.type === "CHARGER"), [topoNodes]);
+
+  // ── 태스크 생성(등록/배차) 폼 ────────────────────────────────────────────────
+  const [showCreate, setShowCreate] = useState(true);
+  const [form, setForm] = useState({ type: "MOVE" as TaskType, targetNode: "", preferredRobotId: "", supplyItem: "물" as typeof SUPPLY_ITEMS[number] });
+  const isSupply = form.type === "SUPPLY";
+  const buildPayload = (): FmsDispatchPayload => isSupply
+    ? { type: "SUPPLY", targetNode: form.supplyItem, priority: 1, preferredRobotId: SUPPLY_ROBOT_ID }
+    : { type: form.type, targetNode: form.targetNode, priority: TASK_PRIORITIES[form.type], preferredRobotId: form.preferredRobotId || undefined };
+  const canCreate = isSupply ? !!form.supplyItem : !!form.targetNode;
+  const submitCreate = (emit: (p: FmsDispatchPayload) => void) => {
+    if (!canCreate) return;
+    emit(buildPayload());
+    setForm(f => ({ ...f, targetNode: "" }));
+  };
 
   useEffect(() => {
     fetch(`${BACKEND_URL}/api/map/assignments`)
@@ -294,6 +316,7 @@ export default function TaskManagerView({
                 {([
                   ["active",    "진행 중"],
                   ["all",       "전체"],
+                  ["DRAFT",     "등록됨"],
                   ["PENDING",   "대기 중"],
                   ["RUNNING",   "수행 중"],
                   ["COMPLETED", "완료"],
@@ -308,6 +331,67 @@ export default function TaskManagerView({
             )}
           </div>
 
+          {/* ── 태스크 등록/배차 폼 (4종 → 글로벌 큐) ───────────────────────── */}
+          {boardTab === "task" && (
+          <div className="flex-none border-b border-white/[0.1] bg-[#FFCE99]/14">
+            <button onClick={() => setShowCreate(v => !v)}
+              className="w-full flex items-center justify-between px-5 py-2 text-[11px] font-bold tracking-wide text-white/[0.7] hover:text-white/90">
+              <span>＋ 태스크 등록 / 배차</span>
+              <span className="text-white/[0.45]">{showCreate ? "▾" : "▸"}</span>
+            </button>
+            {showCreate && (
+            <div className="px-5 pb-4 space-y-2.5">
+              {/* 유형 4종 */}
+              <div className="grid grid-cols-4 gap-1">
+                {(Object.keys(TASK_LABELS) as TaskType[]).map(t => (
+                  <button key={t} onClick={() => setForm(f => ({ ...f, type: t }))}
+                    className={`py-1 text-[10px] font-bold rounded border transition-all ${form.type === t ? "bg-sky-600/40 text-sky-800 border-sky-500/60" : "bg-[#FFCE99]/32 text-white/[0.55] border-white/[0.1] hover:text-white/[0.75]"}`}>
+                    {TASK_LABELS[t]}
+                  </button>
+                ))}
+              </div>
+              {/* 목적지 (공급은 품목) */}
+              {isSupply ? (
+                <div className="grid grid-cols-2 gap-1">
+                  {SUPPLY_ITEMS.map(item => (
+                    <button key={item} onClick={() => setForm(f => ({ ...f, supplyItem: item }))}
+                      className={`py-1.5 text-xs font-bold rounded border transition-all ${form.supplyItem === item ? "bg-sky-600/40 text-sky-800 border-sky-500/60" : "bg-[#FFCE99]/32 text-white/[0.6] border-white/[0.1] hover:text-white/[0.85]"}`}>
+                      {item === "물" ? "💧 물" : "💊 약"}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <select value={form.targetNode} onChange={e => setForm(f => ({ ...f, targetNode: e.target.value }))}
+                  className="w-full bg-[#FFCE99]/14 border border-white/[0.1] rounded-lg px-2 py-1.5 text-xs text-white/85 focus:outline-none focus:border-white/[0.2]">
+                  <option value="">목적지 노드 선택…</option>
+                  {topoNodes.map(n => <option key={n.node_id} value={n.node_id}>{n.node_id} ({n.type})</option>)}
+                </select>
+              )}
+              {/* 지정 로봇 (공급은 omx 고정) */}
+              {!isSupply && (
+                <select value={form.preferredRobotId} onChange={e => setForm(f => ({ ...f, preferredRobotId: e.target.value }))}
+                  className="w-full bg-[#FFCE99]/14 border border-white/[0.1] rounded-lg px-2 py-1.5 text-xs text-white/75 focus:outline-none focus:border-white/[0.2]">
+                  <option value="">자동 배정</option>
+                  {ROBOTS.map(r => <option key={r.id} value={r.id}>{r.id}</option>)}
+                </select>
+              )}
+              {/* 등록만(DRAFT) / 즉시 배차 */}
+              <div className="grid grid-cols-2 gap-2">
+                <button onClick={() => submitCreate(emitFmsRegister)} disabled={!canCreate}
+                  title="글로벌 큐에 등록만 (DRAFT) — 목록에서 '배차'로 할당"
+                  className="py-2 text-[11px] font-bold rounded-lg border border-violet-500/50 bg-violet-600/30 text-violet-100 hover:bg-violet-600/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
+                  등록만
+                </button>
+                <button onClick={() => submitCreate(emitFmsDispatch)} disabled={!canCreate}
+                  className="py-2 text-[11px] font-bold rounded-lg border border-sky-500/50 bg-sky-600/30 text-sky-100 hover:bg-sky-600/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all">
+                  {isSupply ? "omx 공급" : "즉시 배차"}
+                </button>
+              </div>
+            </div>
+            )}
+          </div>
+          )}
+
           <div className="flex-1 overflow-y-auto p-5">
             {boardTab === "task" ? (
               filtered.length === 0 ? (
@@ -318,7 +402,7 @@ export default function TaskManagerView({
               ) : (
                 <div className="space-y-3">
                   {filtered.map(task => (
-                    <TaskCard key={task._id} task={task} onCancel={() => emitFmsCancel(task._id)} />
+                    <TaskCard key={task._id} task={task} onCancel={() => emitFmsCancel(task._id)} onRelease={() => emitFmsRelease(task._id)} />
                   ))}
                 </div>
               )

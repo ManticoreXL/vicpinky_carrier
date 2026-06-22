@@ -2,8 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
 import { Task, TaskDocument, TaskStatus } from '../fms/task.schema';
-import { Robot, RobotDocument } from '../fleet/robot.schema';
-import { Node, NodeDocument } from '../fleet/node.schema';
+import { Robot, RobotDocument } from '../robot/robot.schema';
+import { Node, NodeDocument } from '../topology/node.schema';
 import { Log, LogDocument } from '../logs/log.schema';
 
 // 상태 → 한국어 (LLM이 자연스러운 한국어로 답하도록 컨텍스트부터 한글화)
