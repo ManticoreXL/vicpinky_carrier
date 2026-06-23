@@ -3,8 +3,10 @@
 # rescuer_bringup.launch.py
 # 구호 터틀봇 한 대를 구동하는 데 필요한 노드를 한 번에 켠다.
 #   1) 터틀봇 브링업 (모터/센서)
-#   2) Nav2 (자율 주행) — turtlebot_state/map/disaster_map.yaml 사용
-#   3) 로컬 중앙 상태 노드 (rescuer_state_manager)
+#   2) 하드웨어 브링업 (LED/오디오/WebRTC — 상태 무관 항상 켜짐)
+#   3) DEPLOY 노드 (하차) — turtlebot3_hardware/deploy_node
+#   4) Nav2 (자율 주행) — turtlebot_state/map/disaster_map.yaml 사용
+#   5) 로컬 중앙 상태 노드 (rescuer_state_manager)
 #
 # 실행 예:
 #   ros2 launch turtlebot_state rescuer_bringup.launch.py bot_id:=tb3_04 marker_id:=4
@@ -27,6 +29,7 @@ from launch.actions import (
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -58,7 +61,27 @@ def generate_launch_description():
         launch_arguments={'use_sim_time': use_sim_time}.items(),
     )
 
-    # ── 2) Nav2 (브링업 후 잠시 뒤에 켜서 센서/TF 준비 시간 확보) ──
+    # ── 2) 하드웨어 브링업 (LED/오디오/WebRTC) ──
+    hw_bringup = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(
+            get_package_share_directory('turtlebot3_hardware'),
+            'launch', 'hardware_bringup.launch.py')),
+        launch_arguments={
+            'bot_id': bot_id,
+            'device': '3',  # 가상 카메라 3번 고정 할당 (WebRTC용)
+        }.items(),
+    )
+
+    # ── 3) DEPLOY 노드 (하차) ──
+    deploy_node = Node(
+        package='turtlebot3_hardware',
+        executable='deploy_node',
+        name='deploy_node',
+        output='screen',
+        parameters=[{'bot_id': bot_id}],
+    )
+
+    # ── 4) Nav2 (브링업 후 잠시 뒤에 켜서 센서/TF 준비 시간 확보) ──
     nav2_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(
             get_package_share_directory('turtlebot3_navigation2'),
@@ -70,7 +93,7 @@ def generate_launch_description():
     )
     nav2_delayed = TimerAction(period=5.0, actions=[nav2_launch])
 
-    # ── 3) 로컬 중앙 상태 노드 ──
+    # ── 5) 로컬 중앙 상태 노드 ──
     state_node = Node(
         package='turtlebot_state',
         executable='rescuer_state_manager',
@@ -78,7 +101,7 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'bot_id': bot_id,
-            'marker_id': marker_id,
+            'marker_id': ParameterValue(marker_id, value_type=int),
         }],
     )
 
@@ -87,6 +110,8 @@ def generate_launch_description():
         declare_marker_id,
         declare_use_sim_time,
         bringup_launch,
+        hw_bringup,
+        deploy_node,
         nav2_delayed,
         state_node,
     ])
