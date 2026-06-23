@@ -24,7 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'robot_state_manager = turtlebot_state.robot_state_manager:main',
+            'rescuer_state_manager = turtlebot_state.rescuer_state_manager:main',
+            'explorer_state_manager = turtlebot_state.explorer_state_manager:main',
         ],
     },
 )

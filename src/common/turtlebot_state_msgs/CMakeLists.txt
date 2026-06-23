@@ -13,6 +13,8 @@ find_package(builtin_interfaces REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/RobotState.msg"
   "msg/StateUpdate.msg"
+  "msg/PcCommand.msg"
+  "msg/VicpinkySignal.msg"
   DEPENDENCIES builtin_interfaces
 )
 
