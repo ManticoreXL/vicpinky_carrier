@@ -7,6 +7,8 @@ Panels:
         - /TF1
         - /Map1
         - /LaserScan1
+        - /Victim Markers1
+        - /Victim List1
       Splitter Ratio: 0.5
   - Class: rviz_common/Views
     Name: Views
@@ -105,6 +107,32 @@ Visualization Manager:
         Reliability Policy: Reliable
       Color: 0; 255; 0
       Line Style: Lines
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Victim Markers
+      Enabled: true
+      Namespaces:
+        {}
+      Topic:
+        Value: /victim/markers
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+      Value: true
+    - Class: rviz_default_plugins/PoseArray
+      Name: Victim List
+      Enabled: true
+      Topic:
+        Value: /victim/list
+        Depth: 5
+        Durability Policy: Transient Local
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+      Color: 255; 25; 0
+      Shape: Axes
+      Axes Length: 0.3
+      Axes Radius: 0.05
       Value: true
   Global Options:
     Background Color: 48; 48; 48

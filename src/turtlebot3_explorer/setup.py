@@ -28,7 +28,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'mission_coordinator = turtlebot3_explorer.mission_coordinator:main'
+            'mission_coordinator = turtlebot3_explorer.mission_coordinator:main',
+            'victim_mapper = turtlebot3_explorer.victim_mapper:main',
         ],
     },
 )

@@ -27,6 +27,7 @@ from rclpy.qos import (
 )
 
 from std_msgs.msg import Empty
+from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import OccupancyGrid
 from nav2_msgs.action import NavigateToPose
 from action_msgs.msg import GoalStatus
@@ -42,6 +43,7 @@ class ExplorationCoordinator(Node):
     # ---- 미션 상태 ----
     INIT = 'INIT'
     EXPLORING = 'EXPLORING'
+    INSPECTING = 'INSPECTING'   # 사람 후보 감지 → 정지하고 응시하며 확정 대기
     RETURNING = 'RETURNING'
     DONE = 'DONE'
 
@@ -66,6 +68,14 @@ class ExplorationCoordinator(Node):
         # ---- 온디맨드 마무리 ----
         self.declare_parameter('finish_topic', '/mission/finish_now')  # 이 토픽(std_msgs/Empty) 수신 시 현재 맵 저장 후 복귀
 
+        # ---- 조난자 응시(멈춤) 연동 ----
+        #   victim_mapper 가 사람 후보를 보면 candidate, 확정/오탐이면 confirmed/rejected 발행.
+        #   candidate 수신 시 현재 주행을 멈추고 그 자리에서 응시(INSPECTING)하며 확정 대기.
+        self.declare_parameter('victim_candidate_topic', '/victim/candidate')
+        self.declare_parameter('victim_confirmed_topic', '/victim/confirmed')
+        self.declare_parameter('victim_rejected_topic', '/victim/rejected')
+        self.declare_parameter('inspect_timeout', 10.0)   # 이 시간 내 확정/오탐 없으면 자동으로 탐색 복귀(초)
+
         self.map_save_path = self.get_parameter('map_save_path').value
         self.min_frontier_size = int(self.get_parameter('min_frontier_size').value)
         self.base_frame = self.get_parameter('base_frame').value
@@ -80,6 +90,10 @@ class ExplorationCoordinator(Node):
         self.localization_lost_timeout = float(self.get_parameter('localization_lost_timeout').value)
         self.min_goal_runtime = float(self.get_parameter('min_goal_runtime').value)
         self.finish_topic = self.get_parameter('finish_topic').value
+        self.victim_candidate_topic = self.get_parameter('victim_candidate_topic').value
+        self.victim_confirmed_topic = self.get_parameter('victim_confirmed_topic').value
+        self.victim_rejected_topic = self.get_parameter('victim_rejected_topic').value
+        self.inspect_timeout = float(self.get_parameter('inspect_timeout').value)
 
         # ---- 상태 변수 ----
         self.state = self.INIT
@@ -90,6 +104,11 @@ class ExplorationCoordinator(Node):
         self._finish_requested = False   # 외부에서 '지금 마무리' 요청이 오면 True
         self._ignore_next_result = False # 마무리로 취소한 골의 결과를 한 번 무시
         self._goal_handle = None         # 현재 골 핸들 (취소용)
+
+        # ---- 조난자 응시(멈춤) 상태 ----
+        self._inspecting = False         # INSPECTING 진입 여부(중복 진입 방지)
+        self._inspect_start = None       # 응시 시작 시각(타임아웃 판정)
+        self._inspect_ignore_result = False  # 응시로 취소한 탐색 골의 결과를 한 번 무시
 
         # 루프 방지용 (탐색)
         self.current_goal = None     # 현재 추구 중인 목표 (x, y)
@@ -134,6 +153,17 @@ class ExplorationCoordinator(Node):
             Empty, self.finish_topic, self._finish_now_callback, 10
         )
 
+        # ---- 조난자 응시 연동 구독 ----
+        self._victim_candidate_sub = self.create_subscription(
+            Empty, self.victim_candidate_topic, self._victim_candidate_callback, 10
+        )
+        self._victim_confirmed_sub = self.create_subscription(
+            PoseStamped, self.victim_confirmed_topic, self._victim_confirmed_callback, 10
+        )
+        self._victim_rejected_sub = self.create_subscription(
+            Empty, self.victim_rejected_topic, self._victim_rejected_callback, 10
+        )
+
         # ---- 제어 루프(1Hz) ----
         self._control_timer = self.create_timer(1.0, self.control_loop)
 
@@ -151,6 +181,11 @@ class ExplorationCoordinator(Node):
 
         # ---- '지금 마무리' 요청 처리 (주행 중이든 아니든 최우선) ----
         if self._finish_requested:
+            if self.state == self.INSPECTING:
+                # 응시 중 마무리 요청 → 응시 풀고 마무리로
+                self._end_inspection()
+                self._begin_finish_now()
+                return
             if self.state == self.EXPLORING:
                 self._begin_finish_now()
                 return
@@ -158,6 +193,11 @@ class ExplorationCoordinator(Node):
                 # 이미 복귀/종료 중 → 중복 요청 무시
                 self._finish_requested = False
             # INIT 이면 탐색이 시작될 때까지 요청을 보류(플래그 유지)
+
+        # ---- 조난자 응시 중: 골을 보내지 않고 그 자리에서 대기, 타임아웃만 점검 ----
+        if self.state == self.INSPECTING:
+            self._check_inspect_timeout(self.get_clock().now())
+            return
 
         # 주행 중이면 결과를 기다림 (콜백이 처리)
         if self.is_navigating:
@@ -431,6 +471,12 @@ class ExplorationCoordinator(Node):
             self.get_logger().info('이전 탐색 목표를 취소했습니다. home 으로 복귀합니다.')
             return
 
+        # 응시(사람 감지)로 취소한 탐색 골의 결과 → 한 번 무시 (실패로 집계 안 함)
+        if self._inspect_ignore_result:
+            self._inspect_ignore_result = False
+            self.get_logger().info('응시를 위해 목표를 멈췄습니다. (취소 결과 무시)')
+            return
+
         # 골이 얼마나 오래 돌았는지 (즉시 실패 = 타이밍/localization 문제로 추정)
         runtime = None
         if self._goal_sent_time is not None:
@@ -490,6 +536,62 @@ class ExplorationCoordinator(Node):
     # ==================================================================
     # 온디맨드 '지금 마무리' (부분 맵 저장 + 복귀)
     # ==================================================================
+    # ==================================================================
+    # 조난자 응시(멈춤) 연동
+    # ==================================================================
+    def _victim_candidate_callback(self, msg):
+        """ victim_mapper 가 사람 후보를 봄 → 주행을 멈추고 그 자리에서 응시 시작.
+            (탐색 주행 중일 때만. 복귀/마무리/이미 응시 중이면 무시) """
+        if self.state != self.EXPLORING or self._inspecting:
+            return
+        self.get_logger().warn('● 사람 후보 감지 신호 수신 → 정지하고 응시 시작.')
+        self._inspecting = True
+        self._inspect_start = self.get_clock().now()
+        self.state = self.INSPECTING
+
+        # 현재 탐색 골을 취소해 로봇을 그 자리에 세움 (결과는 한 번 무시)
+        if self.is_navigating and self._goal_handle is not None:
+            self._inspect_ignore_result = True
+            try:
+                self._goal_handle.cancel_goal_async()
+            except Exception as e:
+                self.get_logger().warn(f'응시: 목표 취소 호출 실패(무시): {e}')
+
+    def _victim_confirmed_callback(self, msg):
+        """ 좌표 확정 완료 → 응시 종료, 탐색 재개. """
+        if self.state != self.INSPECTING:
+            return
+        self.get_logger().warn(
+            f'★ 조난자 확정 수신 ({msg.pose.position.x:.2f}, {msg.pose.position.y:.2f}) '
+            f'→ 응시 종료, 탐색 재개.')
+        self._end_inspection()
+
+    def _victim_rejected_callback(self, msg):
+        """ 오탐으로 판정됨 → 응시 종료, 탐색 재개. """
+        if self.state != self.INSPECTING:
+            return
+        self.get_logger().info('응시: 오탐 판정 수신 → 탐색 재개.')
+        self._end_inspection()
+
+    def _end_inspection(self):
+        """ 응시 상태를 풀고 탐색으로 복귀. 다음 골은 control_loop 이 보냄. """
+        self._inspecting = False
+        self._inspect_start = None
+        self.state = self.EXPLORING
+        self.current_goal = None     # 멈춘 동안 위치가 바뀌었으니 목표 새로 선정
+        self.fail_count = 0
+        self._set_cooldown()         # 잠깐 쉬고 다음 프론티어
+
+    def _check_inspect_timeout(self, now):
+        """ 응시가 너무 길어지면(확정/오탐 신호 유실 등) 자동으로 탐색 복귀(영구 정지 방지). """
+        if not self._inspecting or self._inspect_start is None:
+            return
+        waited = (now - self._inspect_start).nanoseconds / 1e9
+        if waited > self.inspect_timeout:
+            self.get_logger().warn(
+                f'응시 {waited:.0f}s 경과(확정/오탐 신호 없음) → 자동 탐색 재개.')
+            self._end_inspection()
+
     def _finish_now_callback(self, msg):
         """ 외부 트리거 수신: 무거운 처리는 control_loop 에서 (콜백은 플래그만 세움). """
         if self.state == self.DONE:

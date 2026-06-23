@@ -6,16 +6,34 @@
 #   - 로봇 bringup 도 이 PC 도 ROS_DOMAIN_ID=41 로 실행 (실행 전 export)
 #       로봇:  export ROS_DOMAIN_ID=41 && ros2 launch turtlebot3_bringup robot.launch.py
 #              (namespace 인자 없음!)
+#       로봇:  + 카메라 퍼블리셔도 로봇에서!  (아래 '카메라' 참고)            ### [추가]
 #   - 네임스페이스 미사용 -> 토픽 /scan, /odom, /cmd_vel / 프레임 map, odom, base_*
 #   - 분리는 도메인이 담당하므로 tb3_NN/* 접두어가 전혀 필요 없음
-#     (그래서 base_scan 다리 같은 보정도 불필요)
 #
-# 기동 순서:
-#   t=0s   slam_toolbox + RViz
+# 기동 순서(PC):
+#   t=0s   카메라 TF(static) + slam_toolbox + RViz + victim_mapper        ### [변경]
 #   t=12s  nav2 (navigation_launch)
 #   t=30s  mission_coordinator
 #
 #   - RViz 끄려면:  ros2 launch turtlebot3_explorer auto_slam_launch.py rviz:=false
+#
+# 카메라 + YOLO 추론 (로봇 라파이에서 각각 따로 실행 — PC 아님! 기본 bringup 과 별개):   ### [변경]
+#   1) 카메라:
+#      ros2 run v4l2_camera v4l2_camera_node --ros-args \
+#        -p image_size:="[640,480]" \
+#        -p camera_frame_id:=camera_optical_frame \
+#        -p camera_info_url:=file:///home/ubuntu/.ros/camera_info/webcam.yaml
+#      -> /image_raw/compressed, /camera_info 를 도메인 41 로 발행.
+#   2) 추론 노드(라파이에서 YOLO):
+#      ros2 run turtlebot3_explorer victim_detector --ros-args -p model_path:=~/models/best.onnx
+#      -> /victim/detections (bbox) 발행. (map 좌표 변환·확정은 PC 의 victim_mapper 가 수행)
+#   * camera_info_url 은 camera_calibration 으로 만든 보정 yaml (없으면 위치추정 부정확).
+#
+# 카메라 TF:
+#   체인:  base_footprint -> camera_link -> camera_optical_frame
+#   측정값(바닥=바퀴 닿는 면 기준): x=0.08m(전방), y=0.0, z=0.12m(바닥~렌즈), 수평 장착.
+#   검증:  ros2 run tf2_ros tf2_echo base_footprint camera_optical_frame  (z≈0.12)
+#   정확도 아쉬우면 cam_mount 의 --pitch 만 키워 카메라를 아래로(광학 회전은 변경 금지).
 # =====================================================================
 import os
 from launch import LaunchDescription
@@ -41,6 +59,47 @@ def generate_launch_description():
 
     nav2_launch = PathJoinSubstitution([FindPackageShare('nav2_bringup'), 'launch', 'navigation_launch.py'])
     slam_launch = PathJoinSubstitution([FindPackageShare('slam_toolbox'), 'launch', 'online_async_launch.py'])
+
+    # ---- 카메라 TF (t=0) : base_footprint -> camera_link -> camera_optical_frame ----
+    # 1) 물리 장착: 측정값(바닥 기준). 수평 장착이라 회전은 전부 0.
+    cam_mount = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='base_to_cam',
+        arguments=['--x', '0.08', '--y', '0.0', '--z', '0.12',
+                   '--roll', '0', '--pitch', '0', '--yaw', '0',
+                   '--frame-id', 'base_footprint', '--child-frame-id', 'camera_link'],
+        parameters=[{'use_sim_time': ParameterValue(use_sim_time, value_type=bool)}],
+        output='screen',
+    )
+    # 2) 광학 회전: 바디(x전방)->광학(z전방). 고정값이므로 변경 금지.
+    cam_optical = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='cam_to_optical',
+        arguments=['--x', '0', '--y', '0', '--z', '0',
+                   '--roll', '-1.5708', '--pitch', '0', '--yaw', '-1.5708',
+                   '--frame-id', 'camera_link', '--child-frame-id', 'camera_optical_frame'],
+        parameters=[{'use_sim_time': ParameterValue(use_sim_time, value_type=bool)}],
+        output='screen',
+    )
+
+    # ---- victim_mapper (t=0) : 라파이 bbox + camera_info + TF → 바닥 투영/확정/마커/CSV ----  ### [변경]
+    #   (YOLO 추론은 라파이의 victim_detector 가 따로 수행 → /victim/detections 로 수신)
+    victim_mapper = Node(
+        package='turtlebot3_explorer',
+        executable='victim_mapper',
+        name='victim_mapper',
+        output='screen',
+        parameters=[{
+            'use_sim_time': ParameterValue(use_sim_time, value_type=bool),
+            'detections_topic': '/victim/detections',
+            'camera_info_topic': '/camera_info',
+            'camera_frame': 'camera_optical_frame',
+            'map_frame': 'map',
+            'csv_path': os.path.expanduser('~/maps/victims.csv'),
+        }],
+    )
 
     # ---- slam_toolbox (t=0) ----
     slam = IncludeLaunchDescription(
@@ -100,6 +159,9 @@ def generate_launch_description():
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('map_save_path', default_value=os.path.expanduser('~/maps/disaster_map')),
         DeclareLaunchArgument('rviz', default_value='true'),
+        cam_mount,         ### [추가]
+        cam_optical,       ### [추가]
+        victim_mapper,     ### [변경] (PC: 투영/확정/마커/CSV)
         slam,
         rviz,
         nav2,
