@@ -86,17 +86,17 @@ class RescuerStateManager(Node):
 
         # ── 발행: 통합 상태 ──
         self.state_pub = self.create_publisher(
-            RobotState, f'/{self.bot_id}/robot_state', latched)
+            RobotState, '/robot_state', latched)
 
         # ── 구독 3종 ──
         self.create_subscription(
-            StateUpdate, f'/{self.bot_id}/state_update',
+            StateUpdate, '/state_update',
             self.on_state_update, 10)
         self.create_subscription(
-            PcCommand, f'/{self.bot_id}/pc_command',
+            PcCommand, '/pc_command',
             self.on_pc_command, 10)
         self.create_subscription(
-            VicpinkySignal, f'/{self.bot_id}/vicpinky_signal',
+            VicpinkySignal, '/vicpinky_signal',
             self.on_vicpinky_signal, 10)
 
         # ── 주기 발행 ──

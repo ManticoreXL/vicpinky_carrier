@@ -62,16 +62,16 @@ class ExplorerStateManager(Node):
         )
 
         self.state_pub = self.create_publisher(
-            RobotState, f'/{self.bot_id}/robot_state', latched)
+            RobotState, '/robot_state', latched)
 
         self.create_subscription(
-            StateUpdate, f'/{self.bot_id}/state_update',
+            StateUpdate, '/state_update',
             self.on_state_update, 10)
         self.create_subscription(
-            PcCommand, f'/{self.bot_id}/pc_command',
+            PcCommand, '/pc_command',
             self.on_pc_command, 10)
         self.create_subscription(
-            VicpinkySignal, f'/{self.bot_id}/vicpinky_signal',
+            VicpinkySignal, '/vicpinky_signal',
             self.on_vicpinky_signal, 10)
 
         period = 1.0 / pub_hz if pub_hz > 0 else 0.5
