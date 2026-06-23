@@ -22,7 +22,7 @@ import numpy as np
 import socketio
 from aiortc import RTCPeerConnection, RTCSessionDescription
 
-from people_viewer import PersonDetector, draw_detections, detections_to_payload
+from turtlebot_people_tracker.turtlebot_people_tracker.people_viewer import PersonDetector, draw_detections, detections_to_payload
 
 # ── 시그널링 이벤트 ───────────────────────────────────────────────────────────
 REQUEST_EVENT = "webrtc_request_stream"   # 브라우저가 스트림 요청 (devtools 확인됨)

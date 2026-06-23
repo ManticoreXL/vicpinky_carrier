@@ -1,24 +1,7 @@
 #!/usr/bin/env python3
-#
 # rescuer_bringup.launch.py
-# 구호 터틀봇 한 대를 구동하는 데 필요한 노드를 한 번에 켠다.
-#   1) 터틀봇 브링업 (모터/센서)
-#   2) 하드웨어 브링업 (LED/오디오/WebRTC — 상태 무관 항상 켜짐)
-#   3) DEPLOY 노드 (하차) — turtlebot3_hardware/deploy_node
-#   4) Nav2 (자율 주행) — turtlebot_state/map/disaster_map.yaml 사용
-#   5) 로컬 중앙 상태 노드 (rescuer_state_manager)
-#
-# 실행 예:
-#   ros2 launch turtlebot_state rescuer_bringup.launch.py bot_id:=tb3_04 marker_id:=4
-#
-# 주의:
-#   - 미션 진행 신호(DEPLOY/GO_LOAD 등)는 여기 없다. 그건 PC가 보낸다.
-#   - 라인트레이서/배달/주차 등 기능 노드는 아직 여기 안 넣었다.
-#     (노드가 더 만들어지면 이 파일에 한 줄씩 추가)
-#   - Nav2 launch 이름이 환경과 다르면 nav2_launch 부분을 수정.
 
 import os
-
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import (
@@ -30,58 +13,39 @@ from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
+from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    # ── 실행 인자 ──
+    # 실행 인자
+    default_bot_id = os.environ.get('BOT_ID', 'tb3_01')
+    default_marker = os.environ.get('MARKER_ID', '11')
+
+    bot_id_arg = DeclareLaunchArgument('bot_id', default_value=default_bot_id)
+    marker_arg = DeclareLaunchArgument('marker_id', default_value=default_marker)
+    use_sim_time_arg = DeclareLaunchArgument('use_sim_time', default_value='false')
+
     bot_id = LaunchConfiguration('bot_id')
     marker_id = LaunchConfiguration('marker_id')
     use_sim_time = LaunchConfiguration('use_sim_time')
 
-    declare_bot_id = DeclareLaunchArgument(
-        'bot_id', default_value='tb3_04',
-        description='로봇 ID (로그/마커 매칭용)')
-    declare_marker_id = DeclareLaunchArgument(
-        'marker_id', default_value='4',
-        description='주차 마커 번호')
-    declare_use_sim_time = DeclareLaunchArgument(
-        'use_sim_time', default_value='false',
-        description='시뮬레이션이면 true')
-
-    # ── 맵 파일 경로 (이 패키지 안에 설치된 맵) ──
+    # 맵 파일 경로 (이 패키지 안에 설치된 맵)
     map_yaml = os.path.join(
         get_package_share_directory('turtlebot_state'),
-        'map', 'disaster_map.yaml')
-
-    # ── 1) 브링업 ──
-    bringup_launch = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(
-            get_package_share_directory('turtlebot3_bringup'),
-            'launch', 'robot.launch.py')),
-        launch_arguments={'use_sim_time': use_sim_time}.items(),
+        'map', 
+        'disaster_map.yaml'
     )
 
-    # ── 2) 하드웨어 브링업 (LED/오디오/WebRTC) ──
-    hw_bringup = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(os.path.join(
-            get_package_share_directory('turtlebot3_hardware'),
-            'launch', 'hardware_bringup.launch.py')),
-        launch_arguments={
-            'bot_id': bot_id,
-            'device': '3',  # 가상 카메라 3번 고정 할당 (WebRTC용)
-        }.items(),
+    # 공통 스택
+    common = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource([
+            FindPackageShare('turtlebot3_hardware'), 
+            '/launch/robot_common.launch.py'
+        ]),
+        launch_arguments={'bot_id': bot_id}.items()
     )
 
-    # ── 3) DEPLOY 노드 (하차) ──
-    deploy_node = Node(
-        package='turtlebot3_hardware',
-        executable='deploy_node',
-        name='deploy_node',
-        output='screen',
-        parameters=[{'bot_id': bot_id}],
-    )
-
-    # ── 4) Nav2 (브링업 후 잠시 뒤에 켜서 센서/TF 준비 시간 확보) ──
+    # Nav2
     nav2_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(
             get_package_share_directory('turtlebot3_navigation2'),
@@ -93,7 +57,7 @@ def generate_launch_description():
     )
     nav2_delayed = TimerAction(period=5.0, actions=[nav2_launch])
 
-    # ── 5) 로컬 중앙 상태 노드 ──
+    # 구호봇 로컬 상태 노드
     state_node = Node(
         package='turtlebot_state',
         executable='rescuer_state_manager',
@@ -106,12 +70,10 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        declare_bot_id,
-        declare_marker_id,
-        declare_use_sim_time,
-        bringup_launch,
-        hw_bringup,
-        deploy_node,
+        bot_id_arg,
+        marker_arg,
+        use_sim_time_arg,
+        common,
         nav2_delayed,
         state_node,
     ])
