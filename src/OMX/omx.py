@@ -11,125 +11,159 @@ from flask import Flask, Response
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Bool, Float64MultiArray
-from sensor_msgs.msg import JointState
+from std_msgs.msg import Bool
 
 # ==========================================
-# 0. ROS 2 통신 노드
+#  ROS 2 통신 노드
 # ==========================================
 class OmxStateNode(Node):
     def __init__(self, start_event, stop_event):
         super().__init__('omx_state_node')
         self.start_event = start_event
         self.stop_event  = stop_event
-
-        self.loaded_pub    = self.create_publisher(Bool,             '/vision/is_loaded',    10)
-        self.motor_pos_pub = self.create_publisher(Float64MultiArray, '/vision/motor_position', 10)
-        self.motor_vel_pub = self.create_publisher(Float64MultiArray, '/vision/motor_velocity', 10)
-        self.motor_eff_pub = self.create_publisher(Float64MultiArray, '/vision/motor_effort',   10)
-
+ 
+        # 퍼블리셔 3개
+        self.loaded_pub     = self.create_publisher(Bool, '/vision/is_loaded',   10)
+        self.obj_red_pub    = self.create_publisher(Bool, '/vision/object_red',  10)
+        self.obj_blue_pub   = self.create_publisher(Bool, '/vision/object_blue', 10)
+ 
         self.start_sub = self.create_subscription(
             Bool, '/vision/start_inference', self.start_callback, 10)
+ 
+        # ── LOAD ROI 상태
+        self.is_loaded_locked  = False
+        self.loaded_start_time = None
+ 
+        # ── 빨강 ROI 상태
+        self.red_state         = True
+        self.red_absent_since  = None
+        self.red_present_since = None
+ 
+        # ── 파랑 ROI 상태
+        self.blue_state         = True
+        self.blue_absent_since  = None
+        self.blue_present_since = None
+ 
+        self.obj_detection_active = True
 
-        self.loaded_start_time    = None
-        self.last_published_state = None
-        self._last_motor_print    = 0.0
+        self.OBJ_ABSENT_SEC  = 20.0
+        self.OBJ_PRESENT_SEC =  5.0
+
+
         print("🚀 [노드 시작] 추론 제어 대기 중...")
+        self._do_publish_loaded(False)
+        self.obj_red_pub.publish(Bool(data=True))
+        self.obj_blue_pub.publish(Bool(data=True))
+
+    def _do_publish_loaded(self, val: bool):
+        self.loaded_pub.publish(Bool(data=val))
+
+    def _timer_republish(self):
+        self._do_publish_loaded(self.is_loaded_locked)
+        self.obj_red_pub.publish(Bool(data=self.red_state))
+        self.obj_blue_pub.publish(Bool(data=self.blue_state))
 
     def start_callback(self, msg):
         if msg.data:
             print("🔥 추론 시작 신호 수신!")
-            self.start_event.set()
+            # 빨강 또는 파랑 둘 중 하나라도 감지되면 시작 허용
+            if self.red_state or self.blue_state:
+                print("✅ 물체 감지 확인 → 추론 시작")
+                self.start_event.set()
+            else:
+                print("⛔ 두 ROI 모두 물체 없음 → 추론 시작 거부")
 
-    # ✅ LeRobot 후킹으로 받은 모터값을 여기서 발행
-    def publish_motor(self, positions, velocities, efforts):
-        now = time.time()
-        if positions:
-            self.motor_pos_pub.publish(Float64MultiArray(data=list(positions)))
-        if velocities:
-            self.motor_vel_pub.publish(Float64MultiArray(data=list(velocities)))
-        if efforts:
-            self.motor_eff_pub.publish(Float64MultiArray(data=list(efforts)))
+    def reset_loaded(self):
+        self.is_loaded_locked  = False
+        self.loaded_start_time = None
+        self._do_publish_loaded(False)
+        print("[Loaded] 상태 리셋 → false")
 
-        if now - self._last_motor_print >= 1.0:
-            pos_str = ", ".join(f"{p:.3f}" for p in positions) if positions else "-"
-            vel_str = ", ".join(f"{v:.3f}" for v in velocities) if velocities else "-"
-            print(f"[모터] pos=[{pos_str}]  vel=[{vel_str}]")
-            self._last_motor_print = now
+    def enable_obj_detection(self):
+        self.red_absent_since   = None
+        self.red_present_since  = None
+        self.blue_absent_since  = None
+        self.blue_present_since = None
+        self.obj_detection_active = True
 
-    def publish_loaded(self, is_loaded):
-        val = bool(is_loaded)
-        if self.last_published_state != val:
-            self.loaded_pub.publish(Bool(data=val))
-            self.last_published_state = val
-        self.check_and_stop(val)
-
-    def check_and_stop(self, is_loaded):
+    def publish_loaded(self, is_loaded: bool):
+        if self.is_loaded_locked:
+            return
         if is_loaded:
             if self.loaded_start_time is None:
                 self.loaded_start_time = time.time()
             elif time.time() - self.loaded_start_time >= 5.0:
+                self.is_loaded_locked = True
+                self._do_publish_loaded(True)
                 if not self.stop_event.is_set():
                     print("⚠️ LOADED 완료! 추론을 정지합니다.")
                     self.stop_event.set()
         else:
             self.loaded_start_time = None
 
+     # ── 빨강 ROI 판정 ───────────────────────────────────────────────
+    def publish_red_detected(self, raw: bool):
+        if not self.obj_detection_active:
+            return
+        now = time.time()
+        if self.red_state:
+            if not raw:
+                if self.red_absent_since is None:
+                    self.red_absent_since = now
+                elif now - self.red_absent_since >= self.OBJ_ABSENT_SEC:
+                    self.red_present_since = None
+                    self.red_state = False
+                    self.obj_red_pub.publish(Bool(data=False))
+                    print("[RedROI] 물체 없음 20초 → False")
+            else:
+                self.red_absent_since = None
+        else:
+            if raw:
+                if self.red_present_since is None:
+                    self.red_present_since = now
+                elif now - self.red_present_since >= self.OBJ_PRESENT_SEC:
+                    self.red_absent_since = None
+                    self.red_state = True
+                    self.obj_red_pub.publish(Bool(data=True))
+                    print("[RedROI] 물체 감지 5초 → True")
+            else:
+                self.red_present_since = None
+ 
+    # ── 파랑 ROI 판정 ───────────────────────────────────────────────
+    def publish_blue_detected(self, raw: bool):
+        if not self.obj_detection_active:
+            return
+        now = time.time()
+        if self.blue_state:
+            if not raw:
+                if self.blue_absent_since is None:
+                    self.blue_absent_since = now
+                elif now - self.blue_absent_since >= self.OBJ_ABSENT_SEC:
+                    self.blue_present_since = None
+                    self.blue_state = False
+                    self.obj_blue_pub.publish(Bool(data=False))
+                    print("[BlueROI] 물체 없음 20초 → False")
+            else:
+                self.blue_absent_since = None
+        else:
+            if raw:
+                if self.blue_present_since is None:
+                    self.blue_present_since = now
+                elif now - self.blue_present_since >= self.OBJ_PRESENT_SEC:
+                    self.blue_absent_since = None
+                    self.blue_state = True
+                    self.obj_blue_pub.publish(Bool(data=True))
+                    print("[BlueROI] 물체 감지 5초 → True")
+            else:
+                self.blue_present_since = None
+
 
 # ==========================================
-# 1. LeRobot 모터 후킹
-# ==========================================
-def _hook_lerobot_motor(ros_node):
-    """
-    LeRobot 의 dynamixel 버스 read 함수를 후킹해서
-    모터 position/velocity/effort 를 ROS 2 로 발행.
-
-    lerobot 패키지 구조에 따라 후킹 대상이 다를 수 있음:
-      - lerobot.common.robot_devices.motors.dynamixel  →  DynamixelMotorsBus.read()
-      - lerobot.common.robot_devices.robots.manipulator → ManipulatorRobot._read_state()
-    아래는 DynamixelMotorsBus.read() 후킹 방식.
-    """
-    try:
-        from lerobot.common.robot_devices.motors import dynamixel as _dyn_mod
-        OrigBus = _dyn_mod.DynamixelMotorsBus
-        _orig_read = OrigBus.read
-
-        def _hooked_read(self_bus, data_name, *args, **kwargs):
-            result = _orig_read(self_bus, data_name, *args, **kwargs)
-            if ros_node is None or not rclpy.ok():
-                return result
-            try:
-                positions  = []
-                velocities = []
-                efforts    = []
-                if data_name == "Present_Position":
-                    positions = list(result.values()) if isinstance(result, dict) else list(result)
-                elif data_name == "Present_Velocity":
-                    velocities = list(result.values()) if isinstance(result, dict) else list(result)
-                elif data_name == "Present_Current":
-                    efforts = list(result.values()) if isinstance(result, dict) else list(result)
-
-                if positions or velocities or efforts:
-                    ros_node.publish_motor(positions, velocities, efforts)
-            except Exception:
-                pass
-            return result
-
-        OrigBus.read = _hooked_read
-        print("[Hook] DynamixelMotorsBus.read() 후킹 완료 ✅")
-
-    except ImportError:
-        print("[Hook] ⚠️ DynamixelMotorsBus 임포트 실패 — 모터 후킹 건너뜀")
-    except Exception as e:
-        print(f"[Hook] ⚠️ 모터 후킹 오류: {e}")
-
-
-# ==========================================
-# 2. Flask 웹 서버 프로세스
+# Flask 웹 서버 프로세스
 # ==========================================
 def flask_worker(queue_front, queue_wrist):
     app = Flask(__name__)
-
+ 
     @app.route('/')
     def index():
         return '''
@@ -166,7 +200,7 @@ def flask_worker(queue_front, queue_wrist):
             try:
                 frame = frame_queue.get(timeout=0.1)
                 encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 50]
-                ret, buffer = cv2.imencode('.jpg', frame, encode_param)
+                ret, buffer  = cv2.imencode('.jpg', frame, encode_param)
                 if ret:
                     yield (b'--frame\r\n'
                            b'Content-Type: image/jpeg\r\n\r\n'
@@ -204,7 +238,7 @@ OriginalVideoCapture = cv2.VideoCapture
 
 
 # ==========================================
-# 3. 영구 카메라 관리
+# 카메라 관리
 # ==========================================
 def _get_or_open_cap(cam_index):
     with _persistent_lock:
@@ -221,25 +255,45 @@ def _get_or_open_cap(cam_index):
             _persistent_caps[cam_index] = cap
         return cap
 
+# ==========================================
+# 색상 감지
+# ==========================================
+def detect_red(hsv):
+    m1 = cv2.inRange(hsv, np.array([0,   70, 50]), np.array([10,  255, 255]))
+    m2 = cv2.inRange(hsv, np.array([170, 70, 50]), np.array([180, 255, 255]))
+    return m1 | m2
+ 
+def detect_blue(hsv):
+    return cv2.inRange(hsv, np.array([100, 70, 50]), np.array([130, 255, 255]))
+ 
+def detect_red_or_blue(hsv):
+    return detect_red(hsv) | detect_blue(hsv)
+ 
+def get_max_area(frm, y1, y2, x1, x2, mask_fn):
+    roi  = frm[y1:y2, x1:x2]
+    hsv  = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+    mask = mask_fn(hsv)
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not contours:
+        return 0, None
+    lc = max(contours, key=cv2.contourArea)
+    return cv2.contourArea(lc), cv2.boundingRect(lc)
 
 # ==========================================
-# 4. 독립 카메라 읽기 스레드 (추론과 무관하게 항상 동작)
+# 독립 카메라 읽기 스레드
 # ==========================================
-# 최신 프레임을 스레드 안전하게 보관
 _latest_frames = {5: None, 6: None}
 _frame_lock    = threading.Lock()
 
 def _camera_reader_thread(cam_index, stop_flag: threading.Event):
-    """
-    ✅ 핵심 수정: 추론 루프와 완전히 분리된 독립 스레드에서 카메라를 읽음.
-    LeRobot 이 종료되어도 이 스레드는 계속 동작 → Flask 화면 유지.
-    """
     print(f"[CamThread] 카메라 {cam_index} 읽기 스레드 시작")
-    frame_count      = 0
-    loaded_strike    = 0
-    WARMUP_FRAMES    = 60
-    REQUIRED_STRIKES = 60
+    frame_count       = 0
+    loaded_strike     = 0
+    WARMUP_FRAMES     = 60
+    REQUIRED_STRIKES  = 60
     is_loaded_printed = False
+
+    OBJ_MIN_AREA = 500
 
     while not stop_flag.is_set():
         cap = _get_or_open_cap(cam_index)
@@ -252,8 +306,29 @@ def _camera_reader_thread(cam_index, stop_flag: threading.Event):
             frame_count += 1
             debug_frame = frame.copy()
 
-            roi_y1, roi_y2, roi_x1, roi_x2 = 50, 240, 440, 640
-            cv2.rectangle(debug_frame, (roi_x1, roi_y1), (roi_x2, roi_y2), (255, 0, 0), 2)
+            r_roi_y1, r_roi_y2 = 50,  240
+            r_roi_x1, r_roi_x2 = 440, 640
+            lr_roi_y1, lr_roi_y2 = 200, 300  # 왼쪽 빨강
+            lr_roi_x1, lr_roi_x2 = 30,  200
+            lb_roi_y1, lb_roi_y2 = 90, 190  # 왼쪽 파랑
+            lb_roi_x1, lb_roi_x2 = 30,  200
+
+            cv2.rectangle(debug_frame,
+                          (r_roi_x1,  r_roi_y1),  (r_roi_x2,  r_roi_y2),  (255, 165, 0), 2)
+            cv2.rectangle(debug_frame,
+                          (lr_roi_x1, lr_roi_y1), (lr_roi_x2, lr_roi_y2), (0,   0,   255), 2)
+            cv2.rectangle(debug_frame,
+                          (lb_roi_x1, lb_roi_y1), (lb_roi_x2, lb_roi_y2), (255, 0,   0),   2)
+ 
+            cv2.putText(debug_frame, "LOAD ROI",
+                        (r_roi_x1  + 4, r_roi_y1  + 16),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 165, 0), 1)
+            cv2.putText(debug_frame, "RED ROI",
+                        (lr_roi_x1 + 4, lr_roi_y1 + 16),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 1)
+            cv2.putText(debug_frame, "BLUE ROI",
+                        (lb_roi_x1 + 4, lb_roi_y1 + 16),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 0, 0), 1)
 
             if frame_count < WARMUP_FRAMES:
                 if frame_count % 20 == 0:
@@ -261,62 +336,95 @@ def _camera_reader_thread(cam_index, stop_flag: threading.Event):
                 cv2.putText(debug_frame, "Warming Up...", (20, 40),
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2)
             else:
-                roi     = frame[roi_y1:roi_y2, roi_x1:roi_x2]
-                hsv_roi = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
-                mask    = cv2.inRange(hsv_roi,
-                                      np.array([0, 50, 50]),
-                                      np.array([180, 255, 255]))
-                contours, _ = cv2.findContours(
-                    mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-
-                max_area = 0
-                if contours:
-                    lc = max(contours, key=cv2.contourArea)
-                    max_area = cv2.contourArea(lc)
-                    x, y, w, h = cv2.boundingRect(lc)
+                # ── 오른쪽 LOAD ROI (빨강+파랑) ──────────────────────
+                r_area, r_rect = get_max_area(
+                    frame, r_roi_y1, r_roi_y2, r_roi_x1, r_roi_x2, detect_red_or_blue)
+                if r_rect is not None:
+                    rx, ry, rw, rh = r_rect
                     cv2.rectangle(debug_frame,
-                                  (x+roi_x1, y+roi_y1),
-                                  (x+w+roi_x1, y+h+roi_y1),
-                                  (0, 255, 255), 2)
-
-                if max_area > 1500:
+                                  (rx+r_roi_x1, ry+r_roi_y1),
+                                  (rx+rw+r_roi_x1, ry+rh+r_roi_y1),
+                                  (0, 165, 255), 2)
+ 
+                if r_area > 900:
                     loaded_strike += 1
-                    cv2.putText(debug_frame,
-                                f"Detecting: {max_area:.0f}px "
-                                f"(S:{loaded_strike}/{REQUIRED_STRIKES})",
-                                (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
                 else:
                     loaded_strike     = 0
                     is_loaded_printed = False
-
-                loaded_status = loaded_strike >= REQUIRED_STRIKES
-
-                if loaded_status:
-                    cv2.putText(debug_frame, "LOADED!", (20, 40),
-                                cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 255), 3)
-                    if not is_loaded_printed:
-                        print("\n=======================================================")
-                        print("🎯 LOADED! 터틀봇 위에 물건이 완벽하게 안착되었습니다!")
-                        print("=======================================================\n")
-                        is_loaded_printed = True
-
+ 
+                if global_ros_node is not None and global_ros_node.is_loaded_locked:
+                    cv2.putText(debug_frame, "LOADED! (LOCKED)", (r_roi_x1, 40),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                elif loaded_strike >= REQUIRED_STRIKES and not is_loaded_printed:
+                    cv2.putText(debug_frame, "LOADED!", (r_roi_x1, 40),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+                    is_loaded_printed = True
+ 
                 if global_ros_node is not None and rclpy.ok():
                     try:
-                        global_ros_node.publish_loaded(loaded_status)
+                        global_ros_node.publish_loaded(loaded_strike >= REQUIRED_STRIKES)
                     except Exception:
                         pass
-
-            # Flask 큐에 전달
+ 
+                # ── 왼쪽 빨강 ROI ────────────────────────────────────
+                lr_area, lr_rect = get_max_area(
+                    frame, lr_roi_y1, lr_roi_y2, lr_roi_x1, lr_roi_x2, detect_red)
+                if lr_rect is not None:
+                    lrx, lry, lrw, lrh = lr_rect
+                    cv2.rectangle(debug_frame,
+                                  (lrx+lr_roi_x1, lry+lr_roi_y1),
+                                  (lrx+lrw+lr_roi_x1, lry+lrh+lr_roi_y1),
+                                  (0, 80, 255), 2)
+ 
+                raw_red = lr_area > OBJ_MIN_AREA
+ 
+                if global_ros_node is not None:
+                    rc = (0, 255, 0) if global_ros_node.red_state else (100, 100, 255)
+                    cv2.putText(debug_frame,
+                                f"RED: {'ON' if global_ros_node.red_state else 'OFF'}",
+                                (lr_roi_x1, lr_roi_y2 + 18),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, rc, 1)
+ 
+                if global_ros_node is not None and rclpy.ok():
+                    try:
+                        global_ros_node.publish_red_detected(raw_red)
+                    except Exception:
+                        pass
+ 
+                # ── 왼쪽 파랑 ROI ────────────────────────────────────
+                lb_area, lb_rect = get_max_area(
+                    frame, lb_roi_y1, lb_roi_y2, lb_roi_x1, lb_roi_x2, detect_blue)
+                if lb_rect is not None:
+                    lbx, lby, lbw, lbh = lb_rect
+                    cv2.rectangle(debug_frame,
+                                  (lbx+lb_roi_x1, lby+lb_roi_y1),
+                                  (lbx+lbw+lb_roi_x1, lby+lbh+lb_roi_y1),
+                                  (255, 80, 0), 2)
+ 
+                raw_blue = lb_area > OBJ_MIN_AREA
+ 
+                if global_ros_node is not None:
+                    bc = (0, 255, 0) if global_ros_node.blue_state else (100, 100, 255)
+                    cv2.putText(debug_frame,
+                                f"BLUE: {'ON' if global_ros_node.blue_state else 'OFF'}",
+                                (lb_roi_x1, lb_roi_y1 - 8),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, bc, 1)
+ 
+                if global_ros_node is not None and rclpy.ok():
+                    try:
+                        global_ros_node.publish_blue_detected(raw_blue)
+                    except Exception:
+                        pass
+ 
             if global_queue_front is not None:
                 try:
                     global_queue_front.put_nowait(debug_frame)
                 except queue.Full:
                     pass
-
-            # 최신 프레임 저장 (LeRobot 이 read() 할 때 반환용)
+ 
             with _frame_lock:
                 _latest_frames[5] = frame.copy()
-
+ 
         elif cam_index == 6:
             if global_queue_wrist is not None:
                 try:
@@ -325,19 +433,14 @@ def _camera_reader_thread(cam_index, stop_flag: threading.Event):
                     pass
             with _frame_lock:
                 _latest_frames[6] = frame.copy()
-
+ 
     print(f"[CamThread] 카메라 {cam_index} 읽기 스레드 종료")
 
 
 # ==========================================
-# 5. HookedVideoCapture — 독립 스레드의 최신 프레임을 반환
+# HookedVideoCapture
 # ==========================================
 class HookedVideoCapture:
-    """
-    LeRobot 이 read() 를 호출하면 독립 스레드가 미리 읽어둔 최신 프레임을 반환.
-    release() 는 무시 → 장치 유지.
-    """
-
     def __init__(self, *args, **kwargs):
         try:
             self.cam_index = int(args[0]) if args else None
@@ -347,7 +450,7 @@ class HookedVideoCapture:
         if self.cam_index not in MANAGED_INDICES:
             self._cap = OriginalVideoCapture(*args, **kwargs)
         else:
-            self._cap = None  # 독립 스레드가 관리
+            self._cap = None
 
     def release(self):
         if self.cam_index in MANAGED_INDICES:
@@ -373,26 +476,22 @@ class HookedVideoCapture:
 
     def grab(self):
         if self.cam_index in MANAGED_INDICES:
-            return True  # 독립 스레드가 항상 읽고 있음
+            return True
         return self._cap.grab() if self._cap else False
 
     def retrieve(self, *args, **kwargs):
         if self.cam_index in MANAGED_INDICES:
             with _frame_lock:
                 f = _latest_frames.get(self.cam_index)
-            if f is not None:
-                return True, f.copy()
-            return False, None
+            return (True, f.copy()) if f is not None else (False, None)
         return self._cap.retrieve(*args, **kwargs) if self._cap else (False, None)
 
     def read(self, *args, **kwargs):
         if self.cam_index in MANAGED_INDICES:
-            # 독립 스레드가 읽어둔 최신 프레임 반환
             with _frame_lock:
                 f = _latest_frames.get(self.cam_index)
             if f is not None:
                 return True, f.copy()
-            # 아직 프레임이 없으면 직접 읽기 (초기 워밍업)
             cap = _get_or_open_cap(self.cam_index)
             return cap.read(*args, **kwargs)
         return self._cap.read(*args, **kwargs) if self._cap else (False, None)
@@ -401,9 +500,6 @@ class HookedVideoCapture:
 cv2.VideoCapture = HookedVideoCapture
 
 
-# ==========================================
-# stop_event 감시 watchdog
-# ==========================================
 def stop_watchdog(stop_event):
     stop_event.wait()
     print("\n[Watchdog] stop_event 감지 → 추론 루프 종료")
@@ -411,7 +507,7 @@ def stop_watchdog(stop_event):
 
 
 # ==========================================
-# 6. 메인 실행부
+# 메인 실행부
 # ==========================================
 if __name__ == "__main__":
     rclpy.init()
@@ -431,19 +527,14 @@ if __name__ == "__main__":
     )
     flask_process.start()
 
-    # ✅ 카메라 사전 오픈
     print("[Camera] 카메라 사전 오픈 중...")
     _get_or_open_cap(5)
     _get_or_open_cap(6)
 
-    # ✅ 독립 카메라 읽기 스레드 시작 (프로그램 종료 전까지 계속 동작)
     cam_stop_flag = threading.Event()
     threading.Thread(target=_camera_reader_thread, args=(5, cam_stop_flag), daemon=True).start()
     threading.Thread(target=_camera_reader_thread, args=(6, cam_stop_flag), daemon=True).start()
     print("[Camera] 카메라 읽기 스레드 시작 ✅\n")
-
-    # ✅ LeRobot 모터 후킹
-    _hook_lerobot_motor(global_ros_node)
 
     sys.argv = [
         "robot_client",
@@ -469,10 +560,8 @@ if __name__ == "__main__":
     print("🚀 Flask 서버 및 ROS 2 노드 시작")
     print("PC 브라우저 접속: http://10.10.14.24:5000")
     print("발행 토픽:")
-    print("  /vision/is_loaded        (Bool)")
-    print("  /vision/motor_position   (Float64MultiArray)")
-    print("  /vision/motor_velocity   (Float64MultiArray)")
-    print("  /vision/motor_effort     (Float64MultiArray)\n")
+    print("  /vision/is_loaded       (Bool)")
+    print("  /vision/object_detected (Bool)\n")
 
     while True:
         print("⏳ [대기] 추론 시작 신호를 기다립니다...")
@@ -480,6 +569,8 @@ if __name__ == "__main__":
         start_event.wait()
         start_event.clear()
         stop_event.clear()
+
+        global_ros_node.reset_loaded()
 
         watchdog = threading.Thread(target=stop_watchdog, args=(stop_event,), daemon=True)
         watchdog.start()
@@ -491,3 +582,5 @@ if __name__ == "__main__":
             print("\n🛑 추론 종료됨. 다시 신호를 기다립니다.")
         except Exception as e:
             print(f"오류: {e}")
+
+        global_ros_node.enable_obj_detection()
