@@ -52,7 +52,7 @@ def generate_launch_description():
             'launch', 'navigation2.launch.py')),
         launch_arguments={
             'use_sim_time': use_sim_time,
-            'map': map_yaml,
+            # 'map': map_yaml,
         }.items(),
     )
     nav2_delayed = TimerAction(period=5.0, actions=[nav2_launch])
