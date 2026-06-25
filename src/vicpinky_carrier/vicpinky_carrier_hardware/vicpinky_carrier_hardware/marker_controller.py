@@ -76,7 +76,7 @@ class CentralParkingController(Node):
         self.current_robot = None
         self.current_goal = None
         self.goal_index = None
-        self.start_parking = True #기본값 False
+        self.start_parking = False
         self.load_seq = 0
         robot_namespaces = ['tb3_01', 'tb3_02', 'tb3_03', 'tb3_04']
         self.robot_id_list = [1, 2, 3, 4]  
@@ -274,7 +274,7 @@ class CentralParkingController(Node):
                         or self.tb3_01_stage == 'PARKING'):
                         if mid == 1:
                             self.current_robot = mid
-                if self.current_robot is not None and mid in self.robot_id_list:
+                if self.current_robot == mid:
                     robot_x = int(cx)
                     robot_y = int(cy)
                     self.theta_buf.append(th)
@@ -468,18 +468,25 @@ class CentralParkingController(Node):
         cv2.putText(frame, mult_str, (15, frame.shape[0] - 15), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 255, 255), 1)
 
         if self.state == 4:
-            mode_msg = VicpinkySignal()
-            mode_msg.signal = "DONE"
-            mode_msg.stamp = self.get_clock().now().to_msg()
-            self.robot_mode_pub[self.current_robot-1].publish(mode_msg)
-            self.tb3_01_stage = ""
-            self.tb3_02_stage = ""
-            self.tb3_03_stage = ""
-            self.tb3_04_stage = ""
-            self.chase_marker_start = False
-            self.current_robot = None
-            self.current_goal = None
-            self.goal_index = None
+            if not self.start_parking and self.load_seq == 0:
+                self.state = 1
+                self.current_goal = None
+                self.load_seq = 1
+            else :
+                mode_msg = VicpinkySignal()
+                mode_msg.signal = "DONE"
+                mode_msg.stamp = self.get_clock().now().to_msg()
+                self.robot_mode_pub[self.current_robot-1].publish(mode_msg)
+                self.tb3_01_stage = ""
+                self.tb3_02_stage = ""
+                self.tb3_03_stage = ""
+                self.tb3_04_stage = ""
+                self.load_seq = 0
+                self.state = 1
+                self.chase_marker_start = False
+                self.current_robot = None
+                self.current_goal = None
+                self.goal_index = None
 
         # print("[TRACK] 5. _show_frame 호출 직전", flush=True)
         self._show_frame(frame)

@@ -37,6 +37,7 @@ class RampControlServer(Node):
         )
 
         self.motor=MirrorMotorControl('/dev/open_rb_ramp',12,13)
+        self.motor.set_profile_acc(3)
         self.motor.set_profile_vel(30)
 
     def timer_callback(self):

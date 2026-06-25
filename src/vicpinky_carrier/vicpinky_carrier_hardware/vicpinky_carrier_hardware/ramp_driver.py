@@ -11,6 +11,7 @@ class MirrorMotorControl:
 
         # 주소값 설정
         self.addr_torque_en = 64
+        self.addr_profile_acc = 108
         self.addr_profile_vel = 112
         self.addr_goal_pos = 116
         self.addr_moving = 122
@@ -51,8 +52,15 @@ class MirrorMotorControl:
         state = "en" if enable else "dis"
         print(f"Motor touque {state}abled!")
 
+    def set_profile_acc(self,acc):
+        # 각도제어 가속도 설정
+        profile_acc=acc # 0은 최대 가속도
+
+        self.packetHandler.write4ByteTxRx(self.portHandler, self.id_l, self.addr_profile_acc, profile_acc)
+        self.packetHandler.write4ByteTxRx(self.portHandler, self.id_r, self.addr_profile_acc, profile_acc)
+
     def set_profile_vel(self,vel):
-        # 각도제어 속력 설정
+        # 각도제어 속도 설정
         profile_vel=vel # 0은 최대 속도
 
         self.packetHandler.write4ByteTxRx(self.portHandler, self.id_l, self.addr_profile_vel, profile_vel)
