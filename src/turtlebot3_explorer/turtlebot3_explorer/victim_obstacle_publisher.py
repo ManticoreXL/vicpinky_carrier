@@ -47,7 +47,7 @@ class VictimObstaclePublisher(Node):
         self.declare_parameter('victim_list_topic', '/victim/list')
         self.declare_parameter('obstacle_topic', '/victim/obstacles')
         self.declare_parameter('map_frame', 'map')
-        self.declare_parameter('obstacle_radius', 0.30)   # victim 1명당 장애물 원 반경(m)
+        self.declare_parameter('obstacle_radius', 1.0)   # victim 1명당 장애물 원 반경(m)
         self.declare_parameter('obstacle_points', 12)     # 원형으로 뿌릴 점 개수
         self.declare_parameter('obstacle_height', 0.10)   # 점 z 높이(costmap 높이 필터에 걸리게)
         self.declare_parameter('pub_rate', 2.0)           # 발행 주기(Hz)
