@@ -1,0 +1,112 @@
+name: domain_bridge_vicpinky
+# vicpinky carrier (domain 40) ↔ hub (domain 49)
+#
+# 🔧 수정 이력:
+#   - 기존: 리스트 형식(- topic:) + 허브 도메인 0 → 표준 domain_bridge 도구가
+#     파싱하지 못하고, 허브(49)가 아닌 0으로 중계되어 백엔드에 데이터가 도달하지 못함.
+#   - 변경: tb3/omx 와 동일한 "맵 형식 + 허브 49"로 통일.
+#   - vicpinky 는 자기 도메인(40)에서 이미 /vicpinky/* 네임스페이스로 발행하므로
+#     uplink 토픽은 remap 없이 도메인만 40→49 로 바꾼다.
+#   - /tf, /tf_static 은 네트워크 부하 때문에 중계하지 않는다(tb3 와 동일 정책).
+#   - carrier_msgs/action/CarrierTask 는 워크스페이스에 빌드돼 있지 않아 타입을
+#     찾지 못하면 브릿지 전체가 죽으므로 주석 처리(빌드 후 활성화).
+
+topics:
+
+  /ramp_state:
+    type: vicpinky_carrier_interfaces/msg/RampState
+    from_domain: 40
+    to_domain: 41
+    remap: /ramp_state
+
+  /ramp_state:
+    type: vicpinky_carrier_interfaces/msg/RampState
+    from_domain: 40
+    to_domain: 42
+    remap: /ramp_state
+
+  /ramp_state:
+    type: vicpinky_carrier_interfaces/msg/RampState
+    from_domain: 40
+    to_domain: 43
+    remap: /ramp_state
+
+  /ramp_state:
+    type: vicpinky_carrier_interfaces/msg/RampState
+    from_domain: 40
+    to_domain: 44
+    remap: /ramp_state
+
+  # 로봇의 현재 상태 빅핑키로 불러오기
+  /robot_state:
+    type: turtlebot_state_msgs/msg/RobotState
+    from_domain: 41
+    to_domain: 40
+    remap: /tb3_01/robot_state
+
+  /robot_state:
+    type: turtlebot_state_msgs/msg/RobotState
+    from_domain: 42
+    to_domain: 40
+    remap: /tb3_02/robot_state
+
+  /robot_state:
+    type: turtlebot_state_msgs/msg/RobotState
+    from_domain: 43
+    to_domain: 40
+    remap: /tb3_03/robot_state
+
+  /robot_state:
+    type: turtlebot_state_msgs/msg/RobotState
+    from_domain: 44
+    to_domain: 40
+    remap: /tb3_04/robot_state
+
+  # 터틀에게 cmd_vel 보내기
+  /tb3_01/cmd_vel:
+    type: geometry_msgs/msg/TwistStamped
+
+    from_domain: 40
+    to_domain: 41
+    remap: /cmd_vel
+
+  /tb3_02/cmd_vel:
+    type: geometry_msgs/msg/TwistStamped
+    from_domain: 40
+    to_domain: 42
+    remap: /cmd_vel
+
+  /tb3_03/cmd_vel:
+    type: geometry_msgs/msg/TwistStamped
+    from_domain: 40
+    to_domain: 43
+    remap: /cmd_vel
+
+  /tb3_04/cmd_vel:
+    type: geometry_msgs/msg/TwistStamped
+    from_domain: 40
+    to_domain: 44
+    remap: /cmd_vel
+
+
+services:
+
+  # ── DOWNLINK 서비스: 허브(49) → vicpinky(40) ──
+  # /vicpinky/run_diagnosis:
+  #   type: std_srvs/srv/Trigger
+  #   from_domain: 49
+  #   to_domain: 40
+
+actions:
+
+  # ── DOWNLINK 액션: 허브(49) → vicpinky(40) ──
+  # /ramp_control:
+  #   type: vicpinky_carrier_interfaces/action/RampControl
+  #   from_domain: 49
+  #   to_domain: 40
+
+  # carrier_msgs 미빌드 — 빌드 후 주석 해제할 것
+  # /vicpinky/carrier_task:
+  #   type: carrier_msgs/action/CarrierTask
+  #   from_domain: 49
+  #   to_domain: 40

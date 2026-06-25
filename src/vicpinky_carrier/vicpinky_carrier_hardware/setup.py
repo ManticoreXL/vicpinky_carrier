@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'ramp_action_server = vicpinky_carrier_hardware.ramp_action_server:main',
+            'marker_controller = vicpinky_carrier_hardware.marker_controller:main',
         ],
     },
 )

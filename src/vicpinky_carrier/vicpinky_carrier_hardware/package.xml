@@ -10,6 +10,7 @@
   <exec_depend>rclpy</exec_depend>
   <exec_depend>dynamixel_sdk</exec_depend>
   <exec_depend>vicpinky_carrier_interfaces</exec_depend>
+  <exec_depend>turtlebot3_state_msgs</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>
