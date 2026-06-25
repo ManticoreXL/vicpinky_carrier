@@ -30,6 +30,9 @@ setup(
         'console_scripts': [
             'mission_coordinator = turtlebot3_explorer.mission_coordinator:main',
             'victim_mapper = turtlebot3_explorer.victim_mapper:main',
+            'victim_inspector = turtlebot3_explorer.victim_inspector:main',
+            'victim_obstacle_publisher = turtlebot3_explorer.victim_obstacle_publisher:main',
+            'victim_detector = turtlebot3_explorer.victim_detector:main',
         ],
     },
 )
