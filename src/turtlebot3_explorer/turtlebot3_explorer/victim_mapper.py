@@ -70,15 +70,12 @@ class VictimMapper(Node):
         self.declare_parameter('uncert_slope', 0.10)
         self.declare_parameter('max_range', 6.0)         # 이보다 먼 추정은 신뢰 안 함(m)
 
-        # ---- 폴백(바닥 교차 실패 시): bbox 높이 기반 거리추정 + 클램프 ----
-        #   카메라가 수평으로 고정돼 시선이 바닥과 안 만날 때, bbox 픽셀 높이로
-        #   거리(d = fy*H/h)를 추정해 bbox 중심 방향으로 투영. 자세를 모르므로
-        #   [min,max]로 클램프하고 불확실성 반경을 크게 줘서 '추정 구역'으로 표시.
+        # ---- 폴백(바닥 교차 실패 시): bbox 높이/너비 동적 기반 거리추정 + 클램프 ----
         self.declare_parameter('enable_fallback', True)
-        self.declare_parameter('assumed_person_height', 1.6)  # 추정용 사람 '세로' 크기(m). 누우면 작아짐 → 클램프로 보정
+        self.declare_parameter('assumed_person_height', 1.6)  # 사람의 몸길이/키 기준값(m)
         self.declare_parameter('fallback_range', 2.5)        # bbox 추정 불가 시 기본 거리(m)
         self.declare_parameter('fallback_min_range', 1.0)    # 거리추정 하한(m)
-        self.declare_parameter('fallback_max_range', 4.0)    # 거리추정 상한(m, 누운 사람 폭주 방지)
+        self.declare_parameter('fallback_max_range', 4.0)    # 거리추정 상한(m)
         self.declare_parameter('fallback_uncert', 1.5)       # 폴백 점의 불확실성 반경(m)
 
         self.declare_parameter('csv_path', os.path.expanduser('~/maps/victims.csv'))
@@ -170,8 +167,10 @@ class VictimMapper(Node):
             bb = d.bbox
             u = bb.center.position.x
             v = bb.center.position.y + bb.size_y / 2.0   # bbox 하단(발 접점 가정)
-            h_px = bb.size_y                             # bbox 픽셀 높이(폴백 거리추정용)
-            est, reason = self._project_to_ground(u, v, h_px, stamp)
+            w_px = bb.size_x                             # bbox 픽셀 너비 (누운 사람 고려)
+            h_px = bb.size_y                             # bbox 픽셀 높이 (서 있는 사람 고려)
+            
+            est, reason = self._project_to_ground(u, v, w_px, h_px, stamp)
             if est is None:
                 reasons.append(reason)
                 continue
@@ -185,7 +184,7 @@ class VictimMapper(Node):
         # 정확(ground) 후보를 우선, 그 안에서 가까운 것. ground 없으면 fallback 중 가까운 것.
         cand.sort(key=lambda c: (0 if c[4] == 'ground' else 1, c[2]))
         mx, my, dist, radius, method = cand[0]
-        tag = '정확(바닥교차)' if method == 'ground' else '추정(방향기반)'
+        tag = '정확(바닥교차)' if method == 'ground' else '추정(동적크기)'
         self.get_logger().info(f'[det] 후보 채택 [{tag}] map=({mx:.2f},{my:.2f}) dist={dist:.2f}m r={radius:.2f}m')
 
         if self._near_known(mx, my):      # 이미 아는 victim 근처면 무시
@@ -278,10 +277,10 @@ class VictimMapper(Node):
     # ==================================================================
     # 바닥 평면 투영: 픽셀 (u,v) -> map (x,y)
     # ==================================================================
-    def _project_to_ground(self, u, v, h_px, stamp):
+    def _project_to_ground(self, u, v, w_px, h_px, stamp):
         """ 디버그판: (결과, 사유문자열) 반환.
             결과는 (x, y, dist, radius, method) 또는 None.
-            method='ground'(바닥교차, 정확) / 'fallback'(bbox 거리추정, 추정구역) """
+            method='ground'(바닥교차, 정확) / 'fallback'(bbox 동적추정, 추정구역) """
         fx, fy, cx, cy = self.K
 
         tf = None
@@ -319,19 +318,25 @@ class VictimMapper(Node):
         else:
             ground_reason = f'시선이 바닥과 안만남 (D_z={D[2]:.3f}>=0, 카메라 수평/위쪽; cam_z={O[2]:.2f})'
 
-        # --- 2순위(폴백): bbox 픽셀 높이로 거리추정 d=fy*H/h, 중심 방향 투영 ---
+        # --- 2순위(폴백): bbox '최대 픽셀 길이'로 동적 거리추정 ---
         if not self.enable_fallback:
             return None, ground_reason
-        # bbox 높이로 거리 추정 (h_px 가 유효할 때만)
-        if h_px and h_px > 1.0:
-            d_est = fy * self.assumed_person_height / float(h_px)
+            
+        # 가로, 세로 중 더 긴 값을 찾아 거리 추정에 사용
+        if w_px is not None and h_px is not None and max(w_px, h_px) > 1.0:
+            max_px = float(max(w_px, h_px))
+            # 가로가 길면(누워있음) fx, 세로가 길면(서있음) fy 초점거리 사용
+            f_effective = fx if w_px > h_px else fy
+            
+            # assumed_person_height (1.6m)를 가장 긴 픽셀 길이에 대응
+            d_est = f_effective * self.assumed_person_height / max_px
             d_clamped = max(self.fallback_min_range, min(self.fallback_max_range, d_est))
-            est_note = f'bbox추정 d={d_est:.1f}→clamp {d_clamped:.1f}m'
+            est_note = f'bbox동적추정(max_px={max_px:.1f}) d={d_est:.1f}→clamp {d_clamped:.1f}m'
         else:
             d_clamped = self.fallback_range
-            est_note = f'bbox높이 없음→기본 {d_clamped:.1f}m'
+            est_note = f'bbox크기 비정상→기본 {d_clamped:.1f}m'
 
-        # bbox 중심 시선을 수평면에 투영한 방향으로 d_clamped 만큼
+        # bbox 중심 시선을 수평면에 투영한 방향으로 d_clamped 만큼 이동
         d_ctr = np.array([(u - cx) / fx, 0.0, 1.0])   # 수직성분 제거 → 광축 수평면 방향
         Dc = R @ d_ctr
         norm = math.hypot(Dc[0], Dc[1])
