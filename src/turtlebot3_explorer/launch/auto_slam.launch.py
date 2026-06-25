@@ -101,6 +101,22 @@ def generate_launch_description():
         }],
     )
 
+    # ---- victim_obstacle_publisher (t=0) : 확정 victim 을 costmap 장애물로 발행 ----
+    #   /victim/list → /victim/obstacles(PointCloud2). nav2 가 victim 을 우회.
+    #   (실시간/데모 공용 노드. 회피 로직은 여기 한 곳에만 둔다.)
+    victim_obstacle = Node(
+        package='turtlebot3_explorer',
+        executable='victim_obstacle_publisher',
+        name='victim_obstacle_publisher',
+        output='screen',
+        parameters=[{
+            'use_sim_time': ParameterValue(use_sim_time, value_type=bool),
+            'obstacle_topic': '/victim/obstacles',
+            'map_frame': 'map',
+            'obstacle_radius': 0.30,
+        }],
+    )
+
     # ---- slam_toolbox (t=0) ----
     slam = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(slam_launch),
@@ -162,6 +178,7 @@ def generate_launch_description():
         cam_mount,         ### [추가]
         cam_optical,       ### [추가]
         victim_mapper,     ### [변경] (PC: 투영/확정/마커/CSV)
+        victim_obstacle,   ### [추가] (victim 회피 장애물 발행)
         slam,
         rviz,
         nav2,
