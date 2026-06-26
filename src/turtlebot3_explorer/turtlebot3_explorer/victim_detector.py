@@ -18,6 +18,7 @@ victim_detector  (라파이 측 실행 / 추론 전용)
 """
 
 import os
+import datetime
 
 import numpy as np
 import cv2
@@ -25,10 +26,11 @@ import onnxruntime as ort
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
+from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy, QoSDurabilityPolicy
 
 from sensor_msgs.msg import CompressedImage
 from vision_msgs.msg import Detection2D, Detection2DArray, BoundingBox2D, ObjectHypothesisWithPose
+from geometry_msgs.msg import PoseStamped
 
 
 class VictimDetector(Node):
@@ -45,12 +47,30 @@ class VictimDetector(Node):
         self.declare_parameter('nms_iou', 0.5)
         self.declare_parameter('process_interval', 0.1)  # 추론 최소 간격(초) = 최대 ~10Hz
 
+        # ---- 조난자 확정 스냅샷 ----
+        #   PC 의 victim_mapper 가 /victim/confirmed 를 내면, 그 순간의 카메라
+        #   최신 프레임 1장을 jpg 로 저장(victims.csv 옆). 대역폭 절약 위해
+        #   이미지는 PC 로 안 보내고 로봇 로컬에 저장.
+        self.declare_parameter('enable_snapshot', True)
+        self.declare_parameter('confirmed_topic', '/victim/confirmed')
+        self.declare_parameter('snapshot_dir', os.path.expanduser('~/maps'))
+        self.declare_parameter('snapshot_prefix', 'victim')   # 파일명 접두어
+        self.declare_parameter('publish_snapshot', True)      # 서버 확인용 이미지 토픽 발행
+        self.declare_parameter('snapshot_topic', '/victim/snapshot')
+        self.declare_parameter('snapshot_jpeg_quality', 80)   # jpg 압축 품질(1~100)
+
         g = self.get_parameter
         self.camera_frame = g('camera_frame').value
         self.input_size = int(g('input_size').value)
         self.conf_thr = float(g('conf_threshold').value)
         self.nms_iou = float(g('nms_iou').value)
         self.process_interval = float(g('process_interval').value)
+
+        self.enable_snapshot = bool(g('enable_snapshot').value)
+        self.snapshot_dir = g('snapshot_dir').value
+        self.snapshot_prefix = g('snapshot_prefix').value
+        self.publish_snapshot = bool(g('publish_snapshot').value)
+        self.snapshot_jpeg_quality = int(g('snapshot_jpeg_quality').value)
 
         # ---- ONNX 세션 (라파이 = CPU. 가속기 쓰면 providers 변경) ----
         model_path = g('model_path').value
@@ -59,11 +79,38 @@ class VictimDetector(Node):
         self.get_logger().info(f'ONNX 로드 완료: {model_path}')
 
         self.last_proc_time = None
+        self._last_frame = None        # 최신 디코드 프레임(BGR) 보관 — 스냅샷용
+        self._snap_count = 0           # 저장한 스냅샷 수(파일 순번)
 
         sensor_qos = QoSProfile(depth=1, reliability=QoSReliabilityPolicy.BEST_EFFORT,
                                 history=QoSHistoryPolicy.KEEP_LAST)
         self.create_subscription(CompressedImage, g('image_topic').value, self._image_cb, sensor_qos)
         self.pub_det = self.create_publisher(Detection2DArray, g('detections_topic').value, 10)
+
+        # ---- 확정 스냅샷: /victim/confirmed 구독 ----
+        if self.enable_snapshot:
+            try:
+                os.makedirs(self.snapshot_dir, exist_ok=True)
+            except OSError as e:
+                self.get_logger().warn(f'스냅샷 폴더 생성 실패({self.snapshot_dir}): {e}')
+            self.create_subscription(
+                PoseStamped, g('confirmed_topic').value, self._confirmed_cb, 10)
+            self.get_logger().info(
+                f'확정 스냅샷 활성화 → {self.snapshot_dir}/{self.snapshot_prefix}_*.jpg')
+
+            # 서버 확인용 이미지 토픽(latched: 늦게 붙은 구독자도 마지막 사진 수신)
+            self.pub_snapshot = None
+            if self.publish_snapshot:
+                snap_qos = QoSProfile(
+                    depth=1,
+                    reliability=QoSReliabilityPolicy.RELIABLE,
+                    durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+                    history=QoSHistoryPolicy.KEEP_LAST,
+                )
+                self.pub_snapshot = self.create_publisher(
+                    CompressedImage, g('snapshot_topic').value, snap_qos)
+                self.get_logger().info(
+                    f'스냅샷 이미지 토픽 발행 → {g("snapshot_topic").value} (CompressedImage/jpeg)')
 
         self.get_logger().info('victim_detector(추론) 시작. 카메라 영상 대기 중...')
 
@@ -78,6 +125,7 @@ class VictimDetector(Node):
         frame = cv2.imdecode(buf, cv2.IMREAD_COLOR)   # BGR
         if frame is None:
             return
+        self._last_frame = frame      # 스냅샷용 최신 프레임 보관
 
         dets = self._infer(frame)   # [(x1,y1,x2,y2,score), ...] 원본 픽셀 좌표
         if not dets:
@@ -102,6 +150,52 @@ class VictimDetector(Node):
             d.results.append(hyp)
             arr.detections.append(d)
         self.pub_det.publish(arr)
+
+    # ==================================================================
+    # 확정 스냅샷: /victim/confirmed 수신 시 최신 프레임 1장 저장
+    # ==================================================================
+    def _confirmed_cb(self, msg: PoseStamped):
+        if not self.enable_snapshot:
+            return
+        if self._last_frame is None:
+            self.get_logger().warn('확정 신호 수신했으나 보관된 카메라 프레임이 없음 — 스냅샷 생략.')
+            return
+        x = msg.pose.position.x
+        y = msg.pose.position.y
+        self._snap_count += 1
+        ts = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        # 파일명: victim_001_x3.61_y1.21_20260626_114501.jpg
+        fname = (f'{self.snapshot_prefix}_{self._snap_count:03d}'
+                 f'_x{x:.2f}_y{y:.2f}_{ts}.jpg')
+        path = os.path.join(self.snapshot_dir, fname)
+        try:
+            ok = cv2.imwrite(path, self._last_frame)
+            if ok:
+                self.get_logger().info(f'★ 조난자 스냅샷 저장: {path}')
+            else:
+                self.get_logger().error(f'스냅샷 저장 실패(cv2.imwrite False): {path}')
+        except Exception as e:
+            self.get_logger().error(f'스냅샷 저장 오류: {e}')
+
+        # 서버 확인용: 같은 프레임을 CompressedImage(jpeg)로 발행
+        if self.publish_snapshot and self.pub_snapshot is not None:
+            try:
+                enc = [int(cv2.IMWRITE_JPEG_QUALITY), self.snapshot_jpeg_quality]
+                ok2, jpg = cv2.imencode('.jpg', self._last_frame, enc)
+                if ok2:
+                    out = CompressedImage()
+                    # 확정 좌표 시각을 보존(서버가 좌표·사진 매칭에 사용 가능)
+                    out.header.stamp = msg.header.stamp
+                    out.header.frame_id = self.camera_frame
+                    out.format = 'jpeg'
+                    out.data = jpg.tobytes()
+                    self.pub_snapshot.publish(out)
+                    self.get_logger().info(
+                        f'스냅샷 토픽 발행 ({len(out.data)//1024} KB).')
+                else:
+                    self.get_logger().error('스냅샷 jpeg 인코딩 실패.')
+            except Exception as e:
+                self.get_logger().error(f'스냅샷 토픽 발행 오류: {e}')
 
     # ==================================================================
     # YOLO 추론 + 후처리 (NMS 직접)  — 원본과 동일
