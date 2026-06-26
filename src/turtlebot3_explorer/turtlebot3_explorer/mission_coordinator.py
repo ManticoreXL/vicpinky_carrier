@@ -69,8 +69,13 @@ class ExplorationCoordinator(Node):
         self.declare_parameter('exclude_rear', True)
         #   rear_depth: 시작점에서 뒤로 막을 깊이(m). 모선이 뒤로 차지하는 길이.
         self.declare_parameter('rear_depth', 2.0)
-        #   rear_width: 막을 좌우 폭(m). 중심선 기준 양옆으로 절반씩.
+        #   rear_width: 막을 좌우 폭(m). 중심선 기준 양옆으로 절반씩. (좌우 대칭용; 하위호환)
         self.declare_parameter('rear_width', 1.5)
+        #   rear_left / rear_right: 좌우 비대칭으로 막고 싶을 때 각 방향 거리(m).
+        #   음수(기본 -1)면 미지정 → rear_width/2 를 양쪽에 사용.
+        #   하나라도 0 이상이면 그 값이 우선(해당 방향만 비대칭 적용).
+        self.declare_parameter('rear_left', -1.0)
+        self.declare_parameter('rear_right', -1.0)
         #   rear_front_pad: 시작점보다 살짝 앞까지 박스를 당길 여유(m). 0이면 시작점이 박스 앞면.
         #   (로봇 몸 길이만큼 앞도 막고 싶을 때 약간 줌)
         self.declare_parameter('rear_front_pad', 0.0)
@@ -102,6 +107,11 @@ class ExplorationCoordinator(Node):
         self.exclude_rear = bool(self.get_parameter('exclude_rear').value)
         self.rear_depth = float(self.get_parameter('rear_depth').value)
         self.rear_width = float(self.get_parameter('rear_width').value)
+        _rl = float(self.get_parameter('rear_left').value)
+        _rr = float(self.get_parameter('rear_right').value)
+        # 미지정(음수)이면 rear_width 절반을 사용 → 좌우 비대칭 가능
+        self.rear_left = _rl if _rl >= 0.0 else self.rear_width / 2.0
+        self.rear_right = _rr if _rr >= 0.0 else self.rear_width / 2.0
         self.rear_front_pad = float(self.get_parameter('rear_front_pad').value)
         self.max_return_attempts = int(self.get_parameter('max_return_attempts').value)
         self.goal_retry_delay = float(self.get_parameter('goal_retry_delay').value)
@@ -483,26 +493,25 @@ class ExplorationCoordinator(Node):
         self.start_dir = (math.cos(yaw0), math.sin(yaw0))
         self.get_logger().info(
             f'출발선 저장: P0=({x0:.2f},{y0:.2f}), heading={math.degrees(yaw0):.0f}° '
-            f'→ 뒤쪽 금지박스(깊이 {self.rear_depth:.1f}m × 폭 {self.rear_width:.1f}m) 적용.')
+            f'→ 뒤쪽 금지박스(깊이 {self.rear_depth:.1f}m, 좌 {self.rear_left:.1f}m / 우 {self.rear_right:.1f}m) 적용.')
         self._publish_rear_marker()
 
     def _rear_box_corners(self):
         """ 금지박스 네 모서리를 map 좌표로 반환(시계방향). 출발점·방향 기준.
-            forward ∈ [-rear_depth, +rear_front_pad], |left| <= rear_width/2 """
+            forward ∈ [-rear_depth, +rear_front_pad], left ∈ [-rear_right, +rear_left] """
         x0, y0 = self.start_pos
         fx, fy = self.start_dir            # 전방 단위벡터
         lx, ly = (-fy, fx)                 # 왼쪽 단위벡터(전방을 +90° 회전)
         f_front = self.rear_front_pad      # 박스 앞면(보통 0 = 출발점)
         f_back = -self.rear_depth          # 박스 뒷면
-        hw = self.rear_width / 2.0         # 폭 절반
 
         def pt(forward, left):
             return (x0 + fx * forward + lx * left,
                     y0 + fy * forward + ly * left)
 
-        # 앞-좌, 앞-우, 뒤-우, 뒤-좌
-        return [pt(f_front,  hw), pt(f_front, -hw),
-                pt(f_back,  -hw), pt(f_back,  hw)]
+        # 앞-좌, 앞-우, 뒤-우, 뒤-좌  (왼쪽=+rear_left, 오른쪽=-rear_right)
+        return [pt(f_front,  self.rear_left), pt(f_front, -self.rear_right),
+                pt(f_back,  -self.rear_right), pt(f_back,  self.rear_left)]
 
     def _publish_rear_marker(self):
         """ 금지박스를 반투명 면(CUBE) + 테두리(LINE_STRIP)로 RViz 에 표시.
@@ -512,11 +521,14 @@ class ExplorationCoordinator(Node):
         arr = MarkerArray()
         x0, y0 = self.start_pos
         fx, fy = self.start_dir
-        # 박스 중심(앞면~뒷면의 가운데)
+        lx, ly = (-fy, fx)                 # 왼쪽 단위벡터
+        # 박스 중심: 앞뒤는 (front~back) 가운데, 좌우는 (left~right) 가운데로 치우침
         cforward = (self.rear_front_pad - self.rear_depth) / 2.0
-        cx = x0 + fx * cforward
-        cy = y0 + fy * cforward
+        cleft = (self.rear_left - self.rear_right) / 2.0   # 비대칭이면 0이 아님
+        cx = x0 + fx * cforward + lx * cleft
+        cy = y0 + fy * cforward + ly * cleft
         yaw = math.atan2(fy, fx)
+        total_width = self.rear_left + self.rear_right     # 좌우 합
 
         # 1) 반투명 면 (CUBE)
         face = Marker()
@@ -532,7 +544,7 @@ class ExplorationCoordinator(Node):
         face.pose.orientation.z = math.sin(yaw / 2.0)
         face.pose.orientation.w = math.cos(yaw / 2.0)
         face.scale.x = self.rear_depth + self.rear_front_pad  # 앞뒤 길이
-        face.scale.y = self.rear_width                        # 폭
+        face.scale.y = total_width                            # 좌우 폭(비대칭 합)
         face.scale.z = 0.02
         face.color = ColorRGBA(r=1.0, g=0.0, b=0.0, a=0.18)   # 옅은 빨강
         arr.markers.append(face)
@@ -572,9 +584,11 @@ class ExplorationCoordinator(Node):
             return False                  # 박스 앞면보다 앞 → 탐색
         if forward < -self.rear_depth:
             return False                  # 박스보다 더 뒤 → 탐색(박스 밖)
-        # 좌우: 폭 절반 안
-        if abs(left) > self.rear_width / 2.0:
-            return False                  # 박스 옆으로 벗어남 → 탐색
+        # 좌우: 왼쪽(+)은 rear_left, 오른쪽(-)은 rear_right 까지
+        if left > self.rear_left:
+            return False                  # 왼쪽으로 벗어남 → 탐색
+        if left < -self.rear_right:
+            return False                  # 오른쪽으로 벗어남 → 탐색
         return True                       # 박스 안 → 제외
 
     # ==================================================================

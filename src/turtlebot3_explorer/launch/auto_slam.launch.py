@@ -53,6 +53,8 @@ def generate_launch_description():
     obstacle_radius = LaunchConfiguration('obstacle_radius')
     rear_depth = LaunchConfiguration('rear_depth')
     rear_width = LaunchConfiguration('rear_width')
+    rear_left = LaunchConfiguration('rear_left')
+    rear_right = LaunchConfiguration('rear_right')
 
     pkg_share = FindPackageShare('turtlebot3_explorer')
     # plain(네임스페이스 없는) 설정 파일
@@ -171,6 +173,8 @@ def generate_launch_description():
                     'finish_topic': '/mission/finish_now',
                     'rear_depth': ParameterValue(rear_depth, value_type=float),
                     'rear_width': ParameterValue(rear_width, value_type=float),
+                    'rear_left': ParameterValue(rear_left, value_type=float),
+                    'rear_right': ParameterValue(rear_right, value_type=float),
                 }],
             ),
         ],
@@ -189,7 +193,14 @@ def generate_launch_description():
             description='출발선 뒤 금지박스 깊이(m). 모선이 뒤로 차지하는 길이만큼. 측정 후 조정.'),
         DeclareLaunchArgument(
             'rear_width', default_value='1.5',
-            description='출발선 뒤 금지박스 폭(m). 중심선 기준 양옆 절반씩. 측정 후 조정.'),
+            description='출발선 뒤 금지박스 폭(m). 좌우 대칭용. rear_left/right 안 주면 이 값 절반씩.'),
+        DeclareLaunchArgument(
+            'rear_left', default_value='-1.0',
+            description='금지박스를 왼쪽으로 막을 거리(m). 음수면 미지정(rear_width 절반 사용). '
+                        '비대칭으로 한쪽만 넓힐 때 사용.'),
+        DeclareLaunchArgument(
+            'rear_right', default_value='-1.0',
+            description='금지박스를 오른쪽으로 막을 거리(m). 음수면 미지정(rear_width 절반 사용).'),
         cam_mount,         ### [추가]
         cam_optical,       ### [추가]
         victim_mapper,     ### [변경] (PC: 투영/확정/마커/CSV)
