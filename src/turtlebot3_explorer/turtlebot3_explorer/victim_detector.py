@@ -38,7 +38,7 @@ class VictimDetector(Node):
         super().__init__('victim_detector')
 
         # ---- 파라미터 ----
-        self.declare_parameter('model_path', os.path.expanduser('~/models/best.onnx'))
+        self.declare_parameter('model_path', os.path.expanduser('~/vicpinky_carrier/src/turtlebot3_explorer/models/best.onnx'))
         self.declare_parameter('image_topic', '/image_raw/compressed')
         self.declare_parameter('detections_topic', '/victim/detections')
         self.declare_parameter('camera_frame', 'camera_optical_frame')
@@ -53,7 +53,7 @@ class VictimDetector(Node):
         #   이미지는 PC 로 안 보내고 로봇 로컬에 저장.
         self.declare_parameter('enable_snapshot', True)
         self.declare_parameter('confirmed_topic', '/victim/confirmed')
-        self.declare_parameter('snapshot_dir', os.path.expanduser('~/maps'))
+        self.declare_parameter('snapshot_dir', os.path.expanduser('~/vicpinky_carrier/src/turtlebot3_explorer/maps'))
         self.declare_parameter('snapshot_prefix', 'victim')   # 파일명 접두어
         self.declare_parameter('publish_snapshot', True)      # 서버 확인용 이미지 토픽 발행
         self.declare_parameter('snapshot_topic', '/victim/snapshot')
