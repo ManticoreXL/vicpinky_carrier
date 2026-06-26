@@ -13,6 +13,7 @@ vicpinky_carrier - mission_coordinator
   - RETURNING: home 목표를 max_return_attempts 회까지 재시도, 그래도 못 가면 현 위치에서 맵 저장 후 종료
 """
 
+import math
 import numpy as np
 
 import rclpy
@@ -59,6 +60,19 @@ class ExplorationCoordinator(Node):
         self.declare_parameter('obstacle_clearance', 0.25)  # 목표를 장애물에서 최소 이만큼 떨어진 곳에만 (m)
         self.declare_parameter('max_goal_attempts', 4)      # 한 목표에 이만큼 연속 실패하면 포기(블랙리스트)
         self.declare_parameter('blacklist_radius', 0.4)     # 블랙리스트 지점 반경 내 프론티어는 다시 안 고름 (m)
+
+        # ---- 출발선 뒤쪽(모선/경사로 방향) 금지 박스 ----
+        #   로봇이 경사로를 내려와 멈춘 시작 위치 P0 와 방향 θ0 를 기억해두고,
+        #   P0 기준 '뒤쪽 직사각형 영역' 안의 프론티어는 탐색 후보에서 영구 제외.
+        #   (모선이 차지하는 공간만 딱 막음. 박스 밖 — 옆이나 더 뒤 — 은 탐색 가능)
+        self.declare_parameter('exclude_rear', True)
+        #   rear_depth: 시작점에서 뒤로 막을 깊이(m). 모선이 뒤로 차지하는 길이.
+        self.declare_parameter('rear_depth', 2.0)
+        #   rear_width: 막을 좌우 폭(m). 중심선 기준 양옆으로 절반씩.
+        self.declare_parameter('rear_width', 1.5)
+        #   rear_front_pad: 시작점보다 살짝 앞까지 박스를 당길 여유(m). 0이면 시작점이 박스 앞면.
+        #   (로봇 몸 길이만큼 앞도 막고 싶을 때 약간 줌)
+        self.declare_parameter('rear_front_pad', 0.0)
         self.declare_parameter('max_return_attempts', 5)    # home 복귀를 이만큼 재시도 후 안 되면 현 위치 저장
         # ---- 강건성(실물) 파라미터 ----
         self.declare_parameter('goal_retry_delay', 3.0)          # 실패 후 다음 시도까지 대기(초)
@@ -84,6 +98,10 @@ class ExplorationCoordinator(Node):
         self.obstacle_clearance = float(self.get_parameter('obstacle_clearance').value)
         self.max_goal_attempts = int(self.get_parameter('max_goal_attempts').value)
         self.blacklist_radius = float(self.get_parameter('blacklist_radius').value)
+        self.exclude_rear = bool(self.get_parameter('exclude_rear').value)
+        self.rear_depth = float(self.get_parameter('rear_depth').value)
+        self.rear_width = float(self.get_parameter('rear_width').value)
+        self.rear_front_pad = float(self.get_parameter('rear_front_pad').value)
         self.max_return_attempts = int(self.get_parameter('max_return_attempts').value)
         self.goal_retry_delay = float(self.get_parameter('goal_retry_delay').value)
         self.localization_timeout = float(self.get_parameter('localization_timeout').value)
@@ -114,6 +132,10 @@ class ExplorationCoordinator(Node):
         self.current_goal = None     # 현재 추구 중인 목표 (x, y)
         self.fail_count = 0          # 현재 목표 연속 실패 횟수
         self.blacklist = []          # 반복 실패해 포기한 지점들 [(x, y), ...]
+
+        # 출발선(시작 위치·방향). 첫 유효 포즈에서 1회 설정 → 뒤쪽 제외 기준.
+        self.start_pos = None        # (x0, y0)
+        self.start_dir = None        # (fx, fy) 시작 시 로봇 전방 단위벡터
 
         # 복귀용
         self.return_attempts = 0
@@ -271,6 +293,7 @@ class ExplorationCoordinator(Node):
             self.get_logger().info('TF(map->base) 대기 중...', throttle_duration_sec=5.0)
             return
         self.home_pose = pose
+        self._capture_start_pose()    # 출발 위치·방향 저장(뒤쪽 제외 기준)
         self.state = self.EXPLORING
         self._last_loc_ok_time = self.get_clock().now()
         self.get_logger().info(
@@ -346,6 +369,8 @@ class ExplorationCoordinator(Node):
                     continue
                 if self._is_blacklisted(wx, wy):
                     continue
+                if self._is_behind_start(wx, wy):   # 출발선 뒤쪽(모선 방향) 제외
+                    continue
 
                 if best_any_d2 is None or d2 < best_any_d2:
                     best_any_d2 = d2
@@ -420,6 +445,57 @@ class ExplorationCoordinator(Node):
             return (t.transform.translation.x, t.transform.translation.y)
         except TransformException:
             return None
+
+    def get_robot_pose_yaw(self):
+        """ (x, y, yaw) 반환. 실패 시 None. 시작 방향 캡처용. """
+        try:
+            t = self.tf_buffer.lookup_transform(
+                self.global_frame, self.base_frame, rclpy.time.Time()
+            )
+        except TransformException:
+            return None
+        q = t.transform.rotation
+        # yaw = atan2(2(wz+xy), 1-2(y^2+z^2))
+        siny = 2.0 * (q.w * q.z + q.x * q.y)
+        cosy = 1.0 - 2.0 * (q.y * q.y + q.z * q.z)
+        yaw = math.atan2(siny, cosy)
+        return (t.transform.translation.x, t.transform.translation.y, yaw)
+
+    def _capture_start_pose(self):
+        """ 첫 유효 포즈에서 출발 위치·방향을 1회 저장. 이미 있으면 무시. """
+        if self.start_pos is not None:
+            return
+        p = self.get_robot_pose_yaw()
+        if p is None:
+            return
+        x0, y0, yaw0 = p
+        self.start_pos = (x0, y0)
+        self.start_dir = (math.cos(yaw0), math.sin(yaw0))
+        self.get_logger().info(
+            f'출발선 저장: P0=({x0:.2f},{y0:.2f}), heading={math.degrees(yaw0):.0f}° '
+            f'→ 뒤쪽 금지박스(깊이 {self.rear_depth:.1f}m × 폭 {self.rear_width:.1f}m) 적용.')
+
+    def _is_behind_start(self, wx, wy):
+        """ (wx,wy) 가 출발선 뒤쪽 '금지 박스' 안이면 True (탐색 제외).
+            출발점 P0, 시작방향 θ0 기준 로컬좌표로 변환:
+              forward = 시작방향 축(+ 앞 / - 뒤),  left = 그 왼쪽 축.
+            박스: forward ∈ [-rear_depth, +rear_front_pad], |left| <= rear_width/2 """
+        if not self.exclude_rear or self.start_pos is None or self.start_dir is None:
+            return False
+        dx = wx - self.start_pos[0]
+        dy = wy - self.start_pos[1]
+        fx, fy = self.start_dir          # 전방 단위벡터
+        forward = dx * fx + dy * fy       # 앞(+)/뒤(-) 거리
+        left = -dx * fy + dy * fx         # 왼쪽(+)/오른쪽(-) 거리 (전방벡터를 90° 돌린 축)
+        # 앞뒤: 시작점보다 뒤(rear_depth 까지) ~ 살짝 앞(front_pad)
+        if forward > self.rear_front_pad:
+            return False                  # 박스 앞면보다 앞 → 탐색
+        if forward < -self.rear_depth:
+            return False                  # 박스보다 더 뒤 → 탐색(박스 밖)
+        # 좌우: 폭 절반 안
+        if abs(left) > self.rear_width / 2.0:
+            return False                  # 박스 옆으로 벗어남 → 탐색
+        return True                       # 박스 안 → 제외
 
     # ==================================================================
     # Nav2 주행

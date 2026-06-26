@@ -50,6 +50,9 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     map_save_path = LaunchConfiguration('map_save_path')
     use_rviz = LaunchConfiguration('rviz')
+    obstacle_radius = LaunchConfiguration('obstacle_radius')
+    rear_depth = LaunchConfiguration('rear_depth')
+    rear_width = LaunchConfiguration('rear_width')
 
     pkg_share = FindPackageShare('turtlebot3_explorer')
     # plain(네임스페이스 없는) 설정 파일
@@ -113,7 +116,7 @@ def generate_launch_description():
             'use_sim_time': ParameterValue(use_sim_time, value_type=bool),
             'obstacle_topic': '/victim/obstacles',
             'map_frame': 'map',
-            'obstacle_radius': 0.30,
+            'obstacle_radius': ParameterValue(obstacle_radius, value_type=float),
         }],
     )
 
@@ -166,6 +169,8 @@ def generate_launch_description():
                     'base_frame': 'base_footprint',
                     'global_frame': 'map',
                     'finish_topic': '/mission/finish_now',
+                    'rear_depth': ParameterValue(rear_depth, value_type=float),
+                    'rear_width': ParameterValue(rear_width, value_type=float),
                 }],
             ),
         ],
@@ -175,6 +180,16 @@ def generate_launch_description():
         DeclareLaunchArgument('use_sim_time', default_value='false'),
         DeclareLaunchArgument('map_save_path', default_value=os.path.expanduser('~/maps/disaster_map')),
         DeclareLaunchArgument('rviz', default_value='true'),
+        DeclareLaunchArgument(
+            'obstacle_radius', default_value='0.5',
+            description='victim 회피 장애물 반경(m). 좁은 공간이면 0.4, 넓으면 0.7로. '
+                        '실제 회피거리는 이 값 + robot_radius + nav2 inflation 이 더해짐.'),
+        DeclareLaunchArgument(
+            'rear_depth', default_value='2.0',
+            description='출발선 뒤 금지박스 깊이(m). 모선이 뒤로 차지하는 길이만큼. 측정 후 조정.'),
+        DeclareLaunchArgument(
+            'rear_width', default_value='1.5',
+            description='출발선 뒤 금지박스 폭(m). 중심선 기준 양옆 절반씩. 측정 후 조정.'),
         cam_mount,         ### [추가]
         cam_optical,       ### [추가]
         victim_mapper,     ### [변경] (PC: 투영/확정/마커/CSV)
