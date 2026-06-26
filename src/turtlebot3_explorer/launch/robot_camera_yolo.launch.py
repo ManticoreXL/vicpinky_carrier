@@ -80,7 +80,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
-        DeclareLaunchArgument('video_device', default_value='/dev/video0'),
+        DeclareLaunchArgument('video_device', default_value='/dev/video2'),
         DeclareLaunchArgument(
             'camera_info_url',
             default_value='file://' + os.path.expanduser('~/.ros/camera_info/webcam.yaml')),
