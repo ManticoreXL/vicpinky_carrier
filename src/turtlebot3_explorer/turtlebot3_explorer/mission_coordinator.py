@@ -27,7 +27,7 @@ from rclpy.qos import (
     QoSHistoryPolicy,
 )
 
-from std_msgs.msg import Empty, ColorRGBA
+from std_msgs.msg import Empty, ColorRGBA, Bool
 from geometry_msgs.msg import PoseStamped, Point
 from visualization_msgs.msg import Marker, MarkerArray
 from nav_msgs.msg import OccupancyGrid
@@ -130,6 +130,7 @@ class ExplorationCoordinator(Node):
         self.is_navigating = False
         self.home_pose = None        # 탐색 시작 시점의 로봇 위치 (x, y)
         self._finished = False       # True 가 되면 제어 루프에서 노드를 종료
+        self._complete_sent = False  # 미션 완료 신호 1회 발행 플래그
         self._finish_requested = False   # 외부에서 '지금 마무리' 요청이 오면 True
         self._ignore_next_result = False # 마무리로 취소한 골의 결과를 한 번 무시
         self._goal_handle = None         # 현재 골 핸들 (취소용)
@@ -204,6 +205,12 @@ class ExplorationCoordinator(Node):
         )
         self._rear_marker_pub = self.create_publisher(
             MarkerArray, '/mission/rear_keepout', marker_qos
+        )
+
+        # ---- 미션 완료 신호(latched) : 탐색 종료(DONE) 시 1회 True 발행 ----
+        #   관제 서버/다른 노드가 '주행·탐색이 끝났다'를 구독으로 알 수 있음.
+        self._complete_pub = self.create_publisher(
+            Bool, '/mission/complete', marker_qos
         )
 
         # ---- 제어 루프(1Hz) ----
@@ -816,8 +823,19 @@ class ExplorationCoordinator(Node):
     # ==================================================================
     # 맵 저장 후 종료
     # ==================================================================
+    def _publish_complete(self):
+        """ 미션 완료(DONE) 신호를 latched 로 1회 발행. 중복 발행 방지. """
+        if getattr(self, '_complete_sent', False):
+            return
+        self._complete_sent = True
+        msg = Bool()
+        msg.data = True
+        self._complete_pub.publish(msg)
+        self.get_logger().info('미션 완료 신호 발행: /mission/complete = True')
+
     def save_map_and_finish(self):
         self.state = self.DONE
+        self._publish_complete()    # 미션 완료 신호 발행
         if not self._save_map_client.wait_for_service(timeout_sec=5.0):
             self.get_logger().error('/slam_toolbox/save_map 서비스 없음. 저장 없이 종료.')
             self._finished = True
