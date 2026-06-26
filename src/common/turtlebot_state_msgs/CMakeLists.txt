@@ -15,6 +15,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/StateUpdate.msg"
   "msg/PcCommand.msg"
   "msg/VicpinkySignal.msg"
+  "srv/Deploy.srv"
   DEPENDENCIES builtin_interfaces
 )
 
