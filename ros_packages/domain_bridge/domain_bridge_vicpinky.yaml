@@ -65,7 +65,6 @@ topics:
   # 터틀에게 cmd_vel 보내기
   /tb3_01/cmd_vel:
     type: geometry_msgs/msg/TwistStamped
-
     from_domain: 40
     to_domain: 41
     remap: /cmd_vel
@@ -87,6 +86,31 @@ topics:
     from_domain: 40
     to_domain: 44
     remap: /cmd_vel
+
+  # 터틀에게 cmd_vel 보내기
+  /tb3_01/vicpinky_signal:
+    type: turtlebot_state_msgs/msg/VicpinkySignal
+    from_domain: 40
+    to_domain: 41
+    remap: /vicpinky_signal
+
+  /tb3_02/vicpinky_signal:
+    type: turtlebot_state_msgs/msg/VicpinkySignal
+    from_domain: 40
+    to_domain: 42
+    remap: /vicpinky_signal
+    
+  /tb3_03/vicpinky_signal:
+    type: turtlebot_state_msgs/msg/VicpinkySignal
+    from_domain: 40
+    to_domain: 43
+    remap: /vicpinky_signal
+    
+  /tb3_04/vicpinky_signal:
+    type: turtlebot_state_msgs/msg/VicpinkySignal
+    from_domain: 40
+    to_domain: 44
+    remap: /vicpinky_signal
 
 
 services:
