@@ -24,6 +24,7 @@ from rclpy.qos import (
 from rcl_interfaces.msg import SetParametersResult
 
 from geometry_msgs.msg import Twist, TwistStamped
+from std_msgs.msg import Bool
 from turtlebot_state_msgs.msg import RobotState, StateUpdate
 
 DEPLOY = 'DEPLOY'
@@ -71,6 +72,8 @@ class DeployNode(Node):
         msg_type = TwistStamped if self.use_stamped else Twist
         self.cmd_pub = self.create_publisher(msg_type, topic, 10)
         self.update_pub = self.create_publisher(StateUpdate, '/state_update', 10)
+        # 완료 순간 알림(이벤트). 기본 QoS = VOLATILE — 과거 완료가 박제/재생되지 않게 한다
+        self.done_pub = self.create_publisher(Bool, '/deploy_done', 10)
 
         # ── 구독: 현재 상태(늦게 떠도 최신 상태 수신) ──
         self.create_subscription(RobotState, '/robot_state',
@@ -145,6 +148,9 @@ class DeployNode(Node):
         u.seq = self.stage_seq 
         u.stamp = self.get_clock().now().to_msg()
         self.update_pub.publish(u)
+        done = Bool()
+        done.data = True
+        self.done_pub.publish(done) # Done -> Deploy 완료
 
     def _on_set_params(self, params):
         for p in params:    
