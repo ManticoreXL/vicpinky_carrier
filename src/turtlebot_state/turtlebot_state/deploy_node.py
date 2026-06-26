@@ -21,6 +21,7 @@ from rclpy.qos import (
     QoSProfile, QoSReliabilityPolicy,
     QoSDurabilityPolicy, QoSHistoryPolicy,
 )
+from rcl_interfaces.msg import SetParametersResult
 
 from geometry_msgs.msg import Twist, TwistStamped
 from turtlebot_state_msgs.msg import RobotState, StateUpdate
@@ -36,8 +37,8 @@ class DeployNode(Node):
         self.declare_parameter('bot_id', 'tb3_01')
         self.declare_parameter('use_stamped', True)        # TwistStamped(기본) vs Twist
         self.declare_parameter('base_frame', 'base_link')
-        self.declare_parameter('forward_speed', 0.07)      # m/s, 천천히
-        self.declare_parameter('forward_time', 12.0)       # s — 경사로+플랫폼 거리에 맞춰 조정
+        self.declare_parameter('forward_speed', 0.05)      # m/s, 천천히
+        self.declare_parameter('forward_time', 30.0)       # s — 경사로+플랫폼 거리에 맞춰 조정
         self.declare_parameter('control_rate_hz', 20.0)
 
         self.bot_id = self.get_parameter('bot_id').value
@@ -47,6 +48,9 @@ class DeployNode(Node):
         self.forward_speed = float(self.get_parameter('forward_speed').value)
         self.forward_time = float(self.get_parameter('forward_time').value)
         rate = float(self.get_parameter('control_rate_hz').value)
+
+        # 파라미터 콜백 함수 추가
+        self.add_on_set_parameters_callback(self._on_set_params)
 
         # ── 내부 상태 ──
         self.stage = 'ONBOARD'
@@ -141,6 +145,14 @@ class DeployNode(Node):
         u.seq = self.stage_seq 
         u.stamp = self.get_clock().now().to_msg()
         self.update_pub.publish(u)
+
+    def _on_set_params(self, params):
+        for p in params:    
+            if p.name == 'forward_speed':
+                self.forward_speed = float(p.value)
+            elif p.name == 'forward_time':
+                self.forward_time = float(p.value)
+        return SetParametersResult(successful=True)
 
 
 def main(args=None):
