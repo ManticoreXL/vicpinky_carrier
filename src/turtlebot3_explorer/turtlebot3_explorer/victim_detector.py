@@ -58,6 +58,7 @@ class VictimDetector(Node):
         self.declare_parameter('publish_snapshot', True)      # 서버 확인용 이미지 토픽 발행
         self.declare_parameter('snapshot_topic', '/victim/snapshot')
         self.declare_parameter('snapshot_jpeg_quality', 80)   # jpg 압축 품질(1~100)
+        self.declare_parameter('debug_log', True)             # 진단 로그(프레임 수신/추론결과) 출력
 
         g = self.get_parameter
         self.camera_frame = g('camera_frame').value
@@ -71,6 +72,8 @@ class VictimDetector(Node):
         self.snapshot_prefix = g('snapshot_prefix').value
         self.publish_snapshot = bool(g('publish_snapshot').value)
         self.snapshot_jpeg_quality = int(g('snapshot_jpeg_quality').value)
+        self.debug_log = bool(g('debug_log').value)
+        self._frame_count = 0          # 받은 프레임 누계(진단용)
 
         # ---- ONNX 세션 (라파이 = CPU. 가속기 쓰면 providers 변경) ----
         model_path = g('model_path').value
@@ -124,10 +127,34 @@ class VictimDetector(Node):
         buf = np.frombuffer(msg.data, dtype=np.uint8)
         frame = cv2.imdecode(buf, cv2.IMREAD_COLOR)   # BGR
         if frame is None:
+            if self.debug_log:
+                self.get_logger().warn('프레임 디코드 실패(빈/손상 데이터).',
+                                       throttle_duration_sec=2.0)
             return
         self._last_frame = frame      # 스냅샷용 최신 프레임 보관
 
+        # [진단] 카메라 프레임이 들어오고 있다는 표시 (2초마다 1회)
+        self._frame_count += 1
+        if self.debug_log:
+            h, w = frame.shape[:2]
+            self.get_logger().info(
+                f'[카메라] 프레임 수신 중 (누계 {self._frame_count}, 해상도 {w}x{h})',
+                throttle_duration_sec=2.0)
+
         dets = self._infer(frame)   # [(x1,y1,x2,y2,score), ...] 원본 픽셀 좌표
+
+        # [진단] 추론 결과: 사람 몇 명 잡았는지
+        if self.debug_log:
+            if dets:
+                top = max(s for *_, s in dets)
+                self.get_logger().info(
+                    f'[추론] 사람 {len(dets)}명 탐지 (최고 score {top:.2f}) → 발행',
+                    throttle_duration_sec=1.0)
+            else:
+                self.get_logger().info(
+                    '[추론] 사람 0명 (영상은 들어오나 탐지 없음)',
+                    throttle_duration_sec=2.0)
+
         if not dets:
             return                  # 탐지 없으면 발행 안 함 (PC 타임아웃은 PC 타이머가 처리)
 
