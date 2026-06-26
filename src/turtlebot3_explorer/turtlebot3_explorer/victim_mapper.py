@@ -63,8 +63,8 @@ class VictimMapper(Node):
         self.declare_parameter('min_confirm_frames', 6)  # 정지 상태에서 모아야 하는 일관된 추정 수
         self.declare_parameter('confirm_timeout', 6.0)   # 이 시간 내 확정 못하면 오탐 처리(초)
         self.declare_parameter('max_spread', 0.5)        # 추정들이 이보다 흩어지면 확정 보류(m)
-        self.declare_parameter('merge_radius', 1.0)      # 이 반경 내 기존 victim 과는 같은 사람(m)
-        self.declare_parameter('cooldown_time', 4.0)     # 오탐 후 재트리거 억제(초)
+        self.declare_parameter('merge_radius', 2.0)      # 이 반경 내 기존 victim 과는 같은 사람(m). 폴백 출렁임(±1.5m) 흡수하도록 크게.
+        self.declare_parameter('cooldown_time', 8.0)     # 확정/오탐 후 재트리거 억제(초). 같은 사람 반복 확정 방지.
 
         self.declare_parameter('uncert_base', 0.20)      # 불확실성 반경 r = base + slope*거리
         self.declare_parameter('uncert_slope', 0.10)
@@ -268,9 +268,14 @@ class VictimMapper(Node):
         self._enter_cooldown(self.get_clock().now())
 
     def _near_known(self, x, y):
+        """ 기존 확정 victim 근처면 True(같은 사람으로 보고 재확정 안 함).
+            merge_radius 에 더해, 각 victim 의 불확실성 반경(v[2])까지 합산해서
+            폴백처럼 위치가 출렁이는 경우도 같은 사람으로 안전하게 묶는다. """
         for v in self.victims:
             vx, vy = v[0], v[1]
-            if (x - vx) ** 2 + (y - vy) ** 2 < self.merge_radius ** 2:
+            v_radius = v[2] if len(v) > 2 else 0.0
+            thr = self.merge_radius + v_radius        # 등록거리 + 그 victim 불확실성
+            if (x - vx) ** 2 + (y - vy) ** 2 < thr ** 2:
                 return True
         return False
 
