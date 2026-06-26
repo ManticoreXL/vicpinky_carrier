@@ -1,119 +1,123 @@
 #!/usr/bin/env python3
 #
-# 후진 구동 기반 라인트레이싱 및 자율 제어권 양보 노드 (적외선 센서 개조 버전)
-# 개발: 김동석
+# 후진 구동 기반 라인트레이싱 노드 (서비스 서버 버전, 적외선 센서 개조)
 #
+# 동작:
+#   /line_trace (turtlebot_state_msgs/srv/LineTrace) 호출을 받으면
+#   요청한 시간(duration)만큼 후진 라인트레이싱을 수행한 뒤 정지하고,
+#   완료 결과를 응답으로 돌려준다(호출이 끝나면 = 수행 완료).
+#
+#   duration 이 0 이하이면 노드 파라미터 기본값(default_time)을 사용한다.
+#   기본 시간은 실행 인자(-p default_time)로 조절 가능하다.
+#
+# 참고: 이전 버전의 /robot_state(TRACE) 구독·상태 연동은 제거하고,
+#       외부 호출로 동작하는 단순 서비스로 재편했다.
+#       (선을 따라 빅핑키 위로 올라가는 완료 판단은 빅핑키 카메라가 하므로
+#        이 노드는 자체 완료 판단 없이 '지정 시간 수행'만 한다.)
+
+import time
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import (
-    QoSProfile, QoSReliabilityPolicy,
-    QoSDurabilityPolicy, QoSHistoryPolicy,
-)
 from gpiozero import DigitalInputDevice
 from geometry_msgs.msg import TwistStamped
 
-# 로컬 중앙 상태 노드가 발행하는 통합 상태
-from turtlebot_state_msgs.msg import RobotState
+from turtlebot_state_msgs.srv import LineTrace
 
 # 하드웨어 핀 매핑 (BCM 기준)
 LEFT_PIN = 22
 RIGHT_PIN = 24
+
 
 class ReverseLineFollowerNode(Node):
 
     def __init__(self):
         super().__init__('reverse_line_follower_node')
 
+        # ── 파라미터 ──
         self.declare_parameter('bot_id', 'tb3_01')
+        self.declare_parameter('default_time', 30.0)     # s 기본값 (실행 인자로 조절)
+        self.declare_parameter('control_rate_hz', 20.0)
         self.bot_id = self.get_parameter('bot_id').value
-
-        qos = QoSProfile(depth=10)
+        self.def_time = float(self.get_parameter('default_time').value)
+        self.rate_hz = float(self.get_parameter('control_rate_hz').value)
 
         # cmd_vel — 브링업이 네임스페이스 없이 /cmd_vel 을 구독하므로 그대로 발행.
         # (로봇 구분은 ROS_DOMAIN_ID 로 함)
-        self.cmd_pub = self.create_publisher(TwistStamped, '/cmd_vel', qos)
+        self.cmd_pub = self.create_publisher(TwistStamped, '/cmd_vel', 10)
 
-        # 로컬 중앙 노드의 /robot_state 는 latched(TRANSIENT_LOCAL) 로 발행되므로
-        # 구독 QoS 도 동일하게 맞춰야 연결된다.
-        latched = QoSProfile(
-            depth=1,
-            reliability=QoSReliabilityPolicy.RELIABLE,
-            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
-            history=QoSHistoryPolicy.KEEP_LAST,
-        )
-        self.state_sub = self.create_subscription(
-            RobotState, '/robot_state', self._state_cb, latched)
-        
+        # ── 적외선 센서 ──
         self.left_sensor = DigitalInputDevice(LEFT_PIN, pull_up=False)
         self.right_sensor = DigitalInputDevice(RIGHT_PIN, pull_up=False)
-        
-        # 기본 상태를 대기(False) 상태로 변경하여 초기 구동 시 제어권 간섭 방지
-        self.is_tracing_active = False  
-        
-        self.linear_speed = 0.03       
-        self.turn_linear = 0.03        
+
+        # ── 주행 파라미터 (상수) ──
+        self.linear_speed = 0.03
+        self.turn_linear = 0.03
         self.base_turn_angular = 0.08
         self.max_turn_angular = 0.25
         self.turn_step = 0.04
 
-        self.LEFT_TURN_SIGN = +1   
-        self.RIGHT_TURN_SIGN = -1  
+        self.LEFT_TURN_SIGN = +1
+        self.RIGHT_TURN_SIGN = -1
 
         self.current_turn_angular = 0.0
         self.last_sensor_state = (None, None)
 
-        self.timer_period = 0.05
-        self.timer = self.create_timer(self.timer_period, self.control_loop)
+        self._busy = False        # 동시 호출 방지
+
+        # ── 서비스 ──
+        self.srv = self.create_service(LineTrace, '/line_trace', self.on_line_trace)
 
         self.get_logger().info(
-            f"🚀 [{self.bot_id} 라인트레이서] 노드 가동. "
-            f"상태 TRACE 진입 대기 중...")
+            f"🚀 [{self.bot_id} 라인트레이서] 서비스 대기. /line_trace 호출 시 수행 — "
+            f"기본 시간={self.def_time:.1f}s")
 
-    def _state_cb(self, msg):
-        """ /robot_state 의 stage 에 따라 라인트레이싱 활성화/비활성화.
-            stage == 'TRACE' 일 때만 동작하고, 그 외 단계에서는 제어권을 양보한다.
-            (TRACE 동안 다리의 검은 선을 따라 빅핑키 위로 올라감. '다 올라옴'
-             판단과 다음 행동 분기는 빅핑키 카메라가 마커 매칭으로 처리하므로,
-             이 노드는 완료 보고를 하지 않는다.) """
-        should_trace = (msg.stage == 'TRACE')
+    # ── 서비스 콜백: 요청한 시간만큼 라인트레이싱(완료될 때까지 블로킹) ──
+    def on_line_trace(self, req, res):
+        if self._busy:
+            res.success = False
+            res.traced_time = 0.0
+            res.message = '이미 라인트레이싱 수행 중'
+            self.get_logger().warn(f"⚠️ [{self.bot_id} 라인트레이서] 중복 호출 거부")
+            return res
 
-        if should_trace and not self.is_tracing_active:
-            self.is_tracing_active = True
-            self.get_logger().warn(
-                f"🟢 [{self.bot_id} 라인트레이서] TRACE 진입! 라인트레이싱 시작 "
-                f"(parking_authorized={msg.parking_authorized})")
+        duration = req.duration if req.duration > 0.0 else self.def_time
 
-        elif not should_trace and self.is_tracing_active:
-            # TRACE 가 아닌 단계로 바뀜 → 작동 중지하고 제어권 양보
-            self.is_tracing_active = False
-            self.get_logger().error(
-                f"🛑 [{self.bot_id} 라인트레이서] stage={msg.stage} 수신. "
-                f"제어권을 양보하고 대기합니다.")
+        self._busy = True
+        # 호출마다 보정 상태 초기화
+        self.current_turn_angular = 0.0
+        self.last_sensor_state = (None, None)
+        self.get_logger().warn(
+            f"🟢 [{self.bot_id} 라인트레이서] 라인트레이싱 시작 — {duration:.1f}s")
 
-            # 관성 진행을 막기 위해 정지 명령 3회 발행
-            for _ in range(3):
-                stop_msg = TwistStamped()
-                stop_msg.header.stamp = self.get_clock().now().to_msg()
-                stop_msg.header.frame_id = f'{self.bot_id}/base_link'
-                stop_msg.twist.linear.x = 0.0
-                stop_msg.twist.angular.z = 0.0
-                self.cmd_pub.publish(stop_msg)
+        period = 1.0 / self.rate_hz if self.rate_hz > 0 else 0.05
+        start = time.monotonic()
+        try:
+            while rclpy.ok():
+                if time.monotonic() - start >= duration:
+                    break
+                self._step_once()
+                time.sleep(period)
+        finally:
+            self._stop()
+            self._busy = False
 
-    def control_loop(self):
-        # 활성화 상태가 아니면 센서를 읽지 않고 cmd_vel 발행도 중단 (외부 노드 충돌 방지)
-        if not self.is_tracing_active:
-            return
+        traced = time.monotonic() - start
+        res.success = True
+        res.traced_time = float(traced)
+        res.message = f'{traced:.1f}s 라인트레이싱 완료'
+        self.get_logger().info(
+            f"✅ [{self.bot_id} 라인트레이서] 수행 완료 ({traced:.1f}s)")
+        return res
 
+    # ── 한 주기: 센서 읽기 → 후진 라인트레이싱 cmd_vel 발행 ──
+    def _step_once(self):
         l_val = self.left_sensor.value
         r_val = self.right_sensor.value
         state = (l_val, r_val)
 
         twist_msg = TwistStamped()
         twist_msg.header.stamp = self.get_clock().now().to_msg()
-        # frame_id 는 TF 프레임 이름. 브링업이 네임스페이스 없이 뜨면 'base_link'
-        # 가 맞을 수 있으나, TwistStamped 의 frame_id 는 대개 모터 드라이버가
-        # 무시하므로 주행에는 영향 없음. TF 경고가 뜨면 'base_link' 로 변경.
         twist_msg.header.frame_id = f'{self.bot_id}/base_link'
 
         if state == (1, 1):
@@ -130,7 +134,7 @@ class ReverseLineFollowerNode(Node):
                 self.current_turn_angular += self.turn_step * target_sign
                 if abs(self.current_turn_angular) > self.max_turn_angular:
                     self.current_turn_angular = self.max_turn_angular * target_sign
-            
+
             twist_msg.twist.linear.x = -self.turn_linear
             twist_msg.twist.angular.z = self.current_turn_angular
             status = f"🔄 좌회전 보정 (후면 우측 이동, angular={self.current_turn_angular:.2f})"
@@ -143,7 +147,7 @@ class ReverseLineFollowerNode(Node):
                 self.current_turn_angular += self.turn_step * target_sign
                 if abs(self.current_turn_angular) > self.max_turn_angular:
                     self.current_turn_angular = self.max_turn_angular * target_sign
-            
+
             twist_msg.twist.linear.x = -self.turn_linear
             twist_msg.twist.angular.z = self.current_turn_angular
             status = f"🔄 우회전 보정 (후면 좌측 이동, angular={self.current_turn_angular:.2f})"
@@ -152,7 +156,7 @@ class ReverseLineFollowerNode(Node):
             twist_msg.twist.linear.x = -self.linear_speed
             twist_msg.twist.angular.z = 0.0
             self.current_turn_angular = 0.0
-            status = "⬜ 흰색 영역 감지 (PC 신호 대기하며 후진 유지)"
+            status = "⬜ 흰색 영역 감지 (후진 유지)"
 
         else:
             twist_msg.twist.linear.x = 0.0
@@ -164,9 +168,19 @@ class ReverseLineFollowerNode(Node):
         if state != self.last_sensor_state:
             self.get_logger().info(
                 f"[{self.bot_id}] 센서(L:{l_val} R:{r_val}) -> {status} "
-                f"[Linear: {twist_msg.twist.linear.x:.2f}, Angular: {twist_msg.twist.angular.z:.2f}]"
-            )
+                f"[Linear: {twist_msg.twist.linear.x:.2f}, "
+                f"Angular: {twist_msg.twist.angular.z:.2f}]")
             self.last_sensor_state = state
+
+    # ── 정지: 관성 진행 방지를 위해 정지 명령 3회 발행 ──
+    def _stop(self):
+        for _ in range(3):
+            stop_msg = TwistStamped()
+            stop_msg.header.stamp = self.get_clock().now().to_msg()
+            stop_msg.header.frame_id = f'{self.bot_id}/base_link'
+            stop_msg.twist.linear.x = 0.0
+            stop_msg.twist.angular.z = 0.0
+            self.cmd_pub.publish(stop_msg)
 
 
 def main(args=None):
@@ -177,15 +191,13 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        if node.is_tracing_active:
-            stop_msg = TwistStamped()
-            node.cmd_pub.publish(stop_msg)
         node.destroy_node()
         if rclpy.ok():
             try:
                 rclpy.shutdown()
             except Exception:
                 pass
+
 
 if __name__ == '__main__':
     main()
