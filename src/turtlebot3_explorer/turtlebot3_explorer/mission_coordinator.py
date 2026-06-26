@@ -27,8 +27,9 @@ from rclpy.qos import (
     QoSHistoryPolicy,
 )
 
-from std_msgs.msg import Empty
-from geometry_msgs.msg import PoseStamped
+from std_msgs.msg import Empty, ColorRGBA
+from geometry_msgs.msg import PoseStamped, Point
+from visualization_msgs.msg import Marker, MarkerArray
 from nav_msgs.msg import OccupancyGrid
 from nav2_msgs.action import NavigateToPose
 from action_msgs.msg import GoalStatus
@@ -184,6 +185,15 @@ class ExplorationCoordinator(Node):
         )
         self._victim_rejected_sub = self.create_subscription(
             Empty, self.victim_rejected_topic, self._victim_rejected_callback, 10
+        )
+
+        # ---- 금지박스 시각화 Marker 발행(latched) ----
+        marker_qos = QoSProfile(
+            depth=1,
+            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
+        )
+        self._rear_marker_pub = self.create_publisher(
+            MarkerArray, '/mission/rear_keepout', marker_qos
         )
 
         # ---- 제어 루프(1Hz) ----
@@ -474,6 +484,76 @@ class ExplorationCoordinator(Node):
         self.get_logger().info(
             f'출발선 저장: P0=({x0:.2f},{y0:.2f}), heading={math.degrees(yaw0):.0f}° '
             f'→ 뒤쪽 금지박스(깊이 {self.rear_depth:.1f}m × 폭 {self.rear_width:.1f}m) 적용.')
+        self._publish_rear_marker()
+
+    def _rear_box_corners(self):
+        """ 금지박스 네 모서리를 map 좌표로 반환(시계방향). 출발점·방향 기준.
+            forward ∈ [-rear_depth, +rear_front_pad], |left| <= rear_width/2 """
+        x0, y0 = self.start_pos
+        fx, fy = self.start_dir            # 전방 단위벡터
+        lx, ly = (-fy, fx)                 # 왼쪽 단위벡터(전방을 +90° 회전)
+        f_front = self.rear_front_pad      # 박스 앞면(보통 0 = 출발점)
+        f_back = -self.rear_depth          # 박스 뒷면
+        hw = self.rear_width / 2.0         # 폭 절반
+
+        def pt(forward, left):
+            return (x0 + fx * forward + lx * left,
+                    y0 + fy * forward + ly * left)
+
+        # 앞-좌, 앞-우, 뒤-우, 뒤-좌
+        return [pt(f_front,  hw), pt(f_front, -hw),
+                pt(f_back,  -hw), pt(f_back,  hw)]
+
+    def _publish_rear_marker(self):
+        """ 금지박스를 반투명 면(CUBE) + 테두리(LINE_STRIP)로 RViz 에 표시.
+            맵/costmap 엔 영향 없는 시각화 전용. """
+        if self.start_pos is None or self.start_dir is None:
+            return
+        arr = MarkerArray()
+        x0, y0 = self.start_pos
+        fx, fy = self.start_dir
+        # 박스 중심(앞면~뒷면의 가운데)
+        cforward = (self.rear_front_pad - self.rear_depth) / 2.0
+        cx = x0 + fx * cforward
+        cy = y0 + fy * cforward
+        yaw = math.atan2(fy, fx)
+
+        # 1) 반투명 면 (CUBE)
+        face = Marker()
+        face.header.frame_id = self.global_frame
+        face.header.stamp = self.get_clock().now().to_msg()
+        face.ns = 'rear_keepout'
+        face.id = 0
+        face.type = Marker.CUBE
+        face.action = Marker.ADD
+        face.pose.position.x = cx
+        face.pose.position.y = cy
+        face.pose.position.z = 0.01
+        face.pose.orientation.z = math.sin(yaw / 2.0)
+        face.pose.orientation.w = math.cos(yaw / 2.0)
+        face.scale.x = self.rear_depth + self.rear_front_pad  # 앞뒤 길이
+        face.scale.y = self.rear_width                        # 폭
+        face.scale.z = 0.02
+        face.color = ColorRGBA(r=1.0, g=0.0, b=0.0, a=0.18)   # 옅은 빨강
+        arr.markers.append(face)
+
+        # 2) 테두리 (LINE_STRIP)
+        edge = Marker()
+        edge.header.frame_id = self.global_frame
+        edge.header.stamp = face.header.stamp
+        edge.ns = 'rear_keepout'
+        edge.id = 1
+        edge.type = Marker.LINE_STRIP
+        edge.action = Marker.ADD
+        edge.scale.x = 0.04   # 선 두께
+        edge.color = ColorRGBA(r=1.0, g=0.0, b=0.0, a=0.9)
+        edge.pose.orientation.w = 1.0
+        corners = self._rear_box_corners()
+        for (px, py) in corners + [corners[0]]:   # 닫힌 사각형
+            edge.points.append(Point(x=px, y=py, z=0.02))
+        arr.markers.append(edge)
+
+        self._rear_marker_pub.publish(arr)
 
     def _is_behind_start(self, wx, wy):
         """ (wx,wy) 가 출발선 뒤쪽 '금지 박스' 안이면 True (탐색 제외).
