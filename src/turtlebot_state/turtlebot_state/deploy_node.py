@@ -34,7 +34,6 @@ class DeployNode(Node):
 
         # ── 파라미터 ──
         self.declare_parameter('bot_id', 'tb3_01')
-        self.declare_parameter('cmd_vel_topic', '')        # 비우면 /{bot_id}/cmd_vel
         self.declare_parameter('use_stamped', True)        # TwistStamped(기본) vs Twist
         self.declare_parameter('base_frame', 'base_link')
         self.declare_parameter('forward_speed', 0.07)      # m/s, 천천히
@@ -42,7 +41,7 @@ class DeployNode(Node):
         self.declare_parameter('control_rate_hz', 20.0)
 
         self.bot_id = self.get_parameter('bot_id').value
-        topic = self.get_parameter('cmd_vel_topic').value or f'/{self.bot_id}/cmd_vel'
+        topic = '/cmd_vel'
         self.use_stamped = bool(self.get_parameter('use_stamped').value)
         self.base_frame = self.get_parameter('base_frame').value
         self.forward_speed = float(self.get_parameter('forward_speed').value)
@@ -139,7 +138,7 @@ class DeployNode(Node):
         u = StateUpdate()
         u.requester = self.get_name()
         u.completed_stage = DEPLOY
-        u.seq = self.stage_seq        # 매니저의 stage_seq 를 전역 단조 seq 로 재사용
+        u.seq = self.stage_seq 
         u.stamp = self.get_clock().now().to_msg()
         self.update_pub.publish(u)
 
