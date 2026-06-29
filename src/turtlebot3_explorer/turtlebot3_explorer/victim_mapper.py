@@ -72,10 +72,10 @@ class VictimMapper(Node):
 
         # ---- 폴백(바닥 교차 실패 시): bbox 높이/너비 동적 기반 거리추정 + 클램프 ----
         self.declare_parameter('enable_fallback', True)
-        self.declare_parameter('assumed_person_height', 1.6)  # 사람의 몸길이/키 기준값(m)
+        self.declare_parameter('assumed_person_height', 1.0)  # 사람 몸길이 기준값(m). 누운 자세+수평카메라에서 폴백이 과대추정하므로 낮춤(실측 보정).
         self.declare_parameter('fallback_range', 2.5)        # bbox 추정 불가 시 기본 거리(m)
         self.declare_parameter('fallback_min_range', 1.0)    # 거리추정 하한(m)
-        self.declare_parameter('fallback_max_range', 4.0)    # 거리추정 상한(m)
+        self.declare_parameter('fallback_max_range', 3.0)    # 거리추정 상한(m). 과대추정 방지 위해 낮춤.
         self.declare_parameter('fallback_uncert', 1.5)       # 폴백 점의 불확실성 반경(m)
 
         self.declare_parameter('csv_path', os.path.expanduser('~/maps/victims.csv'))
