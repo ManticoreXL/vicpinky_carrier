@@ -67,7 +67,7 @@ class RampControlServer(Node):
 
     def execute_callback(self, goal_handle):
         # 액션 요청시 실행하는 함수
-        result= RampControl.Result()
+        result = RampControl.Result()
         goal_state=goal_handle.request.target_string
 
         # 입력값에 따른 실행 구분
@@ -83,7 +83,7 @@ class RampControlServer(Node):
             result.success = False
             result.final_state = self.current_ramp_state
             result.final_angle, _ = self.motor.read_angle()
-            goal_handle.succeed()
+            goal_handle.abort()
             return result
         
         feedback_msg = RampControl.Feedback()

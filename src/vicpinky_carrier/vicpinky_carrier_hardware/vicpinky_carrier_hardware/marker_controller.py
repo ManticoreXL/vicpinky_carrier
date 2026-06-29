@@ -33,7 +33,7 @@ class CentralParkingController(Node):
         # ── 1. ROS 2 파라미터 선언 ──
         # self.declare_parameter('parking_id', 13)           
         # self.declare_parameter('robot_id', 14)              
-        self.declare_parameter('camera_index', 0)          
+        self.declare_parameter('camera_index', 2)          
         # self.declare_parameter('robot_namespace', '')      
 
         # 제어 게인 및 임계치 파라미터화
@@ -161,7 +161,7 @@ class CentralParkingController(Node):
         self.cap = cv2.VideoCapture(self.camera_index, cv2.CAP_V4L2)
         
         if not self.cap.isOpened():
-            fallback_index = 1 if self.camera_index == 0 else 0
+            fallback_index = 0 if self.camera_index == 2 else 2
             self.get_logger().warn(f"⚠️ 카메라 인덱스 {self.camera_index}번 실패. 대체 인덱스 {fallback_index}번 재시도.")
             self.cap = cv2.VideoCapture(fallback_index, cv2.CAP_V4L2)
             if not self.cap.isOpened():
