@@ -5,7 +5,7 @@ import os
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, TextSubstitution
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
@@ -23,10 +23,14 @@ def generate_launch_description():
     marker_arg = DeclareLaunchArgument('marker_id', default_value=default_marker)
 
     # 카메라 및 YOLO 추가 인자
-    video_device_arg = DeclareLaunchArgument('video_device', default_value='/dev/video0')
+    #   video2 = loopback (ffmpeg 가 video0→video2 복제, WebRTC 와 동시사용 위함)
+    video_device_arg = DeclareLaunchArgument('video_device', default_value='/dev/video2')
+    #   camera_info: 패키지 config/webcam.yaml (계정 무관, git 공유). 없으면 camera_info=0 → 마커 NaN.
+    default_cam_info = PathJoinSubstitution([
+        FindPackageShare('turtlebot3_explorer'), 'config', 'webcam.yaml'])
     camera_info_url_arg = DeclareLaunchArgument(
         'camera_info_url',
-        default_value='file://' + os.path.expanduser('~/.ros/camera_info/webcam.yaml')
+        default_value=[TextSubstitution(text='file://'), default_cam_info]
     )
     conf_threshold_arg = DeclareLaunchArgument('conf_threshold', default_value='0.45')
 
@@ -74,7 +78,7 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'video_device': video_device,
-            'image_size': [640, 480],
+            'image_size': [352, 288],
             'camera_frame_id': 'camera_optical_frame',
             'camera_info_url': camera_info_url,
         }],
@@ -98,6 +102,14 @@ def generate_launch_description():
                     'conf_threshold': ParameterValue(conf_threshold, value_type=float),
                     'nms_iou': 0.5,
                     'process_interval': 0.1,
+                    # 확정 스냅샷(확정 시 jpg 저장 + /victim/snapshot 발행)
+                    'enable_snapshot': True,
+                    'confirmed_topic': '/victim/confirmed',
+                    'snapshot_topic': '/victim/snapshot',
+                    'publish_snapshot': True,
+                    'snapshot_jpeg_quality': 80,
+                    # 진단 로그(카메라 프레임/추론결과). 평소엔 False 로 꺼도 됨.
+                    'debug_log': True,
                 }],
             ),
         ],
