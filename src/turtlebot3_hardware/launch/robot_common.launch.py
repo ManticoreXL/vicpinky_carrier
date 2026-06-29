@@ -48,10 +48,15 @@ def generate_launch_description():
         }],
     )
 
-    # 4. TRACE 라인트레이서
+    # 4. line_tracer 노드 (상차)
     reverse_line_follower = Node(
-        package='reverse_line_follower', executable='reverse_line_follower',
-        name='reverse_line_follower', output='screen', parameters=[{'bot_id': bot_id}]
+        package='turtlebot_state', 
+        executable='line_tracer_node', 
+        name='reverse_line_follower', 
+        output='screen', 
+        parameters=[{
+            'bot_id': bot_id
+        },]
     )
 
     return LaunchDescription([
