@@ -33,6 +33,7 @@ setup(
             'rescuer_state_manager = turtlebot_state.rescuer_state_manager:main',
             'explorer_state_manager = turtlebot_state.explorer_state_manager:main',
             'deploy_node = turtlebot_state.deploy_node:main',
+            'reverse_line_follower = turtlebot_state.reverse_line_follower:main',
         ],
     },
 )
