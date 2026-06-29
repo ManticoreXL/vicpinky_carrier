@@ -22,6 +22,7 @@ from rclpy.node import Node
 from gpiozero import DigitalInputDevice
 from geometry_msgs.msg import TwistStamped
 
+from turtlebot_state_msgs.msg import StateUpdate
 from turtlebot_state_msgs.srv import LineTrace
 
 # 하드웨어 핀 매핑 (BCM 기준)
@@ -45,6 +46,8 @@ class ReverseLineFollowerNode(Node):
         # cmd_vel — 브링업이 네임스페이스 없이 /cmd_vel 을 구독하므로 그대로 발행.
         # (로봇 구분은 ROS_DOMAIN_ID 로 함)
         self.cmd_pub = self.create_publisher(TwistStamped, '/cmd_vel', 10)
+        # 완료 보고 → 상태매니저가 ONBOARD 로 토글
+        self.update_pub = self.create_publisher(StateUpdate, '/state_update', 10)
 
         # ── 적외선 센서 ──
         self.left_sensor = DigitalInputDevice(LEFT_PIN, pull_up=False)
@@ -103,12 +106,23 @@ class ReverseLineFollowerNode(Node):
             self._busy = False
 
         traced = time.monotonic() - start
+        # 수행 완료 → 상태매니저에 'TRACE' 끝냄 보고 (→ ONBOARD 로 전환)
+        self._report_done('TRACE')
         res.success = True
         res.traced_time = float(traced)
         res.message = f'{traced:.1f}s 라인트레이싱 완료'
         self.get_logger().info(
-            f"✅ [{self.bot_id} 라인트레이서] 수행 완료 ({traced:.1f}s)")
+            f"✅ [{self.bot_id} 라인트레이서] 수행 완료 ({traced:.1f}s) → state_update(TRACE)")
         return res
+
+    # ── 완료 보고: /state_update 발행 ──
+    def _report_done(self, stage):
+        u = StateUpdate()
+        u.requester = self.get_name()
+        u.completed_stage = stage
+        u.seq = 0
+        u.stamp = self.get_clock().now().to_msg()
+        self.update_pub.publish(u)
 
     # ── 한 주기: 센서 읽기 → 후진 라인트레이싱 cmd_vel 발행 ──
     def _step_once(self):

@@ -20,6 +20,7 @@ import rclpy
 from rclpy.node import Node
 
 from geometry_msgs.msg import Twist, TwistStamped
+from turtlebot_state_msgs.msg import StateUpdate
 from turtlebot_state_msgs.srv import Deploy
 
 
@@ -48,6 +49,8 @@ class DeployNode(Node):
         # ── 발행 ──
         msg_type = TwistStamped if self.use_stamped else Twist
         self.cmd_pub = self.create_publisher(msg_type, topic, 10)
+        # 완료 보고 → 상태매니저가 ACTIVE 로 토글
+        self.update_pub = self.create_publisher(StateUpdate, '/state_update', 10)
 
         # ── 서비스 ──
         self.srv = self.create_service(Deploy, '/deploy', self.on_deploy)
@@ -87,11 +90,22 @@ class DeployNode(Node):
             self._busy = False
 
         driven = time.monotonic() - start
+        # 주행 완료 → 상태매니저에 'DEPLOY' 끝냄 보고 (→ ACTIVE 로 전환)
+        self._report_done('DEPLOY')
         res.success = True
         res.driven_time = float(driven)
         res.message = f'{driven:.1f}s 전진 완료 (@ {speed:.2f}m/s)'
-        self.get_logger().info(f'✅ [{self.bot_id}] 전진 완료 ({driven:.1f}s)')
+        self.get_logger().info(f'✅ [{self.bot_id}] 전진 완료 ({driven:.1f}s) → state_update(DEPLOY)')
         return res
+
+    # ── 완료 보고: /state_update 발행 ──
+    def _report_done(self, stage):
+        u = StateUpdate()
+        u.requester = self.get_name()
+        u.completed_stage = stage
+        u.seq = 0
+        u.stamp = self.get_clock().now().to_msg()
+        self.update_pub.publish(u)
 
     # ── cmd_vel 발행 (stamped/unstamped 공용) ──
     def _publish_cmd(self, vx):
