@@ -1,33 +1,26 @@
 #!/usr/bin/env python3
 #
 # deploy_node.py  (turtlebot3_hardware)
-# 빅핑키에서 하차(DEPLOY)를 수행하는 기능 노드.  Ubuntu 24.04 / ROS 2 Jazzy
-#
-# 전제: DEPLOY 진입 시 로봇은 빅핑키 위에 정차해 있고 경사로(다리)는 이미 내려와 있다.
-#       이 노드는 경사로를 따라 천천히 전진해 지상으로 내려간 뒤 완료를 보고한다.
+# 하차(전진)를 '서비스'로 수행하는 기능 노드.  Ubuntu 24.04 / ROS 2 Jazzy
 #
 # 동작:
-#   /robot_state(stage) 구독 → stage 가 DEPLOY 로 들어오면 1회 전진 실행(개루프 시간)
-#   지정 시간 전진 → 정지 → /state_update(completed='DEPLOY') 발행
-#   stage 가 DEPLOY 가 아니면 cmd_vel 을 발행하지 않는다(제어권 양보).
+#   /deploy (turtlebot_state_msgs/srv/Deploy) 호출을 받으면
+#   요청한 시간(forward_time)만큼 요청 속도(forward_speed)로 전진 후 정지하고,
+#   완료 결과를 응답으로 돌려준다(호출이 끝나면 = 전진 완료).
 #
-# 사용 필드(터틀봇 측 최소):
-#   읽기: RobotState.stage, RobotState.stage_seq
-#   쓰기: StateUpdate.requester / completed_stage / seq / stamp
+#   요청 값이 0 이하이면 노드 파라미터 기본값(속도 0.5, 시간 30)을 사용한다.
+#   기본 속도·시간은 실행 인자(-p forward_speed / -p forward_time)로 조절 가능하다.
+#
+# 참고: 이 버전은 상태매니저 연동(/robot_state 구독, /state_update 보고)을 제거하고
+#       외부에서 명령으로 전진시키는 단순 서비스로 재편한 형태다.
+
+import time
 
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import (
-    QoSProfile, QoSReliabilityPolicy,
-    QoSDurabilityPolicy, QoSHistoryPolicy,
-)
-from rcl_interfaces.msg import SetParametersResult
 
 from geometry_msgs.msg import Twist, TwistStamped
-from std_msgs.msg import Bool
-from turtlebot_state_msgs.msg import RobotState, StateUpdate
-
-DEPLOY = 'DEPLOY'
+from turtlebot_state_msgs.srv import Deploy
 
 
 class DeployNode(Node):
@@ -38,92 +31,67 @@ class DeployNode(Node):
         self.declare_parameter('bot_id', 'tb3_01')
         self.declare_parameter('use_stamped', True)        # TwistStamped(기본) vs Twist
         self.declare_parameter('base_frame', 'base_link')
-        self.declare_parameter('forward_speed', 0.05)      # m/s, 천천히
-        self.declare_parameter('forward_time', 30.0)       # s — 경사로+플랫폼 거리에 맞춰 조정
+        self.declare_parameter('forward_speed', 0.05)       # m/s 기본값 (실행 인자로 조절)
+        self.declare_parameter('forward_time', 30.0)       # s   기본값 (실행 인자로 조절)
         self.declare_parameter('control_rate_hz', 20.0)
 
         self.bot_id = self.get_parameter('bot_id').value
         topic = '/cmd_vel'
         self.use_stamped = bool(self.get_parameter('use_stamped').value)
         self.base_frame = self.get_parameter('base_frame').value
-        self.forward_speed = float(self.get_parameter('forward_speed').value)
-        self.forward_time = float(self.get_parameter('forward_time').value)
-        rate = float(self.get_parameter('control_rate_hz').value)
+        self.def_speed = float(self.get_parameter('forward_speed').value)
+        self.def_time = float(self.get_parameter('forward_time').value)
+        self.rate_hz = float(self.get_parameter('control_rate_hz').value)
 
-        # 파라미터 콜백 함수 추가
-        self.add_on_set_parameters_callback(self._on_set_params)
-
-        # ── 내부 상태 ──
-        self.stage = 'ONBOARD'
-        self.stage_seq = 0
-        self._driving = False
-        self._done_for_seq = None        # 이 stage_seq 의 DEPLOY 는 이미 완료
-        self._drive_start = None
-
-        # ── QoS: 상태매니저의 latched(/robot_state)와 호환되게 ──
-        latched = QoSProfile(
-            depth=1,
-            reliability=QoSReliabilityPolicy.RELIABLE,
-            durability=QoSDurabilityPolicy.TRANSIENT_LOCAL,
-            history=QoSHistoryPolicy.KEEP_LAST,
-        )
+        self._busy = False        # 동시 호출 방지
 
         # ── 발행 ──
         msg_type = TwistStamped if self.use_stamped else Twist
         self.cmd_pub = self.create_publisher(msg_type, topic, 10)
-        self.update_pub = self.create_publisher(StateUpdate, '/state_update', 10)
-        # 완료 순간 알림(이벤트). 기본 QoS = VOLATILE — 과거 완료가 박제/재생되지 않게 한다
-        self.done_pub = self.create_publisher(Bool, '/deploy_done', 10)
 
-        # ── 구독: 현재 상태(늦게 떠도 최신 상태 수신) ──
-        self.create_subscription(RobotState, '/robot_state',
-                                 self.on_robot_state, latched)
-
-        # ── 제어 루프 ──
-        period = 1.0 / rate if rate > 0 else 0.05
-        self.create_timer(period, self.control_loop)
+        # ── 서비스 ──
+        self.srv = self.create_service(Deploy, '/deploy', self.on_deploy)
 
         self.get_logger().info(
-            f'🚚 [{self.bot_id}] deploy_node 가동. cmd={topic}, '
-            f'속도={self.forward_speed:.2f}m/s, 시간={self.forward_time:.1f}s, '
-            f'stamped={self.use_stamped}')
+            f'🚚 [{self.bot_id}] deploy 서비스 대기. /deploy 호출 시 전진 — '
+            f'기본 속도={self.def_speed:.2f}m/s, 기본 시간={self.def_time:.1f}s, '
+            f'cmd={topic}, stamped={self.use_stamped}')
 
-    # ── 현재 상태 수신 ──
-    def on_robot_state(self, msg):
-        self.stage = msg.stage
-        self.stage_seq = msg.stage_seq
+    # ── 서비스 콜백: 요청한 시간만큼 전진(완료될 때까지 블로킹) ──
+    def on_deploy(self, req, res):
+        if self._busy:
+            res.success = False
+            res.driven_time = 0.0
+            res.message = '이미 전진 동작 수행 중'
+            self.get_logger().warn(f'⚠️ [{self.bot_id}] 중복 호출 거부')
+            return res
 
-        if self.stage == DEPLOY:
-            # 이 seq 에서 아직 안 끝냈고 주행 중도 아니면 → 하차 시작
-            if not self._driving and self._done_for_seq != self.stage_seq:
-                self._start_drive()
-        else:
-            # DEPLOY 가 아닌데 주행 중이면 즉시 중단 (예: SET_ERROR)
-            if self._driving:
-                self.get_logger().warn(
-                    f'⚠️ [{self.bot_id}] DEPLOY 중 stage={self.stage} 전환 → 하차 중단')
-                self._stop()
-                self._driving = False
+        # 요청 값이 양수면 그 값, 아니면 노드 기본값
+        speed = req.forward_speed if req.forward_speed > 0.0 else self.def_speed
+        duration = req.forward_time if req.forward_time > 0.0 else self.def_time
 
-    def _start_drive(self):
-        self._driving = True
-        self._drive_start = self.get_clock().now()
+        self._busy = True
         self.get_logger().info(
-            f'➡️ [{self.bot_id}] 하차 시작 — 경사로 전진 {self.forward_time:.1f}s')
+            f'➡️ [{self.bot_id}] 전진 시작 — {duration:.1f}s @ {speed:.2f}m/s')
 
-    # ── 제어 루프 ──
-    def control_loop(self):
-        if not self._driving:
-            return
-        elapsed = (self.get_clock().now() - self._drive_start).nanoseconds / 1e9
-        if elapsed < self.forward_time:
-            self._publish_cmd(self.forward_speed)
-        else:
+        period = 1.0 / self.rate_hz if self.rate_hz > 0 else 0.05
+        start = time.monotonic()
+        try:
+            while rclpy.ok():
+                if time.monotonic() - start >= duration:
+                    break
+                self._publish_cmd(speed)
+                time.sleep(period)
+        finally:
             self._stop()
-            self._driving = False
-            self._done_for_seq = self.stage_seq
-            self._report_done()
-            self.get_logger().info(f'✅ [{self.bot_id}] 하차 완료 → state_update(DEPLOY)')
+            self._busy = False
+
+        driven = time.monotonic() - start
+        res.success = True
+        res.driven_time = float(driven)
+        res.message = f'{driven:.1f}s 전진 완료 (@ {speed:.2f}m/s)'
+        self.get_logger().info(f'✅ [{self.bot_id}] 전진 완료 ({driven:.1f}s)')
+        return res
 
     # ── cmd_vel 발행 (stamped/unstamped 공용) ──
     def _publish_cmd(self, vx):
@@ -131,34 +99,15 @@ class DeployNode(Node):
             m = TwistStamped()
             m.header.stamp = self.get_clock().now().to_msg()
             m.header.frame_id = self.base_frame
-            m.twist.linear.x = vx
+            m.twist.linear.x = float(vx)
             self.cmd_pub.publish(m)
         else:
             m = Twist()
-            m.linear.x = vx
+            m.linear.x = float(vx)
             self.cmd_pub.publish(m)
 
     def _stop(self):
         self._publish_cmd(0.0)
-
-    def _report_done(self):
-        u = StateUpdate()
-        u.requester = self.get_name()
-        u.completed_stage = DEPLOY
-        u.seq = self.stage_seq 
-        u.stamp = self.get_clock().now().to_msg()
-        self.update_pub.publish(u)
-        done = Bool()
-        done.data = True
-        self.done_pub.publish(done) # Done -> Deploy 완료
-
-    def _on_set_params(self, params):
-        for p in params:    
-            if p.name == 'forward_speed':
-                self.forward_speed = float(p.value)
-            elif p.name == 'forward_time':
-                self.forward_time = float(p.value)
-        return SetParametersResult(successful=True)
 
 
 def main(args=None):

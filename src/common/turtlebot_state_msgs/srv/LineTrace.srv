@@ -1,0 +1,5 @@
+float32 duration          # 수행 시간(초). 0 이하 → 노드 기본값 사용
+---
+bool    success           # 정상 완료 여부
+float32 traced_time       # 실제 수행한 시간(초)
+string  message           # 결과 설명
