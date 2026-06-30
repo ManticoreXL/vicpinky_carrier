@@ -14,7 +14,7 @@ VicPinky Carrier는 건물 붕괴 등 인력 투입이 어려운 협소 공간�
 
 
 ## System Architecture
-Comming Soon...
+Coming Soon...
 
 
 ## Key Features
@@ -66,15 +66,15 @@ Comming Soon...
 
 
 ## How It Works
-ㅇㅇ
+Coming Soon...
 
 
 ## Subsystems
-ㅇㅇ
+Coming Soon...
 
 
 ## Quick Start Guide
-ㅇㅇ
+Coming Soon...
 
 
 ## 팀원 소개 및 역할
@@ -91,4 +91,4 @@ Comming Soon...
 
 
 ## LICENSE
-ㅇㅇ
+Coming Soon...
