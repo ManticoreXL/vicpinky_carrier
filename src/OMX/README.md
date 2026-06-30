@@ -12,24 +12,24 @@
  │
  ├── 1. Vision & Background Threading
  │   ├── 📷 Front Cam (IDX:5) ──▶ [ HSV 컬러 감지 & ROI 판정 ] ──┐
- │   │                                                        │
+ │   │                                                           │
  │   └── 📷 Wrist Cam (IDX:6) ──▶ [ 단순 프레임 읽기 ] ──────────┤
- │                                                            ▼
+ │                                                               ▼
  │                                                     [ 🗂️ Frame Buffer ]
  │                                                     (최신 프레임 메모리)
- │                                                            │
- ├── 2. Web Monitor (독립 프로세스)                              │
- │   └── 🌐 Flask Web Server ◀────────────────────────────────┤
- │       └── 브라우저 접속 (Port 5000)                           │
- │                                                            │
- ├── 3. ROS 2 Control (OmxStateNode)                          │
+ │                                                               │
+ ├── 2. Web Monitor (독립 프로세스)                               │
+ │   └── 🌐 Flask Web Server ◀─────────────────────────────────┤
+ │       └── 브라우저 접속 (Port 5000)                            │
+ │                                                               │
+ ├── 3. ROS 2 Control (OmxStateNode)                             │
  │   ├── 📥 Sub: /vision/start_inference (추론 시작 명령 대기)    │
  │   ├── 📤 Pub: /vision/is_loaded       (안착 상태 발행)        │
  │   ├── 📤 Pub: /vision/object_red/blue (객체 감지 발행)        │
- │   └── 🎯 조건 충족 시 추론 시작 Event 발동                      │
- │                                                            │
- └── 4. LeRobot Inference (모방학습 루프)                        │
-     ├── 📸 HookedVideoCapture ◀──────────────────────────────┘
+ │   └── 🎯 조건 충족 시 추론 시작 Event 발동                     │
+ │                                                               │
+ └── 4. LeRobot Inference (모방학습 루프)                         │
+     ├── 📸 HookedVideoCapture ◀───────────────────────────────┘
      │   (cv2.VideoCapture 함수를 가로채어 지연 없이 프레임 공급)
      └── ⚙️ runpy 모듈 실행 (robot_client)
              │
