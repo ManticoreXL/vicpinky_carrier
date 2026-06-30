@@ -143,7 +143,7 @@ export class RobotService implements OnModuleInit {
 
   /**
    * ROS 토픽 수신 감지 → OFFLINE 이면 IDLE 로 전환, 신규면 등록.
-   * 그 외 활성 상태(MOVING/RELIEF/CHARGING 등)는 건드리지 않는다.
+   * 그 외 활성 상태(WORKING/CHARGING 등)는 건드리지 않는다.
    */
   async bringOnlineIfOffline(robot_id: string): Promise<void> {
     await this.robotModel.updateOne(
@@ -159,7 +159,7 @@ export class RobotService implements OnModuleInit {
 
   /**
    * ROS 토픽 미수신 → IDLE 상태일 때만 OFFLINE 처리.
-   * 활성 상태(MOVING/RELIEF/CHARGING 등)인 로봇은 건드리지 않는다 (태스크 로직이 별도 처리).
+   * 활성 상태(WORKING/CHARGING 등)인 로봇은 건드리지 않는다 (태스크 로직이 별도 처리).
    */
   async setOfflineIfIdle(robot_id: string): Promise<void> {
     await this.robotModel.updateOne(
@@ -170,7 +170,7 @@ export class RobotService implements OnModuleInit {
 
   /**
    * 강제 종료(크래시) 등 비정상 오프라인 처리.
-   * MOVING 포함 모든 상태에서 OFFLINE 으로 전환하고 텔레메트리를 초기화한다.
+   * WORKING 포함 모든 상태에서 OFFLINE 으로 전환하고 텔레메트리를 초기화한다.
    * 맵(location)·마지막 노드(lastNode)는 복구/추적을 위해 그대로 유지한다.
    */
   async setOffline(robot_id: string): Promise<void> {

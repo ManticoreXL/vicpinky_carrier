@@ -389,7 +389,7 @@ function GenericRobotPanel({
  .slice(0, 12);
 
  const STATUS_C: Record<string, string> = {
- IDLE: "text-white/90", MOVING: "text-white/90", WORKING: "text-white/90",
+ IDLE: "text-white/90", WORKING: "text-white/90",
  ERROR: "text-white/90", OFFLINE: "text-white/[0.45]",
  };
 

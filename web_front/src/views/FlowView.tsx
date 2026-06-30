@@ -147,8 +147,8 @@ function DispatchChart() {
               <Node label="handleNav — 경로탐색→buildRosPlan→startPlan" cls={CLS.process} step={1} wide
                     impl="resolvePath → pathfinding.findPath → buildRosPlan(goal_pose / nav action) · targetNode 잠금(nodeLock)" />
               <Arrow />
-              <Node label="상태: MOVING / RELIEF / TO_CHARGE / RETURNING" cls={CLS.process} wide
-                    impl="movingStatusFor — MOVE→MOVING, PROCESS→RELIEF, CHARGE→TO_CHARGE, RECALL→RETURNING(handleRecall→initPosition)" />
+              <Node label="상태: WORKING / TO_CHARGE / RETURNING" cls={CLS.process} wide
+                    impl="movingStatusFor — MOVE·PROCESS·SUPPLY→WORKING, CHARGE→TO_CHARGE, RECALL→RETURNING(handleRecall→initPosition)" />
               <Arrow />
               <Node label="⚠ CHARGE: 충전소 노드 미해석 → FAILED 가능" cls={CLS.warning} wide planned
                     impl="수동 CHARGE는 목적지 해석 단계 없어 targetNode='' → FAILED · auto-charge는 nearestCharger로 정상 (FMS_TASK_MANAGER §11)" />

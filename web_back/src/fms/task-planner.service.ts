@@ -195,7 +195,7 @@ export class TaskPlannerService implements OnModuleInit {
       return true;
     }
 
-    // 4) 목적지 확정 후 일반 이동(MOVING)과 동일하게 주행
+    // 4) 목적지 확정 후 일반 이동(WORKING)과 동일하게 주행
     this.logger.log(`[복귀] ${robotId} → 초기위치 ${initNode.node_id} (맵 ${mapId})`);
     return this.handleNav(robot, task, taskId);
   }

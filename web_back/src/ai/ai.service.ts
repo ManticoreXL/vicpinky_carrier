@@ -158,10 +158,10 @@ preferredRobotId는 언급되지 않으면 null. priority는 1(높음)~10(낮음
    → 부족 시: 관제에 해당 로봇 충전 요구 알림, 다른 로봇 탐색
 5. 로봇 작업 수행 적합 상태 확인 (IDLE이고 오류 없음)
    → 부적합 시: 관제 알림(AlertTower), 운영자 조치 대기
-6. 로봇에 작업 할당 → 경로 탐색(A*) → goal_pose 전송 → 상태 ASSIGNED→MOVING
+6. 로봇에 작업 할당 → 경로 탐색 → goal_pose 전송 → 상태 ASSIGNED→WORKING
 7. 작업 상태 모니터링 (amcl_pose 위치 추적, 2초 주기 tick)
-   → 오프라인 20s 감지 시: 태스크 FAILED, 관제 알림
-   → 전복(roll/pitch > 28°) 감지 시: 즉시 관제 알림
+   → 오프라인 6s 감지 시: 태스크 FAILED, 관제 알림
+   → 전복(roll/pitch > 45°) 감지 시: 즉시 관제 알림
 8. 에러 발생 시: 관제 작업자 판단 후 재시도 또는 취소
 9. 목적지 도착(nav2 goal reached 확인) → 태스크 COMPLETED → 로봇 IDLE 복귀 → 홈 위치로 귀환
 10. 이동 시 하나하나 노드 경로에 따라 한 번에 한 노드씩 이동시켜
@@ -170,7 +170,7 @@ SUPPLY=물자공급, PROCESS=작업, CHARGE=충전, MOVE=단순이동
 
 [로봇 상태]
 공통: IDLE=대기(작업배정가능), RETURNING=복귀중, PAUSED=일시정지, ERROR=오류, OFFLINE=오프라인(ROS연결끊김)
-이동·작업: MOVING=이동중, RELIEF=구호중, TO_CHARGE=충전소이동중, CHARGING=충전중
+작업·충전: WORKING=작업중(이동·구호·공급 통합), TO_CHARGE=충전소이동중, CHARGING=충전중, WAITING_CHARGE=충전대기
 빅핑키 캐리어: PARKED=주차됨, TO_LOAD=적재위치이동중, LOADING=상차중, LOADED=적재됨, UNLOADING=하차중, CARRIER_UP=캐리어올림, CARRIER_DOWN=캐리어내림
 
 아래는 MongoDB에서 실시간 조회한 현재 FMS 데이터입니다. 이 데이터를 기반으로 정확하게 답변하세요:

@@ -51,8 +51,8 @@ export class AiController {
 3. IDLE 로봇 탐색(ROS 토픽 5초 이내) → 없으면 PENDING 대기
 4. 배터리 20% 이상 확인 → 부족 시 충전 요구 알림
 5. 로봇 상태 IDLE·오류없음 확인 → 부적합 시 AlertTower
-6. 작업 할당 → A* 경로탐색 → goal_pose 전송 → ASSIGNED→MOVING
-7. amcl_pose 위치 추적(2초 tick) → 오프라인 20s→FAILED, 전복감지→알림
+6. 작업 할당 → 경로탐색 → goal_pose 전송 → ASSIGNED→WORKING
+7. amcl_pose 위치 추적(2초 tick) → 오프라인 6s→FAILED, 전복감지→알림
 8. 에러 발생 → 관제 조치
 9. 목적지 0.5m 이내 도착 → COMPLETED → 로봇 IDLE → 홈 귀환
 

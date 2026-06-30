@@ -10,8 +10,8 @@ import { Log, LogDocument } from '../logs/log.schema';
 const ROBOT_STATUS_KO: Record<string, string> = {
   // 공통
   IDLE: '대기', RETURNING: '복귀중', PAUSED: '일시정지', ERROR: '오류', OFFLINE: '오프라인',
-  // 이동·작업
-  MOVING: '이동중', RELIEF: '구호중', TO_CHARGE: '충전소이동중', CHARGING: '충전중',
+  // 작업·충전
+  WORKING: '작업중', TO_CHARGE: '충전소이동중', CHARGING: '충전중', WAITING_CHARGE: '충전대기',
   // 빅핑키 캐리어
   PARKED: '주차됨', TO_LOAD: '적재위치이동중', LOADING: '상차중', LOADED: '적재됨',
   UNLOADING: '하차중', CARRIER_UP: '캐리어올림', CARRIER_DOWN: '캐리어내림',
