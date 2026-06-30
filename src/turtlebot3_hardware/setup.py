@@ -1,3 +1,5 @@
+import os
+from glob import glob
 from setuptools import find_packages, setup
 
 package_name = 'turtlebot3_hardware'
@@ -10,6 +12,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.*')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -25,7 +28,8 @@ setup(
     entry_points={
         'console_scripts': [
             'headlight_node = turtlebot3_hardware.headlight_node:main',
-            'voice_node = turtlebot3_hardware.voice_node:main'
+            'voice_node = turtlebot3_hardware.voice_node:main',
+            'turtlebot3_webrtc = turtlebot3_hardware.turtlebot3_webrtc:main',
         ],
     },
 )

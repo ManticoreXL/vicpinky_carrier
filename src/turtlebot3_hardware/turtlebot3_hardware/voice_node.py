@@ -22,9 +22,9 @@ class VoiceNode(Node):
         self.declare_parameter('phrase_time_limit', 5)
         self.declare_parameter('howling_delay', 0.5)
         self.declare_parameter('stt_timer_period', 0.1)
-        self.declare_parameter('audio_player_cmd', 'mpg123')
+        self.declare_parameter('audio_player_cmd', 'mpg123 -a plughw:1,0')
         self.declare_parameter('temp_audio_path', '/tmp/tts_output.mp3')
-        self.declare_parameter('mic_keywords', ['googlevoicehat', 'i2s', 'snd_rpi'])
+        self.declare_parameter('mic_keywords', ['googlevoicehat', 'i2s', 'snd_rpi', 'hw:1,0', 'plughw:1,0'])
         self.declare_parameter('pause_threshold', 0.5)
         self.declare_parameter('energy_threshold', 200)
         self.declare_parameter('dynamic_energy_threshold', False)
@@ -48,12 +48,14 @@ class VoiceNode(Node):
         self.tts_cb_group = MutuallyExclusiveCallbackGroup()
         self.timer_cb_group = MutuallyExclusiveCallbackGroup()
 
+        # STT 퍼블리셔
         self.stt_pub = self.create_publisher(
             String,
             'recognized_text',
             10
         )
 
+        # TTS 서브스크라이버
         self.tts_sub = self.create_subscription(
             String,
             'speak_cmd',
@@ -65,13 +67,25 @@ class VoiceNode(Node):
         self.is_speaking = False
         self.stt_queue = queue.Queue()
 
+        # 모드 변경 서브스크라이버
+        self.mode_sub = self.create_subscription(
+            String,
+            'voice_mode',
+            self.mode_callback,
+            10
+        )
+
+        self.current_mode = 'STT'
+        self.stop_listening_fn = None
+
+        # 하울링 방지용 타이머
         self.stt_timer = self.create_timer(
             stt_timer_period,
             self.process_stt_queue,
             callback_group=self.timer_cb_group
         )
 
-        # 파라미터 변경 콜백 등록 (실행 중 동적 변경 대응)
+        # 파라미터 변경 콜백 등록
         self.add_on_set_parameters_callback(self.parameters_callback)
 
         self.recognizer = sr.Recognizer()
@@ -89,8 +103,8 @@ class VoiceNode(Node):
                     source, 
                     duration=ambient_noise_duration
                 )
-            
-            self.stop_listening = self.recognizer.listen_in_background(
+
+            self.stop_listening_fn = self.recognizer.listen_in_background(
                 self.mic, 
                 self.stt_callback, 
                 phrase_time_limit=phrase_time_limit
@@ -131,6 +145,22 @@ class VoiceNode(Node):
                 break
 
         return SetParametersResult(successful=successful, reason=reason)
+    
+    def mode_callback(self, msg):
+        new_mode = msg.data.upper()
+
+        if new_mode == 'CALL' and self.current_mode == 'STT':
+            self.get_logger().info("[Mode]: Switching to Calling mode...")
+            
+            if self.stop_listening_fn is not None:
+                self.stop_listening_fn(wait_for_stop=False)
+                self.stop_listening_fn = None
+            self.current_mode = 'CALL'
+
+        elif new_mode == 'STT' and self.current_mode == 'CALL':
+            self.get_logger().info("[Mode]: Switching to STT mode...")
+            self.stop_listening_fn = self.recognizer.listen_in_background(self.mic, self.stt_callback)
+            self.current_mode = 'STT'
 
     def find_i2s_microphone(self):
         mic_names = sr.Microphone.list_microphone_names()
@@ -172,6 +202,11 @@ class VoiceNode(Node):
             self.stt_pub.publish(msg)
 
     def speak_callback(self, msg):
+        # 통화 모드 중일 때 TTS 스피커 점유 차단
+        if self.current_mode == 'CALL':
+            self.get_logger().warn(f"통화 모드 중입니다. TTS 명령을 무시합니다: {msg.data}")
+            return
+
         if self.is_speaking:
             self.get_logger().warn("Already speaking. Ignored new command.")
             return
@@ -191,8 +226,9 @@ class VoiceNode(Node):
             tts = gTTS(text=text, lang=self.tts_language, tld=self.tts_tld)
             tts.save(self.temp_audio_path)
             
-            subprocess.run([self.audio_player_cmd, "-q", self.temp_audio_path])
-            
+            play_command = f"{self.audio_player_cmd} {self.temp_audio_path}"
+            subprocess.run(play_command, shell=True)
+
             if os.path.exists(self.temp_audio_path):
                 os.remove(self.temp_audio_path)
                 
@@ -215,8 +251,8 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
-        if hasattr(node, 'stop_listening'):
-            node.stop_listening(wait_for_stop=False)
+        if node.stop_listening_fn is not None:
+            node.stop_listening_fn(wait_for_stop=False)
         node.destroy_node()
         rclpy.shutdown()
 
