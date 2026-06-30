@@ -1,4 +1,5 @@
 import dynamixel_sdk        # DYNAMIXEL SDK를 불러옵니다
+import time
 
 class MirrorMotorControl:
 
@@ -11,6 +12,7 @@ class MirrorMotorControl:
 
         # 주소값 설정
         self.addr_torque_en = 64
+        self.addr_hardware_err = 70
         self.addr_profile_acc = 108
         self.addr_profile_vel = 112
         self.addr_goal_pos = 116
@@ -144,6 +146,36 @@ class MirrorMotorControl:
         #     err_msg=self.packetHandler.getTxRxResult(dxl_comm_result)
         #     raise Exception(f"Failed to read motor status!: {err_msg}")
         return read_data
+    
+    def motor_overload_check(self, motor = 0, reload = 0):
+        # 모터의 과부하 체크 (추가예정)
+        overloaded = 0
+        if motor == 0:
+            motor_id = self.id_l
+        else:
+            motor_id = self.id_r
+        dxl_hw_err, dxl_comm_result, dxl_error = self.packetHandler.read1ByteTxRx(self.portHandler, motor_id, self.addr_hardware_err)
+        if dxl_comm_result == dynamixel_sdk.COMM_SUCCESS:
+            if dxl_hw_err & 0x20: # bit 5 확인 (모터 과부하)
+                overloaded = 1
+            else:
+                overloaded = 0
+        else:
+            raise Exception(f"Failed to read motor condition!: {dxl_comm_result}")
+        if overloaded and reload:
+            self.reboot(motor)
+        return overloaded
+    
+    def reboot(self, motor = 0, timer = 0):
+        # 모터 재부팅, 재부팅 후 타이머 필수
+        if motor == 0:
+            motor_id = self.id_l
+        else:
+            motor_id = self.id_r
+        self.packetHandler.reboot(self.portHandler, motor_id)
+        if timer:
+            time.sleep(timer)
+
 
     def close(self):
         self.set_torque(enable=False)

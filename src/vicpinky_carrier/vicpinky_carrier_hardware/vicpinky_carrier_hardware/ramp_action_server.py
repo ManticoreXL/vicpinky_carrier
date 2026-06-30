@@ -18,7 +18,7 @@ class RampControlServer(Node):
         super().__init__("ramp_controller")
 
         self.current_ramp_state = 'Closed'
-        self.current_angle = 2048
+        self.current_angle = 2020
         self.current_load = 0
         self.is_moving = False
 
@@ -48,6 +48,16 @@ class RampControlServer(Node):
         # 경사로 상태 업데이트
         try:
             if self.is_moving:
+                # 모터 과부화 확인 및 재부팅 블록
+                l_over = self.motor.motor_overload_check(0)
+                r_over = self.motor.motor_overload_check(1)
+                if l_over or r_over:
+                    if l_over: self.motor.reboot(0)
+                    if r_over: self.motor.reboot(1)
+                    time.sleep(1)
+                    self.motor.set_torque()
+                    time.sleep(0.5)
+                # 기존 코드
                 self.current_angle , _ = self.motor.read_angle()
                 self.current_load ,_ = self.motor.read_load()
                 if self.motor.is_moving() or abs(self.goal_angle - self.motor.read_angle()[0]) > 50:
@@ -62,7 +72,7 @@ class RampControlServer(Node):
     def publish_state(self):
         msg = RampState()
         msg.ramp_state = self.current_ramp_state
-        msg.ramp_angle = self.current_angle * 360 /4096
+        msg.ramp_angle = self.current_angle * 2 * 3.141592 / 4096
         self.state_publisher.publish(msg)
 
     def execute_callback(self, goal_handle):
@@ -75,7 +85,7 @@ class RampControlServer(Node):
             self.goal_angle = 3328
             self.get_logger().info("Opening the ramp!")
         elif goal_state in ['close', 'Close', 'c', 'closed', 'C', 'CLOSE']:
-            self.goal_angle = 2048
+            self.goal_angle = 2020
             self.current_ramp_state = 'Closed'
             self.get_logger().info("Closing the ramp!")
         else:
