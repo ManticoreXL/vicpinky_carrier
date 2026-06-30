@@ -20,13 +20,14 @@ interface Props {
  robotYaw?: number; // rad
  scanPoints?: Point2D[]; // 라이다 스캔 점 (map 프레임, m)
  pathPoints?: Point2D[]; // 경로 (map 프레임, m)
+ victims?: { x: number; y: number; radius?: number }[]; // 조난자 좌표 (map 프레임, m)
  size?: number;
 }
 
 // ── 컴포넌트 ──────────────────────────────────────────────────────────────────
 
 const MapCanvas = forwardRef<MapCanvasHandle, Props>(
- ({ imageUrl, mapInfo, robotX, robotY, robotYaw, scanPoints, pathPoints, size = 320 }, ref) => {
+ ({ imageUrl, mapInfo, robotX, robotY, robotYaw, scanPoints, pathPoints, victims, size = 320 }, ref) => {
  const canvasRef = useRef<HTMLCanvasElement>(null);
 
  // PNG 다운로드: canvas에 이미 그려진 내용을 blob으로 추출
@@ -143,6 +144,30 @@ const MapCanvas = forwardRef<MapCanvasHandle, Props>(
  c.stroke();
  }
  }
+
+ // ── 조난자(victim) 마커 — /victim/report ──
+ if (victims && victims.length && mapInfo) {
+ const vscale = size / mapInfo.width;
+ for (const v of victims) {
+ const [vx, vy] = toPx(v.x, v.y, mapInfo);
+ if (v.radius && v.radius > 0) {
+ c.beginPath();
+ c.arc(vx, vy, (v.radius / mapInfo.resolution) * vscale, 0, Math.PI * 2);
+ c.strokeStyle = "rgba(244,63,94,0.45)";
+ c.lineWidth = 1;
+ c.setLineDash([4, 3]);
+ c.stroke();
+ c.setLineDash([]);
+ }
+ c.beginPath();
+ c.arc(vx, vy, 5, 0, Math.PI * 2);
+ c.fillStyle = "rgba(244,63,94,0.95)";
+ c.fill();
+ c.strokeStyle = "#fff";
+ c.lineWidth = 1.5;
+ c.stroke();
+ }
+ }
  };
  img.onerror = () => {
  const c = canvasRef.current?.getContext("2d");
@@ -156,9 +181,9 @@ const MapCanvas = forwardRef<MapCanvasHandle, Props>(
  c.textAlign = "left";
  };
  img.src = imageUrl;
- }, [imageUrl, robotX, robotY, robotYaw, scanPoints, pathPoints, mapInfo, size]);
+ }, [imageUrl, robotX, robotY, robotYaw, scanPoints, pathPoints, victims, mapInfo, size]);
 
- return <canvas ref={canvasRef} width={size} height={size} className="block" />;
+ return <canvas ref={canvasRef} width={size} height={size} className="block max-w-full h-auto" />;
  },
 );
 

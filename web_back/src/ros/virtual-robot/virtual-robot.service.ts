@@ -19,11 +19,21 @@ const HEARTBEAT_MS  = 1_000;  // 정지 중에도 온라인 유지용 텔레메�
 const MOVE_SPEED    = 0.6;    // m/s — 터틀봇 정도의 주행 속도
 const ARRIVE_EPS    = 0.05;   // 도착 판정 거리 (m)
 
+// ── 배터리 (적합도·충전 테스트용 — 적합도 탭에서 수동 오버라이드 가능) ──
+const BAT_START = [100, 72, 48, 22]; // 봇별 시작 배터리(%) — 편차를 둬 추천/충전 로직 테스트
+const BAT_DRAIN = 0.06;  // 이동 중 텔레메트리 주입당 소모(%) — 정지 중엔 수동 설정값 유지
+const BAT_MIN   = 5;     // 최소 배터리(%)
+
+// SUPPLY 비전 적재 완료 토픽 — task-planner.service.ts 의 LOADED_TOPIC 와 동일(로봇별 아님, 단일 비전 허브).
+// 적재 버튼이 이 토픽에 {data:true} 를 1회 주입하면 TaskPlannerService.onSupplyLoaded 가 대기 중 SUPPLY 를 완료시킨다.
+const LOADED_TOPIC = '/omx/vision/is_loaded';
+
 interface BotState {
   pose:    { x: number; y: number; yaw: number };
   goal:    { x: number; y: number; yaw: number } | null;
   moving:  boolean;
   battery: number; // %
+  error:   boolean; // true면 전복 자세(IMU roll 90°) 주입 → 백엔드 전복 감지로 ERROR 시뮬레이션
 }
 
 @Injectable()
@@ -45,7 +55,8 @@ export class VirtualRobotService implements OnModuleInit, OnModuleDestroy {
         pose:    { x: i * 0.5, y: 0, yaw: 0 },
         goal:    null,
         moving:  false,
-        battery: 100,
+        battery: BAT_START[i] ?? 100,
+        error:   false,
       });
     });
 
@@ -129,9 +140,63 @@ export class VirtualRobotService implements OnModuleInit, OnModuleDestroy {
     for (const [id, bot] of this.bots) this.emitOne(id, bot, now);
   }
 
-  // odom / amcl_pose / battery_state 한 대 분 주입
+  /** 테스트봇 배터리 수동 설정(적합도 탭 등에서 호출). 즉시 텔레메트리 반영. @returns 성공 여부 */
+  setBattery(robotId: string, pct: number): boolean {
+    const bot = this.bots.get(robotId);
+    if (!bot) return false;
+    bot.battery = Math.max(0, Math.min(100, pct));
+    this.emitOne(robotId, bot, Date.now()); // 즉시 반영
+    this.logger.log(`${robotId} 배터리 수동 설정 → ${bot.battery}%`);
+    return true;
+  }
+
+  /** 테스트봇 전복(ERROR) 시뮬레이션 토글 — 체크 시 IMU roll 90° 자세 주입 → 백엔드 전복 감지로 ERROR.
+   *  해제 시 정상 자세 IMU 1회 주입 → ERROR→IDLE 복구. @returns 성공 여부 */
+  setError(robotId: string, on: boolean): boolean {
+    const bot = this.bots.get(robotId);
+    if (!bot) return false;
+    bot.error = on;
+    if (on) { bot.moving = false; bot.goal = null; } // 전복 시 정지
+    this.emitOne(robotId, bot, Date.now()); // 즉시 반영(전복 ON이면 기운 IMU 포함)
+    // 해제 시: 정상 자세 IMU 1회 주입 → onImu가 ERROR→IDLE 복구
+    if (!on) {
+      this.rosService.injectMessage({ topic: `/${robotId}/imu`, data: { orientation: { x: 0, y: 0, z: 0, w: 1 } }, timestamp: Date.now() });
+    }
+    this.logger.log(`${robotId} 전복(ERROR) 시뮬레이션 → ${on ? 'ON' : 'OFF'}`);
+    return true;
+  }
+
+  /** 테스트봇 적재(SUPPLY 비전 적재 완료) 신호 1회 주입 — /omx/vision/is_loaded=true 발행 → 대기 중 SUPPLY COMPLETED.
+   *  is_loaded 는 로봇별이 아니라 단일 비전 허브 토픽이라(omx 1대 전제), 진행 중인 SUPPLY 1건을 완료시킨다.
+   *  vision 신호는 1회 소비되므로 지속 상태가 아니라 누를 때마다 1회 발행한다(적재 대기 중일 때 눌러야 효과). @returns 성공 여부 */
+  signalLoaded(robotId: string): boolean {
+    const bot = this.bots.get(robotId);
+    if (!bot) return false;
+    this.rosService.injectMessage({ topic: LOADED_TOPIC, data: { data: true }, timestamp: Date.now() });
+    this.logger.log(`${robotId} 적재 신호 주입 → ${LOADED_TOPIC}=true (대기 중 SUPPLY 완료)`);
+    return true;
+  }
+
+  /** 시뮬레이터 내부 위치를 직접 지정(+즉시 텔레메트리 반영). 백엔드 재시작 시 lastNode 좌표 복원 등에 사용. */
+  setPose(robotId: string, x: number, y: number, yaw: number): boolean {
+    const bot = this.bots.get(robotId);
+    if (!bot) return false;
+    bot.pose = { x, y, yaw };
+    bot.goal = null;
+    bot.moving = false;
+    this.emitOne(robotId, bot, Date.now());
+    this.logger.log(`${robotId} 시작 위치 설정 → (${x.toFixed(2)}, ${y.toFixed(2)})`);
+    return true;
+  }
+
+  /** 현재 테스트봇 배터리/전복 상태 목록 (UI 초기 표시용) */
+  getBatteries(): { robotId: string; battery: number; error: boolean }[] {
+    return [...this.bots.entries()].map(([robotId, b]) => ({ robotId, battery: Math.round(b.battery), error: b.error }));
+  }
+
+  // odom / amcl_pose / battery_state (+전복 시 imu) 한 대 분 주입
   private emitOne(id: string, bot: BotState, now: number) {
-    if (bot.moving) bot.battery = Math.max(20, bot.battery - 0.02); // 천천히 소모
+    if (bot.moving) bot.battery = Math.max(BAT_MIN, bot.battery - BAT_DRAIN); // 이동 중 소모 (정지 중엔 유지)
     this.rosService.injectMessage(this.poseMsg(id, bot, 'amcl_pose', now));
     this.rosService.injectMessage(this.poseMsg(id, bot, 'odom', now));
     this.rosService.injectMessage({
@@ -139,6 +204,11 @@ export class VirtualRobotService implements OnModuleInit, OnModuleDestroy {
       data: { percentage: bot.battery },
       timestamp: now,
     });
+    // 전복 ON: roll 90° 자세 IMU 주입(매 하트비트) → onImu가 ERROR 전환·태스크 반납.
+    // 전복 OFF: 정상 자세는 setError(false) 시 1회만 주입(복구), 평상시엔 imu 미주입(부하 절감).
+    if (bot.error) {
+      this.rosService.injectMessage({ topic: `/${id}/imu`, data: { orientation: { x: 0.7071, y: 0, z: 0, w: 0.7071 } }, timestamp: now });
+    }
   }
 
   private poseMsg(id: string, bot: BotState, kind: 'amcl_pose' | 'odom', now: number): RosMessage {

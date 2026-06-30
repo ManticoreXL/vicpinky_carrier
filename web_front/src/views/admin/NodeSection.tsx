@@ -3,6 +3,7 @@ import TopologyMapView from "../../components/TopologyMapView";
 import { api } from "./api";
 import { TH, TD, INP, SEL, BTN } from "./styles";
 import { SectionHeader, ErrBar, TableWrap, NodeTypeBadge } from "./common";
+import { usePolling } from "./usePolling";
 import type { FleetNode, FleetMap, NodeType } from "./types";
 
 export function NodeSection() {
@@ -34,6 +35,7 @@ export function NodeSection() {
  }, [mapFilter]);
 
  useEffect(() => { void load(); }, [load]);
+ usePolling(load, 2000, !editId && !adding);   // 항상 DB에서 받아와 새로 그림 (편집 중 제외)
 
  async function save() {
  if (!editId) return;
@@ -73,6 +75,22 @@ export function NodeSection() {
  } catch (e) { setErr(String(e)); }
  }
 
+ // 점유 수동 해제 — 충전소 isLocked/isLockedBy 둘 다 비운다
+ async function clearOccupancy(node: FleetNode) {
+ try {
+ await api(`/api/fleet/topology/nodes/${node.node_id}`, { method: "PATCH", body: JSON.stringify({ isLocked: false, isLockedBy: null }) });
+ void load();
+ } catch (e) { setErr(String(e)); }
+ }
+
+ // 초기 위치 토글 — 노드의 initPosition on/off
+ async function toggleInitPosition(node: FleetNode) {
+ try {
+ await api(`/api/fleet/topology/nodes/${node.node_id}`, { method: "PATCH", body: JSON.stringify({ initPosition: !node.initPosition }) });
+ void load();
+ } catch (e) { setErr(String(e)); }
+ }
+
  function startEdit(n: FleetNode) {
  setEditId(n.node_id);
  setEditDraft({ newId: n.node_id, map_id: n.map_id, type: n.type, x: n.x, y: n.y, yaw: n.yaw });
@@ -95,7 +113,7 @@ export function NodeSection() {
  <TableWrap>
  <thead>
  <tr className="border-b border-white/[0.1]">
- {["node_id","map_id","타입","x","y","yaw","잠금","점유(isLockedBy)",""].map(h => <th key={h} className={TH}>{h}</th>)}
+ {["node_id","map_id","타입","x","y","yaw","잠금","초기위치","점유(isLockedBy)",""].map(h => <th key={h} className={TH}>{h}</th>)}
  </tr>
  </thead>
  <tbody>
@@ -120,6 +138,11 @@ export function NodeSection() {
  </div>
  </td>
  <td className={TD} />
+ <td className={TD}>
+ <label className="flex items-center gap-1 text-xs text-white/[0.7] whitespace-nowrap">
+ <input type="checkbox" checked={!!addDraft.initPosition} onChange={e => setAddDraft(d => ({ ...d, initPosition: e.target.checked }))} /> 초기
+ </label>
+ </td>
  <td className={TD} />
  <td className={TD}>
  <div className="flex gap-1">
@@ -130,7 +153,7 @@ export function NodeSection() {
  </tr>
  )}
  {displayed.length === 0 && !adding && (
- <tr><td colSpan={9} className="px-3 py-6 text-center text-white/[0.55] text-xs">노드 없음</td></tr>
+ <tr><td colSpan={10} className="px-3 py-6 text-center text-white/[0.55] text-xs">노드 없음</td></tr>
  )}
  {displayed.map(n => {
  const isEdit = editId === n.node_id;
@@ -165,9 +188,16 @@ export function NodeSection() {
  onClick={() => toggleNodeLock(n)}>{n.isLocked ? "잠김" : "열림"}</button>
  </td>
  <td className={TD}>
- {n.isLockedBy
-  ? <span className="px-2 py-0.5 text-xs font-bold rounded border bg-emerald-900/40 text-white/[0.82] border-white/[0.1] whitespace-nowrap">⚡ {n.isLockedBy}</span>
-  : <span className="text-white/[0.4]">—</span>}
+ <button className={`px-2 py-0.5 text-xs font-bold rounded border transition-colors ${n.initPosition ? "bg-amber-500/30 text-white/[0.9] border-amber-400/40 hover:bg-amber-500/40" : "bg-[#FFCE99]/32 text-white/[0.55] border-white/[0.1] hover:text-white/90"}`}
+ onClick={() => toggleInitPosition(n)}>{n.initPosition ? "✓ 설정됨" : "설정"}</button>
+ </td>
+ <td className={TD}>
+ {n.isLockedBy ? (
+  <div className="flex items-center gap-1">
+   <span className="px-2 py-0.5 text-xs font-bold rounded border bg-emerald-900/40 text-white/[0.82] border-white/[0.1] whitespace-nowrap">⚡ {n.isLockedBy}</span>
+   <button className={BTN("bg-[#FFCE99]/32 text-red-800 border-white/[0.1] hover:text-white/90")} title="점유 수동 해제" onClick={() => clearOccupancy(n)}>해제</button>
+  </div>
+ ) : <span className="text-white/[0.4]">—</span>}
  </td>
  <td className={TD}>
  {delConfirm === n.node_id ? (

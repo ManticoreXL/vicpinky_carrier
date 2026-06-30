@@ -7,6 +7,8 @@ import { LogsModule } from './logs/logs.module';
 import { FmsModule } from './fms/fms.module';
 import { FleetModule } from './fleet.module';
 import { AiModule } from './ai/ai.module';
+import { VictimModule } from './victim/victim.module';
+import { TaskCatalogModule } from './task-catalog/task-catalog.module';
 
 @Module({
   imports: [
@@ -20,8 +22,10 @@ import { AiModule } from './ai/ai.module';
     VisionModule,
     LogsModule,
     FleetModule,
+    VictimModule,
     FmsModule,
     AiModule,
+    TaskCatalogModule,
   ],
 })
 export class AppModule {}

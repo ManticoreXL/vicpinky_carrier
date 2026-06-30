@@ -16,7 +16,7 @@ import * as yaml from 'js-yaml';
 //   - downlink (hub→robot): from_domain == hub → 허브 토픽 = key
 // ──────────────────────────────────────────────────────────────────────────────
 
-export type BridgeKind = 'topic' | 'action';
+export type BridgeKind = 'topic' | 'action' | 'service';
 /** uplink = 로봇→허브(관측/구독), downlink = 허브→로봇(명령/발행) */
 export type BridgeDirection = 'uplink' | 'downlink';
 
@@ -52,9 +52,10 @@ interface RawEntry {
 }
 
 interface RawFile {
-  name?:   string;
-  topics?: Record<string, RawEntry>;
-  actions?: Record<string, RawEntry>;
+  name?:     string;
+  topics?:   Record<string, RawEntry>;
+  actions?:  Record<string, RawEntry>;
+  services?: Record<string, RawEntry>;
 }
 
 // ── 헬퍼 ─────────────────────────────────────────────────────────────────────
@@ -100,7 +101,7 @@ export function parseBridgeDir(dir: string): BridgeMap {
       continue; // 잘못된 YAML은 건너뜀
     }
     const domains = new Set<number>();
-    for (const section of [raw.topics, raw.actions]) {
+    for (const section of [raw.topics, raw.actions, raw.services]) {
       for (const e of Object.values(section ?? {})) {
         if (isValidEntry(e)) {
           domains.add(e.from_domain!);
@@ -153,6 +154,7 @@ export function parseBridgeDir(dir: string): BridgeMap {
 
     ingest(raw.topics, 'topic');
     ingest(raw.actions, 'action');
+    ingest(raw.services, 'service');
 
     robots.push({ robotId, robotDomain, telemetry, commands });
   }
@@ -176,7 +178,7 @@ export function summarizeBridgeMap(map: BridgeMap): string {
     if (r.commands.length) {
       lines.push('  ▸ 제어(허브→로봇, 발행/액션):');
       for (const c of r.commands) {
-        const tag = c.kind === 'action' ? ' [action]' : '';
+        const tag = c.kind === 'action' ? ' [action]' : c.kind === 'service' ? ' [service]' : '';
         lines.push(`    - ${c.hubTopic}  (${c.type})${tag}`);
       }
     }

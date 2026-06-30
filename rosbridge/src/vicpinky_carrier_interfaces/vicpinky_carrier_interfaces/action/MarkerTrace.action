@@ -1,0 +1,12 @@
+# MarkerTrace.action
+
+# Request
+int32 bot_num
+string bot_action
+---
+# Result
+bool success
+string action_result
+---
+# Feedback
+string current_state

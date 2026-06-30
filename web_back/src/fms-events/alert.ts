@@ -5,7 +5,7 @@
 // id/timestamp 부여 + 브로드캐스트는 TaskManagerEventsService가 담당한다.
 
 export type AlertType =
-  | 'fall' | 'robot_offline' | 'task_failed' | 'no_path' | 'assigned' | 'completed' | 'info';
+  | 'fall' | 'robot_offline' | 'task_failed' | 'no_path' | 'assigned' | 'completed' | 'info' | 'low_battery' | 'charged';
 
 export class Alert {
   private constructor(
@@ -34,6 +34,11 @@ export class Alert {
     return new Alert('no_path', message, true, taskId, robotId);
   }
 
+  /** 작업 실패 + 글로벌 큐 반납 — 관제 조치(확인) 필요. 전복(에러)처럼 모달로 띄운다. */
+  static taskFailed(taskId: string, robotId: string, message: string): Alert {
+    return new Alert('task_failed', message, true, taskId, robotId);
+  }
+
   /** 전복 감지 — 관제 조치 필요 */
   static fall(robotId: string, message: string): Alert {
     return new Alert('fall', message, true, undefined, robotId);
@@ -42,5 +47,15 @@ export class Alert {
   /** 로봇 오프라인(태스크 중단) — 관제 조치 필요 */
   static robotOffline(robotId: string, message: string): Alert {
     return new Alert('robot_offline', message, true, undefined, robotId);
+  }
+
+  /** 배터리 부족 — 관제 조치(확인/자동충전) 필요 */
+  static lowBattery(robotId: string, message: string): Alert {
+    return new Alert('low_battery', message, true, undefined, robotId);
+  }
+
+  /** 배터리 충전/회복 — 알림만(조치 불필요, 토스트로 표시) */
+  static charged(robotId: string, message: string): Alert {
+    return new Alert('charged', message, false, undefined, robotId);
   }
 }

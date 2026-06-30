@@ -18,7 +18,8 @@ async function bootstrap() {
   // 비전 분석용 base64 이미지 수용 — 본문 한도 상향
   app.use(json({ limit: '15mb' }));
   app.use(urlencoded({ limit: '15mb', extended: true }));
-  await app.listen(3001);
-  console.log('NestJS 백엔드 실행 중: http://localhost:3001');
+  const port = Number(process.env.PORT ?? 3001);
+  await app.listen(port);
+  console.log(`NestJS 백엔드 실행 중: http://localhost:${port}`);
 }
 bootstrap();

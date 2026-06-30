@@ -14,7 +14,7 @@ export interface RobotPathState {
   pathQueue: string[];
   posX:      number | null;
   posY:      number | null;
-  priority:  number; // 태스크 우선순위 (낮을수록 먼저 — 1=긴급)
+  priority:  number; // 양보 우선순위 (낮을수록 먼저). 호출자가 TYPE_PRIORITY 기반 trafficPriority로 채움
   order:     number; // TASK 받은 시각(ms). 우선순위 같을 때 이른 쪽이 먼저
 }
 

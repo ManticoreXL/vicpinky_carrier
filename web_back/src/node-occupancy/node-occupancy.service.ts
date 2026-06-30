@@ -19,6 +19,11 @@ export class NodeOccupancyService {
 
   setServer(server: Server) { this.server = server; }
 
+  /** 점유 변경 소켓 이벤트 발행 (release 시 robotId=null) */
+  private emitOccupancyChange(nodeId: string, robotId: string | null): void {
+    this.server?.emit('node_occupancy_changed', { node_id: nodeId, robotId });
+  }
+
   // ── 점유 등록 ────────────────────────────────────────────────────────────
 
   occupy(robotId: string, nodeId: string): void {
@@ -28,7 +33,7 @@ export class NodeOccupancyService {
     // 이전 노드 해제
     if (prev) {
       this.nodeToRobot.delete(prev);
-      this.server?.emit('node_occupancy_changed', { node_id: prev, robotId: null });
+      this.emitOccupancyChange(prev, null);
     }
 
     // 해당 노드를 이미 다른 로봇이 점유 중이면 그 로봇 기록 제거 (비정상 상황 방어)
@@ -40,7 +45,7 @@ export class NodeOccupancyService {
 
     this.robotToNode.set(robotId, nodeId);
     this.nodeToRobot.set(nodeId, robotId);
-    this.server?.emit('node_occupancy_changed', { node_id: nodeId, robotId });
+    this.emitOccupancyChange(nodeId, robotId);
     this.logger.log(`[점유] ${robotId} → ${nodeId}`);
   }
 
@@ -52,7 +57,7 @@ export class NodeOccupancyService {
 
     this.robotToNode.delete(robotId);
     this.nodeToRobot.delete(nodeId);
-    this.server?.emit('node_occupancy_changed', { node_id: nodeId, robotId: null });
+    this.emitOccupancyChange(nodeId, null);
     this.logger.log(`[점유해제] ${robotId} ← ${nodeId}`);
   }
 

@@ -66,30 +66,54 @@ export interface RobotInfo {
   ip: string;
   ros_domain_id: number;
   status: string;
-  location?: string | null;
+  location?: string | null;   // 현재 로봇이 위치한 맵 id (Fleet 맵 매칭 기준)
+  lastNode?: string | null;    // 현재/마지막으로 위치한 노드 id
   pose_x?: number | null;
   pose_y?: number | null;
   yaw?: number | null;
   battery?: number | null;
   lastSeenAt?: string | null;
+  online?: boolean;            // 백엔드 권위 온라인 여부(=status!==OFFLINE)
 }
 
 // ── FMS 타입 ─────────────────────────────────────────────────────────────────
-export type TaskStatus = 'DRAFT' | 'PENDING' | 'ASSIGNED' | 'RUNNING' | 'COMPLETED' | 'FAILED';
-export type TaskType = 'SUPPLY' | 'PROCESS' | 'CHARGE' | 'MOVE';
+export type TaskStatus = 'DRAFT' | 'PENDING' | 'ASSIGNED' | 'RUNNING' | 'SUSPENDED' | 'COMPLETED' | 'FAILED';
+export type TaskType = 'SUPPLY' | 'PROCESS' | 'CHARGE' | 'MOVE' | 'RECALL' | 'PAUSE';
 
+export interface RosPlanStep {
+ kind?: string;
+ topicName: string;
+ messageType?: string;
+ awaitNodeId?: string | null;
+ awaitKind?: string;
+ waitMs?: number;
+ awaitTopic?: string;
+ awaitField?: string;
+ awaitValue?: unknown;
+ endTopic?: string;   // 엔드조건: 기본 완료 후 기다릴 외부 신호 토픽
+ endField?: string;
+ endValue?: unknown;
+}
 export interface FmsTask {
  _id: string;
  task_id: string;
+ label?: string; // 표시용 이름 (빌더 커스텀 태스크 = 정의 이름)
  type: TaskType;
  status: TaskStatus;
  priority: number;
+ seq?: number;
+ batchId?: string | null;
+ scenarioId?: string | null;
+ repeat?: boolean;
  targetNode: string;
  preferredRobotId?: string | null;
  waitReason?: string;
  assignedRobotId: string | null;
  pathQueue: string[];
  fullPath?: string[];
+ rosPlan?: RosPlanStep[]; // 커스텀 태스크의 ROS 액션 스텝(단계 전부 표시용)
+ rosCursor?: number;      // 현재/실패한 스텝 인덱스
+ errorMessage?: string | null; // 실패 사유(어느 스텝에서 났는지 포함)
  createdAt: string;
  startedAt?: string;
  completedAt?: string;
@@ -106,7 +130,7 @@ export interface FmsDispatchPayload {
 
 export interface TaskManagerAlert {
  id: string;
- type: 'fall' | 'robot_offline' | 'task_failed' | 'no_path' | 'assigned' | 'completed' | 'info';
+ type: 'fall' | 'robot_offline' | 'task_failed' | 'no_path' | 'assigned' | 'completed' | 'info' | 'low_battery' | 'charged';
  taskId?: string;
  robotId?: string;
  message: string;
@@ -228,6 +252,10 @@ export function useNestSocket() {
  );
  });
 
+ socket.on("fms_task_deleted", ({ _id }: { _id: string }) => {
+ setFmsTasks((prev) => prev.filter((t) => t._id !== _id));
+ });
+
  // ── Task Manager 알림 ───────────────────────────────────────────────────
  socket.on("task_manager_alert", (alert: TaskManagerAlert) => {
  setTmAlerts((prev) => [alert, ...prev].slice(0, 50));
@@ -260,7 +288,7 @@ export function useNestSocket() {
  socket.on("robot_status_changed", (payload: { robot_id: string; status: string }) => {
  setRobotStatuses(prev => ({ ...prev, [payload.robot_id]: payload.status }));
  setRobots(prev =>
-  prev.map(r => r.robot_id === payload.robot_id ? { ...r, status: payload.status } : r)
+  prev.map(r => r.robot_id === payload.robot_id ? { ...r, status: payload.status, online: payload.status !== "OFFLINE" } : r)
  );
  });
 
@@ -332,17 +360,17 @@ export function useNestSocket() {
  socketRef.current?.emit("fms_cancel_task", { taskId });
  }, []);
 
- // 자동충전 — 충전소 선택/점유 검사/배차는 모두 백엔드가 수행. 프론트는 robotId만 전송.
+ // 자동충전 — 충전소 선택/점유 검사/할당는 모두 백엔드가 수행. 프론트는 robotId만 전송.
  const emitFmsAutoCharge = useCallback((robotId: string) => {
  socketRef.current?.emit("fms_auto_charge", { robotId });
  }, []);
 
- // 등록만 (배차 X) — DRAFT 태스크 생성
+ // 등록만 (할당 X) — DRAFT 태스크 생성
  const emitFmsRegister = useCallback((payload: FmsDispatchPayload) => {
  socketRef.current?.emit("fms_register_task", payload);
  }, []);
 
- // DRAFT 태스크를 배차 큐에 투입
+ // DRAFT 태스크를 할당 큐에 투입
  const emitFmsRelease = useCallback((taskId: string) => {
  socketRef.current?.emit("fms_release_task", { taskId });
  }, []);
@@ -360,11 +388,16 @@ export function useNestSocket() {
  socketRef.current?.emit("task_manager_set_home", { robotId, x, y, yaw });
  }, []);
 
+ // 초기위치(홈)로 복귀 — 백엔드가 등록된 홈 좌표로 goal 발행
+ const emitReturnHome = useCallback((robotId: string) => {
+ socketRef.current?.emit("fms_return_home", { robotId });
+ }, []);
+
  return {
  emitCmdVel, emitPublish, emitAction, cancelAction, callService,
  emitFmsDispatch, emitFmsCancel, emitFmsAutoCharge, emitFmsRegister, emitFmsRelease, emitNodeLock,
  emitNavInitialPose,
- ackTmAlert, setRobotHome,
+ ackTmAlert, setRobotHome, emitReturnHome,
  nestConnected, rosMessages, socket,
  activeGoals, actionFeedbacks, actionResults,
  mapTimestamps, mapInfos,

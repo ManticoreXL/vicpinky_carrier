@@ -4,6 +4,7 @@ import { taskStatusKo, TASK_STATUS_KO } from "../../utils/statusLabel";
 import { api } from "./api";
 import { TH, TD, INP, SEL, BTN, TASK_STATUS_COLOR, TASK_TYPE_COLOR } from "./styles";
 import { SectionHeader, ErrBar, TableWrap } from "./common";
+import { usePolling } from "./usePolling";
 import type { Task, TaskType, TaskStatus } from "./types";
 
 export function TaskSection() {
@@ -33,6 +34,7 @@ export function TaskSection() {
  }, [statusFilter]);
 
  useEffect(() => { void load(); }, [load]);
+ usePolling(load, 2000, !adding && !delConfirm && !cancelConfirm);   // 항상 DB에서 받아와 새로 그림
 
  async function add() {
  if (!addDraft.targetNode) { setErr("targetNode 필수"); return; }
@@ -68,7 +70,7 @@ export function TaskSection() {
  {(["PENDING","ASSIGNED","RUNNING","COMPLETED","FAILED"] as TaskStatus[]).map(s => <option key={s} value={s}>{TASK_STATUS_KO[s] ?? s}</option>)}
  </select>
  <select className={`${SEL} w-40`} value={mapPreview} onChange={e => setMapPreview(e.target.value)}>
- <option value="">맵 미리보기…</option>
+ <option value="">맵 목록</option>
  {maps.map(m => <option key={m} value={m}>{m}</option>)}
  </select>
  </div>

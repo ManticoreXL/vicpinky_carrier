@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { useNestSocket } from "../hooks/useNestSocket";
 import TopologyEditor from "./TopologyEditor";
 import { RobotSection } from "./admin/RobotSection";
 import { MapSection } from "./admin/MapSection";
@@ -22,17 +21,16 @@ const TABS: { id: AdminTab; label: string }[] = [
 
 export default function AdminView() {
  const [tab, setTab] = useState<AdminTab>("editor");
- const { robotStatuses } = useNestSocket();
 
  return (
  <div className="h-full flex flex-col bg-[#FFCE99]/14 backdrop-blur-xl text-white/90 overflow-hidden">
  {/* 탭 바 */}
- <div className="flex-none flex border-b border-white/[0.1] bg-[#FFCE99]/32 px-4 pt-2 gap-1">
+ <div className="flex-none flex border-b border-white/[0.1] bg-[#FFCE99]/32 px-4 pt-2 gap-1 overflow-x-auto">
  {TABS.map(t => (
  <button
  key={t.id}
  onClick={() => setTab(t.id)}
- className={`px-4 py-2 text-xs font-bold tracking-wider border-b-2 transition-colors ${
+ className={`px-4 py-2 text-xs font-bold tracking-wider border-b-2 transition-colors whitespace-nowrap flex-none ${
  tab === t.id
  ? "border-indigo-500 text-white/[0.82]"
  : "border-transparent text-white/[0.6] hover:text-white/[0.75]"
@@ -50,7 +48,7 @@ export default function AdminView() {
  </div>
  ) : (
  <div className="flex-1 overflow-y-auto overflow-x-auto p-3 sm:p-5">
- {tab === "robots" && <RobotSection liveStatuses={robotStatuses} />}
+ {tab === "robots" && <RobotSection />}
  {tab === "maps" && <MapSection />}
  {tab === "nodes" && <NodeSection />}
  {tab === "edges" && <EdgeSection />}

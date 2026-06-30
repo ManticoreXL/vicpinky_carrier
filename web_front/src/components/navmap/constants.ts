@@ -21,6 +21,7 @@ export const NODE_COLOR: Record<string, string> = {
   WAYPOINT: "#60a5fa",
   STATION: "#fbbf24",
   CHARGER: "#4ade80",
+  VICTIM: "#ef4444", // 조난자 임시노드 — 빨강
 };
 
 export const ROBOT_COLORS = ["#f472b6", "#a78bfa", "#fb923c", "#34d399", "#f87171", "#38bdf8"];

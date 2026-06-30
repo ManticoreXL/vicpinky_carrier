@@ -1,14 +1,16 @@
 import { useEffect, useState, useCallback } from "react";
 import { PanelProps, PublishFn } from "../../hooks/useRos";
+import { batteryPercent } from "../../utils/battery";
 import {
  RosMessage, CmdVelPayload,
  ActionGoalPayload, ActionFeedback, ActionResult, ActiveGoals,
 } from "../../hooks/useNestSocket";
 import {
  PanelCard, Section, NoData,
-} from "./BigPinkyPanel";
+} from "./shared";
 import { useKeyboardControl } from "../../hooks/useKeyboardControl";
-import ActionPanel from "../ActionPanel";
+import ActionPanel from "./ActionPanel";
+import { quatToYaw, quatToRoll, quatToPitch, r2d, f } from "../../utils/quaternion";
 
 type DiagStatus = "idle" | "loading" | "ok" | "error";
 interface DiagResult {
@@ -16,20 +18,6 @@ interface DiagResult {
  summary: string;
  errors: string[];
 }
-
-// ── 유틸 ──────────────────────────────────────────────────────────────────────
-
-function quatToYaw(q: { x: number; y: number; z: number; w: number }) {
- return Math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z));
-}
-function quatToRoll(q: { x: number; y: number; z: number; w: number }) {
- return Math.atan2(2 * (q.w * q.x + q.y * q.z), 1 - 2 * (q.x * q.x + q.y * q.y));
-}
-function quatToPitch(q: { x: number; y: number; z: number; w: number }) {
- return Math.asin(Math.max(-1, Math.min(1, 2 * (q.w * q.y - q.z * q.x))));
-}
-const r2d = (r: number) => (r * 180) / Math.PI;
-const f = (n: number, d = 2) => n.toFixed(d);
 
 // ── 타입 ──────────────────────────────────────────────────────────────────────
 
@@ -62,6 +50,15 @@ export default function TurtlebotPanel({
  const [keyboardActive, setKeyboardActive] = useState(false);
  const [diagStatus, setDiagStatus] = useState<DiagStatus>("idle");
  const [diagResult, setDiagResult] = useState<DiagResult | null>(null);
+ // 전개(Deploy) 서비스 — /{botId}/deploy (turtlebot_state_msgs/srv/Deploy)
+ const [deployTime, setDeployTime] = useState("25");
+ const [deploySpeed, setDeploySpeed] = useState("0");
+ const [deployStatus, setDeployStatus] = useState<"idle" | "loading" | "done">("idle");
+ const [deployResult, setDeployResult] = useState<{ success: boolean; drivenTime: number; message: string } | null>(null);
+ // 라인트레이서(LineTrace) 서비스 — /{botId}/line_trace (turtlebot_state_msgs/srv/LineTrace)
+ const [lineTraceDur, setLineTraceDur] = useState("0");
+ const [lineTraceStatus, setLineTraceStatus] = useState<"idle" | "loading" | "done">("idle");
+ const [lineTraceResult, setLineTraceResult] = useState<{ success: boolean; tracedTime: number; message: string } | null>(null);
 
  // 메시지가 끊겨도 오프라인 판정이 갱신되도록 1초마다 강제 리렌더
  const [, setTick] = useState(0);
@@ -81,11 +78,6 @@ export default function TurtlebotPanel({
  // 오프라인이면 stale 데이터를 보여주지 않도록 undefined 반환 → 각 카드 NoData 표시
  const p = (topic: string) => (online ? rosMessages[`/${botId}/${topic}`]?.data : undefined);
 
- // // cmd_vel
- // const cvData = p("cmd_vel") as { linear?: { x?: number }; angular?: { z?: number } } | undefined;
- // const cvLinear = cvData?.linear?.x ?? null;
- // const cvAngular = cvData?.angular?.z ?? null;
- // 수정 (TwistStamped)
  const cvData = p("cmd_vel") as { twist?: { linear?: { x?: number }; angular?: { z?: number } } } | undefined;
  const cvLinear = cvData?.twist?.linear?.x ?? null;
  const cvAngular = cvData?.twist?.angular?.z ?? null;
@@ -98,9 +90,7 @@ export default function TurtlebotPanel({
  power_supply_status?: number; power_supply_health?: number; power_supply_technology?: number;
  present?: boolean;
  } | undefined;
- const batPct = batData?.percentage != null
- ? Math.round(batData.percentage > 1 ? batData.percentage : batData.percentage * 100)
- : null;
+ const batPct = batteryPercent(batData?.percentage);
  const batV = batData?.voltage ?? null;
  const batA = batData?.current ?? null;
 
@@ -144,7 +134,7 @@ export default function TurtlebotPanel({
 
  // ── 키보드 조종 ──────────────────────────────────────────────────────────
  const handleCmdVel = useCallback((payload: CmdVelPayload) => emitCmdVel(payload), [emitCmdVel]);
- useKeyboardControl({ botId, enabled: keyboardActive, publish: handleCmdVel, linearSpeed: 0.2, angularSpeed: 1.0 });
+ useKeyboardControl({ botId, enabled: keyboardActive, publish: handleCmdVel, linearSpeed: 0.03, angularSpeed: 1.0 });
 
  useEffect(() => {
  const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") setKeyboardActive(false); };
@@ -171,6 +161,39 @@ export default function TurtlebotPanel({
  },
  );
  }, [botId, callService]);
+
+ // 전개(Deploy) 서비스 호출 — 요청 {forward_time, forward_speed} → 응답 {success, driven_time, message}
+ const runDeploy = useCallback(() => {
+ setDeployStatus("loading");
+ setDeployResult(null);
+ callService(
+ `/${botId}/deploy`,
+ "turtlebot_state_msgs/srv/Deploy",
+ { forward_time: Number(deployTime) || 0, forward_speed: Number(deploySpeed) || 0 },
+ (res) => {
+ const r = res as { success?: boolean; driven_time?: number; message?: string };
+ setDeployResult({ success: r.success ?? false, drivenTime: r.driven_time ?? 0, message: r.message ?? "" });
+ setDeployStatus("done");
+ },
+ );
+ }, [botId, callService, deployTime, deploySpeed]);
+
+ // 라인트레이서 서비스 호출 — 요청 {duration} → 응답 {success, traced_time, message}.
+ // 지정 시간만큼 적외선 라인트레이싱(후진) 수행 후 정지(블로킹). duration 0 이하 → 노드 default_time(기본 30s).
+ const runLineTrace = useCallback(() => {
+ setLineTraceStatus("loading");
+ setLineTraceResult(null);
+ callService(
+ `/${botId}/line_trace`,
+ "turtlebot_state_msgs/srv/LineTrace",
+ { duration: Number(lineTraceDur) || 0 },
+ (res) => {
+ const r = res as { success?: boolean; traced_time?: number; message?: string };
+ setLineTraceResult({ success: r.success ?? false, tracedTime: r.traced_time ?? 0, message: r.message ?? "" });
+ setLineTraceStatus("done");
+ },
+ );
+ }, [botId, callService, lineTraceDur]);
 
  return (
  <div className="max-w-2xl">
@@ -343,6 +366,60 @@ export default function TurtlebotPanel({
  </div>
  </Section>
 
+ {/* ── 전개 (Deploy) — /{botId}/deploy 서비스 호출 + 응답 표시 ──────────── */}
+ <Section label="전개 (Deploy)">
+ <div className="flex flex-col gap-3">
+ <div className="flex items-center gap-2 flex-wrap">
+ <label className="text-xs text-white/[0.6] tracking-wide">전진 시간(s)</label>
+ <input type="number" step="0.5" value={deployTime} onChange={(e) => setDeployTime(e.target.value)}
+ className="w-16 text-xs bg-[#FFCE99]/32 border border-white/[0.1] text-white/90 px-2 py-0.5" />
+ <label className="text-xs text-white/[0.6] tracking-wide">속도(m/s)</label>
+ <input type="number" step="0.05" value={deploySpeed} onChange={(e) => setDeploySpeed(e.target.value)}
+ className="w-16 text-xs bg-[#FFCE99]/32 border border-white/[0.1] text-white/90 px-2 py-0.5" />
+ <button onClick={runDeploy} disabled={deployStatus === "loading"}
+ className={`px-4 py-1.5 border text-xs font-bold tracking-wide transition-all ${
+ deployStatus === "loading"
+ ? "border-white/[0.1] bg-transparent text-white/[0.55] cursor-not-allowed"
+ : "border-white/[0.1] bg-[#FFCE99]/32 text-white/[0.75] hover:text-white/90"
+ }`}>
+ {deployStatus === "loading" ? "전개 중…" : "전개 보내기"}
+ </button>
+ </div>
+ {deployResult && (
+ <div className={`text-xs p-2.5 border ${deployResult.success ? "border-white/[0.1] bg-green-950/20 text-white/90" : "border-white/[0.1] bg-red-950/20 text-white/90"}`}>
+ <p className="font-bold">{deployResult.success ? "◉ 완료" : "⚠ 실패"} · 전진 {deployResult.drivenTime.toFixed(1)}s</p>
+ {deployResult.message && <p className="mt-1 text-white/[0.75]">{deployResult.message}</p>}
+ </div>
+ )}
+ </div>
+ </Section>
+
+ {/* ── 라인트레이서 (LineTrace) — /{botId}/line_trace 서비스 호출 + 응답 표시 ──── */}
+ <Section label="라인트레이서 (LineTrace)">
+ <div className="flex flex-col gap-3">
+ <div className="flex items-center gap-2 flex-wrap">
+ <label className="text-xs text-white/[0.6] tracking-wide">수행 시간(s)</label>
+ <input type="number" step="0.5" min="0" value={lineTraceDur} onChange={(e) => setLineTraceDur(e.target.value)}
+ className="w-16 text-xs bg-[#FFCE99]/32 border border-white/[0.1] text-white/90 px-2 py-0.5" />
+ <span className="text-xs text-white/[0.4]">0 = 노드 기본 시간(default 30s)</span>
+ <button onClick={runLineTrace} disabled={lineTraceStatus === "loading"}
+ className={`px-4 py-1.5 border text-xs font-bold tracking-wide transition-all ${
+ lineTraceStatus === "loading"
+ ? "border-white/[0.1] bg-transparent text-white/[0.55] cursor-not-allowed"
+ : "border-white/[0.1] bg-[#FFCE99]/32 text-white/[0.75] hover:text-white/90"
+ }`}>
+ {lineTraceStatus === "loading" ? "주행 중…" : "라인트레이스 실행"}
+ </button>
+ </div>
+ {lineTraceResult && (
+ <div className={`text-xs p-2.5 border ${lineTraceResult.success ? "border-white/[0.1] bg-green-950/20 text-white/90" : "border-white/[0.1] bg-red-950/20 text-white/90"}`}>
+ <p className="font-bold">{lineTraceResult.success ? "◉ 완료" : "⚠ 실패"} · 수행 {lineTraceResult.tracedTime.toFixed(1)}s</p>
+ {lineTraceResult.message && <p className="mt-1 text-white/[0.75]">{lineTraceResult.message}</p>}
+ </div>
+ )}
+ </div>
+ </Section>
+
  {/* ── Action ──────────────────────────────────────────────────────── */}
  <ActionPanel
  robotNamespace={botId}
@@ -355,6 +432,9 @@ export default function TurtlebotPanel({
 
  {/* ── 음성 명령 (/speak_cmd) ─────────────────────────────────────── */}
  <SpeakCmdPanel botId={botId} publish={publish} />
+
+ {/* ── LED 헤드라이트 (/headlight_cmd) ─────────────────────────────── */}
+ <HeadlightPanel botId={botId} publish={publish} />
 
  </PanelCard>
  </div>
@@ -505,6 +585,47 @@ function SpeakCmdPanel({ botId, publish }: { botId: string; publish: PublishFn }
       {lastText}
      </div>
     )}
+   </div>
+  </Section>
+ );
+}
+
+// ── HeadlightPanel ────────────────────────────────────────────────────────────
+// LED 헤드라이트 제어 — /{botId}/headlight_cmd (std_msgs/String: on/off/blink)
+
+type HeadlightCmd = "on" | "off" | "blink";
+
+const HEADLIGHT_BTNS: { cmd: HeadlightCmd; label: string; icon: string }[] = [
+ { cmd: "on",    label: "켜기",    icon: "💡" },
+ { cmd: "off",   label: "끄기",    icon: "🌑" },
+ { cmd: "blink", label: "깜빡임",  icon: "✨" },
+];
+
+function HeadlightPanel({ botId, publish }: { botId: string; publish: PublishFn }) {
+ const [active, setActive] = useState<HeadlightCmd | null>(null);
+
+ const send = (cmd: HeadlightCmd) => {
+  publish(`/${botId}/headlight_cmd`, "std_msgs/String", { data: cmd });
+  setActive(cmd);
+ };
+
+ return (
+  <Section label="LED 헤드라이트 (/headlight_cmd)">
+   <div className="grid grid-cols-3 gap-2">
+    {HEADLIGHT_BTNS.map(({ cmd, label, icon }) => (
+     <button
+      key={cmd}
+      onClick={() => send(cmd)}
+      title={`headlight_cmd: ${cmd}`}
+      className={`py-2.5 border text-xs font-semibold tracking-wide transition-all ${
+       active === cmd
+        ? "border-amber-400/50 bg-amber-400/15 text-amber-300"
+        : "border-white/[0.1] bg-transparent text-white/[0.6] hover:border-white/[0.12] hover:text-white/[0.82]"
+      }`}
+     >
+      <span className="mr-1">{icon}</span>{label}
+     </button>
+    ))}
    </div>
   </Section>
  );

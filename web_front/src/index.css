@@ -110,3 +110,20 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 .animate-slide-up { animation: slide-up 0.3s ease-out; }
+
+/* AUTO DISPATCHER ON — 글로벌 태스크 큐가 자동 실행 중임을 알리는 움직이는 배경 */
+@keyframes autoDispatchSweep {
+  0%   { background-position: 0% 50%; }
+  100% { background-position: 200% 50%; }
+}
+.auto-dispatch-active {
+  background-image: linear-gradient(
+    90deg,
+    rgba(16, 185, 129, 0.20),
+    rgba(245, 158, 11, 0.26),
+    rgba(16, 185, 129, 0.20),
+    rgba(245, 158, 11, 0.26)
+  );
+  background-size: 200% 100%;
+  animation: autoDispatchSweep 2.5s linear infinite;
+}

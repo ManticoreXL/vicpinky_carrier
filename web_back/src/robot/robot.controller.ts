@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from '@nestjs/common';
 import { RobotService } from './robot.service';
 import { Robot, RobotStatus } from './robot.schema';
 
@@ -7,7 +7,9 @@ export class RobotController {
   constructor(private readonly robotService: RobotService) {}
 
   @Get()
-  findAll() { return this.robotService.findAll(); }
+  findAll(@Query('map_id') map_id?: string) {
+    return map_id ? this.robotService.findByMap(map_id) : this.robotService.findAll();
+  }
 
   @Get(':id')
   findOne(@Param('id') id: string) { return this.robotService.findById(id); }
@@ -26,8 +28,8 @@ export class RobotController {
   }
 
   @Patch(':id/location')
-  updateLocation(@Param('id') id: string, @Body('node_id') node_id: string) {
-    return this.robotService.updateLocation(id, node_id);
+  updateNode(@Param('id') id: string, @Body('node_id') node_id: string) {
+    return this.robotService.updateNode(id, node_id);
   }
 
   @Patch(':id/rename')

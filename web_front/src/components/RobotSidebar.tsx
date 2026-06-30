@@ -1,23 +1,7 @@
 import { useThrottled } from "../hooks/useThrottled";
-import { robotStatusKo } from "../utils/statusLabel";
+import { robotStatusKo, robotStatusColor, robotStatusDot, isRobotOnline } from "../utils/statusLabel";
 import type { RosMessage } from "../hooks/useNestSocket";
 import type { RobotInfo } from "../hooks/useNestSocket";
-
-const STATUS_COLOR: Record<string, string> = {
- IDLE:    "text-white/[0.68]",
- MOVING:  "text-orange-600",
- WORKING: "text-amber-600",
- ERROR:   "text-red-600",
- OFFLINE: "text-white/[0.45]",
-};
-
-const STATUS_DOT: Record<string, string> = {
- IDLE:    "bg-white/30",
- MOVING:  "bg-orange-500 animate-pulse",
- WORKING: "bg-amber-500 animate-pulse",
- ERROR:   "bg-red-500",
- OFFLINE: "bg-white/10",
-};
 
 interface Props {
  robots: RobotInfo[];
@@ -30,7 +14,7 @@ export default function RobotSidebar({ robots, selectedRobot, onSelect, rosMessa
  const displayMessages = useThrottled(rosMessages, 800);
 
  return (
-  <aside className="w-56 sm:w-60 flex-none glass-panel border-r border-white/[0.1] flex flex-col overflow-y-auto">
+  <aside className="w-full sm:w-60 flex-none glass-panel border-b sm:border-b-0 sm:border-r border-white/[0.1] flex flex-col overflow-hidden sm:overflow-y-auto">
    <div className="px-4 py-4 border-b border-white/[0.1]">
     <span className="sub-label">Fleet</span>
     <div className="flex items-center justify-between mt-1">
@@ -40,7 +24,7 @@ export default function RobotSidebar({ robots, selectedRobot, onSelect, rosMessa
     </div>
    </div>
 
-   <div className="flex-1 overflow-y-auto p-3 space-y-1">
+   <div className="flex flex-row sm:flex-col gap-2 sm:gap-1 sm:flex-1 overflow-x-auto sm:overflow-x-hidden overflow-y-hidden sm:overflow-y-auto p-3">
     {robots.length === 0 ? (
      <p className="px-3 py-8 text-xs text-white/[0.4] text-center italic">스캔 중...</p>
     ) : (
@@ -69,10 +53,8 @@ function RobotItem({
 }) {
  const { robot_id, status } = robot;
 
- // 온라인 여부: 상태가 OFFLINE이 아니거나, 최근 odom 토픽 수신 중
- const odomTs  = rosMessages[`/${robot_id}/odom`]?.timestamp ?? 0;
- const rosOnline = odomTs > 0 && Date.now() - odomTs < 5_000;
- const isOnline  = status !== "OFFLINE" || rosOnline;
+ // 온라인 여부: 백엔드 status 기준(OFFLINE이 아니면 온라인) — 클라 타이머 사용 안 함
+ const isOnline = isRobotOnline(status);
 
  // 배터리: 서버 병합값(DB+텔레메트리) 우선, 없으면 ROS 토픽 파싱
  let batPct: number | null = robot.battery != null ? Math.round(robot.battery) : null;
@@ -97,7 +79,7 @@ function RobotItem({
  return (
   <button
    onClick={() => onSelect(robot_id)}
-   className={`w-full text-left p-3 rounded-xl transition-all duration-300 border ${
+   className={`w-48 sm:w-full flex-none text-left p-3 rounded-xl transition-all duration-300 border ${
     selected
      ? "bg-orange-500/10 border-orange-500/25 shadow-md shadow-orange-500/5"
      : "border-transparent bg-transparent hover:bg-[#FFCE99]/32 hover:border-white/[0.1]"
@@ -105,13 +87,13 @@ function RobotItem({
   >
    <div className="flex items-center justify-between mb-2">
     <div className="flex items-center gap-2 min-w-0">
-     <div className={`w-1.5 h-1.5 rounded-full flex-none ${STATUS_DOT[status] ?? "bg-white/15"}`} />
+     <div className={`w-1.5 h-1.5 rounded-full flex-none ${robotStatusDot(status)}`} />
      <span className={`text-xs font-semibold truncate ${selected ? "text-orange-700" : "text-white/65"}`}>
       {robot_id}
      </span>
     </div>
     <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-[#FFCE99]/32
-                      border border-white/[0.08] ${STATUS_COLOR[status] ?? "text-white/[0.45]"}`}>
+                      border border-white/[0.08] ${robotStatusColor(status)}`}>
      {robotStatusKo(status)}
     </span>
    </div>

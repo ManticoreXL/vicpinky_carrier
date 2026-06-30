@@ -1,15 +1,20 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
-import { Task, TaskDocument, TaskStatus } from '../fms/task.schema';
+import { TaskHistory, TaskHistoryDocument, TaskStatus } from '../fms/task.schema';
 import { Robot, RobotDocument } from '../robot/robot.schema';
 import { Node, NodeDocument } from '../topology/node.schema';
 import { Log, LogDocument } from '../logs/log.schema';
 
 // 상태 → 한국어 (LLM이 자연스러운 한국어로 답하도록 컨텍스트부터 한글화)
 const ROBOT_STATUS_KO: Record<string, string> = {
-  IDLE: '대기', MOVING: '이동중', WORKING: '작업중',
-  CHARGING: '충전중', ERROR: '오류', OFFLINE: '오프라인',
+  // 공통
+  IDLE: '대기', RETURNING: '복귀중', PAUSED: '일시정지', ERROR: '오류', OFFLINE: '오프라인',
+  // 이동·작업
+  MOVING: '이동중', RELIEF: '구호중', TO_CHARGE: '충전소이동중', CHARGING: '충전중',
+  // 빅핑키 캐리어
+  PARKED: '주차됨', TO_LOAD: '적재위치이동중', LOADING: '상차중', LOADED: '적재됨',
+  UNLOADING: '하차중', CARRIER_UP: '캐리어올림', CARRIER_DOWN: '캐리어내림',
 };
 const TASK_STATUS_KO: Record<string, string> = {
   PENDING: '대기중', ASSIGNED: '배정됨', RUNNING: '진행중',
@@ -32,7 +37,7 @@ export class RagService {
   private readonly logger = new Logger(RagService.name);
 
   constructor(
-    @InjectModel(Task.name)  private readonly taskModel:  Model<TaskDocument>,
+    @InjectModel(TaskHistory.name)  private readonly taskModel:  Model<TaskHistoryDocument>,
     @InjectModel(Robot.name) private readonly robotModel: Model<RobotDocument>,
     @InjectModel(Node.name)  private readonly nodeModel:  Model<NodeDocument>,
     @InjectModel(Log.name)   private readonly logModel:   Model<LogDocument>,
@@ -99,7 +104,7 @@ export class RagService {
             posDesc = '위치 미확정(AMCL/odom 미수신)';
           }
 
-          const locField = r.location ? ` / 등록노드 ${r.location}` : '';
+          const locField = r.lastNode ? ` / 등록노드 ${r.lastNode}` : '';
           lines.push(`  - ${r.robot_id} (IP ${r.ip}): 상태=${statusKo} / ${bat} / ${posDesc}${locField}`);
         }
       }

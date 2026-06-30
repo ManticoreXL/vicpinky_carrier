@@ -44,14 +44,31 @@ topics:
     to_domain: 49
     remap: /tb3_01/imu
 
+  /map: # 정찰 맵 — 로봇(41) /map → 허브(49) /tb3_01/map (latched)
+    type: nav_msgs/msg/OccupancyGrid
+    from_domain: 41
+    to_domain: 49
+    remap: /tb3_01/map
+    qos:
+      durability: transient_local
+      reliability: reliable
+      history: keep_last
+      depth: 1
+
+  /victim/report: # 조난자 좌표 보고 (로봇 41 → 허브 49, 동일 이름)
+    type: std_msgs/msg/String
+    from_domain: 41
+    to_domain: 49
+    remap: /victim/report
+
   # ── DOWNLINK: 관제탑(49)에서 로봇(41)으로 명령 전송 ──
   /tb3_01/cmd_vel: # 비상 정지 및 조이스틱 수동 제어용
     type: geometry_msgs/msg/TwistStamped
     from_domain: 49
     to_domain: 41
     remap: /cmd_vel
-    qos:
-      reliability: reliable
+    # qos:
+    #   reliability: reliable
 
   /tb3_01/initialpose: # 서버에서 초기 위치 집어주기 (필수)
     type: geometry_msgs/msg/PoseWithCovarianceStamped
@@ -71,11 +88,26 @@ topics:
     to_domain: 41
     remap: /speak_cmd
 
+  /tb3_01/headlight_cmd: # LED 헤드라이트 제어 (on/off/blink)
+    type: std_msgs/msg/String
+    from_domain: 49
+    to_domain: 41
+    remap: /headlight_cmd
+
+services:
+
+  # ── DOWNLINK 서비스: 관제탑(49) → 로봇(41) ──
+  /tb3_01/line_trace:                 # 허브(49) 발행 → 로봇(41) /line_trace 서비스로 중계 (라인트레이서 on/off)
+    type: turtlebot_state_msgs/srv/LineTrace
+    from_domain: 49
+    to_domain: 41
+    remap: /line_trace
+
 actions:
 
   # ── DOWNLINK ACTIONS: 관제탑(49)에서 로봇(41) 행동 제어 및 도착 여부 추적 ──
   /tb3_01/navigate_to_pose: # 목적지 할당 및 피드백(도착/실패) 수신용 (필수)
     type: nav2_msgs/action/NavigateToPose
-    from_domain: 49  # 💡 40으로 오타나 있던 도메인 ID 수정 완료
+    from_domain: 49
     to_domain: 41
     remap: /navigate_to_pose

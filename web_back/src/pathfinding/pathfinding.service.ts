@@ -8,6 +8,9 @@ import { Edge, EdgeDocument } from '../topology/edge.schema';
 // (표준 다익스트라는 양수 비용을 요구 — 0.01 같은 작은 양수는 정상적인 저비용 간선이다)
 const MIN_WEIGHT = 0;
 
+// 노드와 노드 사이 거리(고정) — A* 경로 홉 수 × 이 값 = 거리(m).
+const NODE_HOP_DIST = 0.1;
+
 /**
  * 경로 탐색 전담 서비스.
  *
@@ -56,7 +59,7 @@ export class PathfindingService {
       return [];
     }
 
-    // 💡 물리적 좌표(nodePos)는 무시하고, 충전소 판별을 위한 타입(nodeType)만 저장
+    // 충전소 판별을 위한 노드 타입(nodeType)만 저장 — 좌표는 다익스트라에 불필요
     const nodeType = new Map<string, string>();
     for (const n of allNodes) {
       nodeType.set(n.node_id, n.type);
@@ -98,7 +101,7 @@ export class PathfindingService {
       this.logger.warn(`[PathFind] 출발노드 "${startNodeId}" 엣지 없음`);
     }
 
-    // 💡 A*에서 휴리스틱을 뺀 다익스트라(Dijkstra) 방식으로 탐색
+    // 다익스트라(Dijkstra): 누적 비용 gCost 기준으로만 노드를 확장
     const gCost  = new Map<string, number>();
     const parent = new Map<string, string>();
     const closed = new Set<string>(); // 방문 완료 노드 추적 (무한 루프 방지)
@@ -156,33 +159,6 @@ export class PathfindingService {
     return path;
   }
 
-  // ── 최근접 스테이션/충전소 탐색 ──────────────────────────────────────────
-  //
-  // 점유 대기 중인 로봇을 가장 가까운 STATION/CHARGER 노드로 안내할 때 사용
-
-  async findNearestStation(fromNodeId: string, map_id: string): Promise<string | null> {
-    const stations = await this.nodeModel
-      .find({ map_id, type: { $in: [NodeType.STATION, NodeType.CHARGER] } })
-      .lean()
-      .exec();
-
-    if (stations.length === 0) return null;
-
-    let nearest: string | null = null;
-    let minHops = Infinity;
-
-    for (const st of stations) {
-      if (st.node_id === fromNodeId) return fromNodeId;
-      const path = await this.findPath(fromNodeId, st.node_id, map_id);
-      if (path.length > 0 && path.length < minHops) {
-        minHops = path.length;
-        nearest = st.node_id;
-      }
-    }
-
-    return nearest;
-  }
-
   // ── 좌표 기준 최근접 노드 탐색 ──────────────────────────────────────────────
   // robot.location 이 null일 때 AMCL 위치로 출발 노드를 결정하는 데 사용
 
@@ -203,5 +179,25 @@ export class PathfindingService {
       if (d < minDist) { minDist = d; nearest = node.node_id; }
     }
     return nearest;
+  }
+
+  // ── 위치 → 목적지 노드 거리 (노드 간 0.1 고정, A* 홉 수 기반) ─────────────────
+  /**
+   * 위치(x,y)에서 가장 가까운 노드 → 목적지 노드까지 A* 경로 거리.
+   * 노드와 노드 사이를 0.1로 고정해 (홉 수 × 0.1)을 거리로 본다. 위치/목적지 미상·도달 불가 시 null.
+   * (목적지 노드가 속한 맵을 스스로 찾아 그 맵에서 계산한다.)
+   */
+  async hopDistanceFromPosition(
+    x: number | null | undefined, y: number | null | undefined, targetNodeId: string,
+  ): Promise<number | null> {
+    if (x == null || y == null) return null;
+    const target = await this.nodeModel.findOne({ node_id: targetNodeId }).lean().exec();
+    const mapId = target?.map_id;
+    if (!mapId) return null;
+    const startNode = await this.findNearestNodeToPosition(x, y, mapId);
+    if (!startNode) return null;
+    const path = await this.findPath(startNode, targetNodeId, mapId);
+    if (path.length === 0) return null;          // 도달 불가
+    return (path.length - 1) * NODE_HOP_DIST;    // 홉 수 × 0.1
   }
 }

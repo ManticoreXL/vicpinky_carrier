@@ -24,6 +24,4 @@ export function distToSegment(px: number, py: number, x1: number, y1: number, x2
   return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)));
 }
 
-export function quatToYaw(q: { x: number; y: number; z: number; w: number }) {
-  return Math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z));
-}
+// quatToYaw 는 utils/quaternion.ts 로 이동(패널·navmap 공용).

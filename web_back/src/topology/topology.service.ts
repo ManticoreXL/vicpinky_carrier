@@ -5,7 +5,7 @@ import type { Server } from 'socket.io';
 import { Node, NodeDocument, NodeType } from './node.schema';
 import { Edge, EdgeDocument, EdgeDirection } from './edge.schema';
 import { Robot, RobotDocument } from '../robot/robot.schema';
-import { Task, TaskDocument } from '../fms/task.schema';
+import { TaskHistory, TaskHistoryDocument } from '../fms/task.schema';
 
 @Injectable()
 export class TopologyService implements OnModuleInit {
@@ -16,7 +16,7 @@ export class TopologyService implements OnModuleInit {
     @InjectModel(Node.name)  private readonly nodeModel:  Model<NodeDocument>,
     @InjectModel(Edge.name)  private readonly edgeModel:  Model<EdgeDocument>,
     @InjectModel(Robot.name) private readonly robotModel: Model<RobotDocument>,
-    @InjectModel(Task.name)  private readonly taskModel:  Model<TaskDocument>,
+    @InjectModel(TaskHistory.name)  private readonly taskModel:  Model<TaskHistoryDocument>,
   ) {}
 
   // 스키마에 isLockedBy를 추가한 뒤, 그 필드가 없는 기존 노드 문서에 null을 백필한다.
@@ -27,6 +27,26 @@ export class TopologyService implements OnModuleInit {
       { $set: { isLockedBy: null } },
     );
     if (res.modifiedCount) this.logger.log(`[migration] isLockedBy 백필 — 노드 ${res.modifiedCount}개`);
+
+    // initPosition 컬럼 백필 (기존 노드 문서엔 기본 false)
+    const initRes = await this.nodeModel.updateMany(
+      { initPosition: { $exists: false } },
+      { $set: { initPosition: false } },
+    );
+    if (initRes.modifiedCount) this.logger.log(`[migration] initPosition 백필 — 노드 ${initRes.modifiedCount}개`);
+
+    // 고아 엣지 정리 — 양 끝 노드 중 하나라도 실재하지 않는 엣지 제거(삭제 노드 잔재).
+    // cascade 도입 이전에 남은 잔재 + 방어. 경로탐색/연결판정을 오염시키므로 기동 시 1회 청소.
+    const [nodeIdDocs, edgeDocs] = await Promise.all([
+      this.nodeModel.find({}, { node_id: 1 }).lean().exec(),
+      this.edgeModel.find({}, { edge_id: 1, startNode: 1, endNode: 1 }).lean().exec(),
+    ]);
+    const ids = new Set(nodeIdDocs.map((n) => n.node_id));
+    const orphanEdgeIds = edgeDocs.filter((e) => !ids.has(e.startNode) || !ids.has(e.endNode)).map((e) => e.edge_id);
+    if (orphanEdgeIds.length) {
+      await this.edgeModel.deleteMany({ edge_id: { $in: orphanEdgeIds } });
+      this.logger.log(`[고아엣지정리] 삭제 노드 참조 엣지 ${orphanEdgeIds.length}개 제거`);
+    }
   }
 
   setServer(server: Server) { this.server = server; }
@@ -34,6 +54,10 @@ export class TopologyService implements OnModuleInit {
   // ── Node CRUD ─────────────────────────────────────────────────────────────
 
   async createNode(dto: Partial<Node>): Promise<NodeDocument> {
+    // 초기위치로 만들면 같은 맵의 기존 노드는 전부 해제 (맵당 하나만)
+    if (dto.initPosition === true && dto.map_id) {
+      await this.nodeModel.updateMany({ map_id: dto.map_id }, { $set: { initPosition: false } });
+    }
     return this.nodeModel.create(dto);
   }
 
@@ -47,6 +71,17 @@ export class TopologyService implements OnModuleInit {
   }
 
   async updateNode(node_id: string, dto: Partial<Node>): Promise<NodeDocument> {
+    // 초기위치를 켜면 같은 맵의 다른 노드는 자동 해제 (맵당 하나만)
+    if (dto.initPosition === true) {
+      const existing = await this.nodeModel.findOne({ node_id }).lean().exec();
+      const mapId = dto.map_id ?? existing?.map_id;
+      if (mapId) {
+        await this.nodeModel.updateMany(
+          { map_id: mapId, node_id: { $ne: node_id } },
+          { $set: { initPosition: false } },
+        );
+      }
+    }
     const doc = await this.nodeModel.findOneAndUpdate({ node_id }, dto, { new: true });
     if (!doc) throw new NotFoundException(`Node ${node_id} 없음`);
     return doc;
@@ -54,25 +89,19 @@ export class TopologyService implements OnModuleInit {
 
   async removeNode(node_id: string): Promise<void> {
     await this.nodeModel.deleteOne({ node_id });
+    // cascade: 이 노드에 연결된 엣지도 함께 삭제(고아 엣지 방지). startNode/endNode 어느 쪽이든 참조하면 제거.
+    // (임시 VICTIM 노드처럼 동적 생성된 노드를 지울 때 연결 엣지가 남지 않도록)
+    const res = await this.edgeModel.deleteMany({ $or: [{ startNode: node_id }, { endNode: node_id }] });
+    this.logger.log(`Node 삭제: ${node_id} (연결 엣지 ${res.deletedCount ?? 0}개 cascade 삭제)`);
   }
 
   async findNodesByType(map_id: string, type: NodeType): Promise<NodeDocument[]> {
     return this.nodeModel.find({ map_id, type }).exec();
   }
 
-  // ── 충전소 점유(isLockedBy) ──────────────────────────────────────────────────
-  // 로봇이 충전소에 도착하면 robot_id 기록, 떠날 때 null로 해제.
-
-  async setChargerLockedBy(node_id: string, robotId: string | null): Promise<void> {
-    await this.nodeModel.updateOne({ node_id }, { isLockedBy: robotId });
-  }
-
-  /** 해당 로봇이 점유 중이던 충전소를 해제 (새 태스크로 출발할 때).
-   *  exceptNodeId를 주면 그 노드는 해제하지 않는다(이번 충전 목적지 예약 보존용). */
-  async releaseChargersLockedBy(robotId: string, exceptNodeId?: string): Promise<void> {
-    const filter: Record<string, unknown> = { isLockedBy: robotId };
-    if (exceptNodeId) filter.node_id = { $ne: exceptNodeId };
-    await this.nodeModel.updateMany(filter, { isLockedBy: null });
+  /** 맵의 초기 위치 노드 (initPosition=true, 맵당 하나). 없으면 null. */
+  async findInitPositionNode(map_id: string): Promise<NodeDocument | null> {
+    return this.nodeModel.findOne({ map_id, initPosition: true }).exec();
   }
 
   // ── Edge CRUD ─────────────────────────────────────────────────────────────

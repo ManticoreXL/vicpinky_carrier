@@ -1,18 +1,5 @@
 // TaskManagerView 상수
-
-export const ROBOTS = [
-  { id: "vicpinky", domain: 40, type: "carrier" },
-  { id: "tb3_01",   domain: 41, type: "tb3" },
-  { id: "tb3_02",   domain: 42, type: "tb3" },
-  { id: "tb3_03",   domain: 43, type: "tb3" },
-  { id: "tb3_04",   domain: 44, type: "tb3" },
-  { id: "omx",      domain: 45, type: "arm" },
-  // rosbridge 미경유 가상 테스트봇 4대 (항상 성공)
-  { id: "TEST-BOT1", domain: 99,  type: "test" },
-  { id: "TEST-BOT2", domain: 100, type: "test" },
-  { id: "TEST-BOT3", domain: 101, type: "test" },
-  { id: "TEST-BOT4", domain: 102, type: "test" },
-] as const;
+export { ROBOTS } from "../../robots"; // 로봇 로스터는 src/robots.ts 에 단일 정의(여기선 재노출만)
 
 export const TASK_COLORS: Record<string, string> = {
   SUPPLY:  "bg-sky-500/10 border-sky-500/30 text-sky-700",
@@ -20,16 +7,6 @@ export const TASK_COLORS: Record<string, string> = {
   CHARGE:  "bg-emerald-500/10 border-emerald-500/30 text-emerald-700",
   MOVE:    "bg-[#FFCE99]/32 border-white/[0.12] text-white/[0.68]",
 };
-
-export const STATUS_DOT: Record<string, string> = {
-  PENDING:   "bg-amber-400",
-  ASSIGNED:  "bg-sky-400",
-  RUNNING:   "bg-emerald-400 animate-pulse",
-  COMPLETED: "bg-white/30",
-  FAILED:    "bg-rose-400",
-};
-
-export const ONLINE_MS = 5000;
 
 export const TOOL_LABELS: Record<string, string> = {
   dispatch_task:    "태스크 디스패치",

@@ -169,7 +169,9 @@ preferredRobotId는 언급되지 않으면 null. priority는 1(높음)~10(낮음
 SUPPLY=물자공급, PROCESS=작업, CHARGE=충전, MOVE=단순이동
 
 [로봇 상태]
-IDLE=대기(작업배정가능), MOVING=이동중, WORKING=작업중, ERROR=오류, OFFLINE=오프라인(ROS연결끊김)
+공통: IDLE=대기(작업배정가능), RETURNING=복귀중, PAUSED=일시정지, ERROR=오류, OFFLINE=오프라인(ROS연결끊김)
+이동·작업: MOVING=이동중, RELIEF=구호중, TO_CHARGE=충전소이동중, CHARGING=충전중
+빅핑키 캐리어: PARKED=주차됨, TO_LOAD=적재위치이동중, LOADING=상차중, LOADED=적재됨, UNLOADING=하차중, CARRIER_UP=캐리어올림, CARRIER_DOWN=캐리어내림
 
 아래는 MongoDB에서 실시간 조회한 현재 FMS 데이터입니다. 이 데이터를 기반으로 정확하게 답변하세요:
 ${ragContext}

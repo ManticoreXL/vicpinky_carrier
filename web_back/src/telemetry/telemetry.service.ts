@@ -4,6 +4,7 @@ import { RosService } from '../ros/ros.service';
 import { RobotService } from '../robot/robot.service';
 import type { RosMessage } from '../ros/ros.types';
 import { Quaternion } from '../geometry/pose';
+import { normalizeBatteryPct } from '../common/battery';
 
 // ── 상수 ─────────────────────────────────────────────────────────────────────
 
@@ -127,8 +128,7 @@ export class TelemetryService implements OnModuleInit {
     const batMatch = msg.topic.match(/^\/([^/]+)\/battery_state$/);
     if (batMatch) {
       const id = batMatch[1];
-      let pct  = (msg.data as { percentage?: number })?.percentage ?? null;
-      if (pct != null && pct <= 1.01) pct *= 100; // 0~1 정규화 값 → %
+      const pct = normalizeBatteryPct((msg.data as { percentage?: number })?.percentage);
       this.applyBattery(id, pct, now);
       return;
     }

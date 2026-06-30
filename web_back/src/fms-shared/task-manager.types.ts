@@ -2,7 +2,7 @@
 
 export interface TaskManagerAlert {
   id: string;
-  type: 'fall' | 'robot_offline' | 'task_failed' | 'no_path' | 'assigned' | 'completed' | 'info';
+  type: 'fall' | 'robot_offline' | 'task_failed' | 'no_path' | 'assigned' | 'completed' | 'info' | 'low_battery' | 'charged';
   taskId?: string;
   robotId?: string;
   message: string;
@@ -13,6 +13,8 @@ export interface TaskManagerAlert {
 export interface RobotCache {
   lastSeen:       number;
   batteryPct:     number | null;
+  charging?:      boolean | null; // battery_state power_supply_status === CHARGING(1). null = 미보고
+
   posX:           number | null;
   posY:           number | null;
   yaw:            number | null;

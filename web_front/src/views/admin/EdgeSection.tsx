@@ -3,6 +3,7 @@ import TopologyMapView from "../../components/TopologyMapView";
 import { api } from "./api";
 import { TH, TD, INP, SEL, BTN } from "./styles";
 import { SectionHeader, ErrBar, TableWrap } from "./common";
+import { usePolling } from "./usePolling";
 import type { FleetEdge, FleetNode, EdgeDirection } from "./types";
 
 export function EdgeSection() {
@@ -33,6 +34,7 @@ export function EdgeSection() {
  }, [mapFilter]);
 
  useEffect(() => { void load(); loadNodes(); }, [load, loadNodes]);
+ usePolling(load, 2000, !editId && !adding);   // 항상 DB에서 받아와 새로 그림 (편집 중 제외)
 
  const nodeMaps = [...new Set(allNodes.map(n => n.map_id))].sort();
  const nodesForMap = (mapId: string) => allNodes.filter(n => n.map_id === mapId);

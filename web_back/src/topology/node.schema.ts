@@ -5,6 +5,7 @@ export enum NodeType {
   WAYPOINT = 'WAYPOINT',
   STATION  = 'STATION',
   CHARGER  = 'CHARGER',
+  VICTIM   = 'VICTIM',  // 조난자 임시노드 — /victim/confirmed로 동적 생성, 정찰 전용
 }
 
 export type NodeDocument = HydratedDocument<Node>;
@@ -28,6 +29,10 @@ export class Node {
 
   @Prop({ required: true })
   yaw: number;
+
+  /** 이 노드가 맵의 초기 위치(스폰/초기 pose 기준점)인지 여부 — 관리 탭에서 토글 */
+  @Prop({ default: false })
+  initPosition: boolean;
 
   /** 노드 폐쇄 여부 — true 이면 경로 탐색에서 제외 (다익스트라 우회) */
   @Prop({ default: false })

@@ -11,7 +11,7 @@
 | 핵심 로직 | 담당 | 위치 |
 |---|---|---|
 | **경로 탐색**(Dijkstra) | `PathfindingService` | `src/pathfinding/pathfinding.service.ts` |
-| **경로 탐색이 실행되는 곳**(배차 루프) | `DispatchService` | `src/fms/dispatch/dispatch.service.ts` |
+| **경로 탐색이 실행되는 곳**(할당 루프) | `DispatchService` | `src/fms/dispatch/dispatch.service.ts` |
 | **task 타입별 로직** | `SupplyTaskHandler` / `NavigationTaskHandler` | `src/fms/dispatch/task-handlers/` |
 | **글로벌 task queue** | `GlobalTaskQueueService` | `src/fms/queue/global-task-queue.service.ts` |
 | **로봇별 task queue** | `RobotTaskQueueService` | `src/fms-state/robot-task-queue.service.ts` (결합 0 → 최상위) |
@@ -71,7 +71,7 @@ src/
    ├─ queue/
    │  └─ global-task-queue.service.ts  # 글로벌 큐(미배정 PENDING) — FmsService/Mongo 결합
    ├─ dispatch/
-   │  ├─ dispatch.service.ts           # 배차 루프 + dispatchNext
+   │  ├─ dispatch.service.ts           # 할당 루프 + dispatchNext
    │  └─ task-handlers/                # task 타입별 실행 전략
    │     ├─ task-handler.interface.ts
    │     ├─ supply-task.handler.ts     # SUPPLY: 즉시 보급
@@ -120,7 +120,7 @@ ROS /<bot>/*        → robotState.lastSeen 갱신
    /<bot>/imu           → FallDetectionService.onImu()
 ```
 
-### 3.3 배차 → 주행 → 완료 (해피패스)
+### 3.3 할당 → 주행 → 완료 (해피패스)
 ```
 enqueue(task)                         # 글로벌 큐 PENDING
   └ dispatch.process (다음 tick)
@@ -146,7 +146,7 @@ enqueue(task)                         # 글로벌 큐 PENDING
   - `active: robotId → taskId` (실행 중, 로봇당 1개)
   - `queued: robotId → taskId[]` (대기 FIFO)
 
-배차 정책(`DispatchService.process`):
+할당 정책(`DispatchService.process`):
 
 | 상황 | 처리 |
 |---|---|
@@ -158,7 +158,7 @@ enqueue(task)                         # 글로벌 큐 PENDING
 
 로봇이 활성 태스크를 끝내면(`completeTask`/취소/reconcile) `dispatchNext(robotId)`가
 로봇별 큐의 다음 태스크를 꺼내 실행한다(SUPPLY는 즉시완료이므로 건너뛰고 다음 시도).
-로봇이 **오프라인**되면 그 로봇의 대기 태스크는 글로벌 큐로 **반환(재배차)**된다.
+로봇이 **오프라인**되면 그 로봇의 대기 태스크는 글로벌 큐로 **반환(재할당)**된다.
 
 ---
 
@@ -211,7 +211,7 @@ npm run test:e2e -- fms-pipeline      # 실행 (MongoDB 필요)
 
 검증 시나리오(3개 모두 통과):
 1. 가상 테스트봇 온라인 인식
-2. **경로탐색 → 배차 → 주행 → 완료** (`N1→N2→N3`, fullPath=`[N2,N3]`, 도착 location=`N3`)
+2. **경로탐색 → 할당 → 주행 → 완료** (`N1→N2→N3`, fullPath=`[N2,N3]`, 도착 location=`N3`)
 3. **로봇별 큐잉**: 작업 중 들어온 2번째 태스크가 큐에 적재되어 1번째 완료 후 순차 실행
    (B.startedAt ≥ A.completedAt 로 병렬 아님 = 큐잉 증명)
 

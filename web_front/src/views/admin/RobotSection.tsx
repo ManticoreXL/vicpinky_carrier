@@ -1,13 +1,14 @@
 import { useState, useEffect, useCallback } from "react";
-import { robotStatusKo, ROBOT_STATUS_KO } from "../../utils/statusLabel";
+import { robotStatusKo, ROBOT_STATUS_KO, robotStatusColor, robotStatusDot } from "../../utils/statusLabel";
 import { api } from "./api";
-import { TH, TD, INP, SEL, BTN, STATUS_COLOR } from "./styles";
+import { TH, TD, INP, SEL, BTN } from "./styles";
 import { SectionHeader, ErrBar, TableWrap } from "./common";
+import { usePolling } from "./usePolling";
 import type { Robot, RobotStatus } from "./types";
 
-export function RobotSection({ liveStatuses }: { liveStatuses: Record<string, string> }) {
+export function RobotSection() {
  const [robots, setRobots] = useState<Robot[]>([]);
- const [loading, setLoading] = useState(false);
+ const [loading] = useState(false);
  const [editId, setEditId] = useState<string | null>(null);
  const [editDraft, setEditDraft] = useState<{ newId: string; ip: string; ros_domain_id: number; status: RobotStatus }>({ newId: "", ip: "", ros_domain_id: 0, status: "IDLE" });
  const [adding, setAdding] = useState(false);
@@ -15,13 +16,21 @@ export function RobotSection({ liveStatuses }: { liveStatuses: Record<string, st
  const [err, setErr] = useState("");
  const [delConfirm, setDelConfirm] = useState<string | null>(null);
 
+ // 항상 DB에서 받아와 새로 그린다 (소켓 표시값 대신 DB가 진실의 원천)
  const load = useCallback(async () => {
- setLoading(true);
  try { setRobots(await api<Robot[]>("/api/fleet/robots")); } catch (e) { setErr(`로봇 로드 실패: ${String(e)}`); }
- setLoading(false);
  }, []);
 
- useEffect(() => { void load(); }, [load]);
+ // 로우 한 줄만 DB에서 다시 읽어 즉시 반영
+ const refreshRow = useCallback(async (id: string) => {
+ try {
+ const fresh = await api<Robot>(`/api/fleet/robots/${id}`);
+ setRobots(prev => prev.map(x => x.robot_id === id ? fresh : x));
+ } catch (e) { setErr(String(e)); }
+ }, []);
+
+ useEffect(() => { void load(); }, [load]);           // 마운트(탭 전환) 시 즉시 DB 재조회
+ usePolling(load, 2000, !editId && !adding);          // 편집 중이 아니면 2초마다 DB 재조회 → test-bot 등 변경 즉시 반영
 
  async function save() {
  if (!editId) return;
@@ -34,7 +43,7 @@ export function RobotSection({ liveStatuses }: { liveStatuses: Record<string, st
  await api(`/api/fleet/robots/${editId}`, { method: "PATCH", body: JSON.stringify({ ip: editDraft.ip, ros_domain_id: editDraft.ros_domain_id, status: editDraft.status }) });
  }
  setEditId(null);
- void load();
+ await load();   // 저장 후 즉시 DB 재조회 (이후 폴링이 계속 최신 유지)
  } catch (e) { setErr(String(e)); }
  }
 
@@ -69,7 +78,7 @@ export function RobotSection({ liveStatuses }: { liveStatuses: Record<string, st
  <TableWrap>
  <thead>
  <tr className="border-b border-white/[0.1]">
- {["robot_id","ip","도메인 ID","상태","현재 위치",""].map(h => <th key={h} className={TH}>{h}</th>)}
+ {["robot_id","ip","도메인 ID","상태","맵","노드",""].map(h => <th key={h} className={TH}>{h}</th>)}
  </tr>
  </thead>
  <tbody>
@@ -78,7 +87,7 @@ export function RobotSection({ liveStatuses }: { liveStatuses: Record<string, st
  <td className={TD}><input className={INP} placeholder="tb3_01" value={addDraft.robot_id} onChange={e => setAddDraft(d => ({ ...d, robot_id: e.target.value }))} /></td>
  <td className={TD}><input className={INP} placeholder="192.168.0.10" value={addDraft.ip} onChange={e => setAddDraft(d => ({ ...d, ip: e.target.value }))} /></td>
  <td className={TD}><input className={INP} type="number" value={addDraft.ros_domain_id} onChange={e => setAddDraft(d => ({ ...d, ros_domain_id: +e.target.value }))} /></td>
- <td className={TD} colSpan={2}><span className="text-white/[0.6]">—</span></td>
+ <td className={TD} colSpan={3}><span className="text-white/[0.6]">—</span></td>
  <td className={TD}>
  <div className="flex gap-1">
  <button className={BTN("bg-green-900/40 text-white/[0.82] border-white/[0.1] hover:bg-green-800/50")} onClick={add}>저장</button>
@@ -88,7 +97,7 @@ export function RobotSection({ liveStatuses }: { liveStatuses: Record<string, st
  </tr>
  )}
  {robots.length === 0 && !adding && (
- <tr><td colSpan={6} className="px-3 py-6 text-center text-white/[0.55] text-xs">등록된 로봇이 없습니다</td></tr>
+ <tr><td colSpan={7} className="px-3 py-6 text-center text-white/[0.55] text-xs">등록된 로봇이 없습니다</td></tr>
  )}
  {robots.map(r => {
  const isEdit = editId === r.robot_id;
@@ -117,28 +126,17 @@ export function RobotSection({ liveStatuses }: { liveStatuses: Record<string, st
  <td className={TD}>
  {isEdit
  ? <select className={SEL} value={editDraft.status} onChange={e => setEditDraft(d => ({ ...d, status: e.target.value as RobotStatus }))}>
- {(["IDLE","MOVING","WORKING","ERROR","OFFLINE"] as RobotStatus[]).map(s => <option key={s} value={s}>{ROBOT_STATUS_KO[s] ?? s}</option>)}
+ {(["IDLE","RETURNING","PAUSED","WORKING","TO_CHARGE","CHARGING","PARKED","TO_LOAD","LOADING","LOADED","UNLOADING","CARRIER_UP","CARRIER_DOWN","ERROR","OFFLINE"] as RobotStatus[]).map(s => <option key={s} value={s}>{ROBOT_STATUS_KO[s] ?? s}</option>)}
  </select>
- : (() => {
- const live = liveStatuses[r.robot_id];
- const display = (live ?? r.status) as RobotStatus;
- const isLive = live != null;
- return (
+ : (
  <span className="inline-flex items-center gap-1.5">
- {isLive && (
- <span className={`w-1.5 h-1.5 rounded-full animate-pulse ${
- display === "OFFLINE" ? "bg-[#521C0D]/40" :
- display === "IDLE" ? "bg-green-400" :
- display === "MOVING" ? "bg-blue-400" :
- display === "WORKING" ? "bg-yellow-400": "bg-red-400"
- }`} title="실시간" />
- )}
- <span className={`font-bold ${STATUS_COLOR[display]}`}>{robotStatusKo(display)}</span>
+ <span className={`w-1.5 h-1.5 rounded-full ${robotStatusDot(r.status)}`} title="DB (2초마다 갱신)" />
+ <span className={`font-bold ${robotStatusColor(r.status)}`}>{robotStatusKo(r.status)}</span>
  </span>
- );
- })()}
+ )}
  </td>
  <td className={TD}>{r.location ?? <span className="text-white/[0.6]">—</span>}</td>
+ <td className={TD}>{r.lastNode ?? <span className="text-white/[0.6]">—</span>}</td>
  <td className={TD}>
  {delConfirm === r.robot_id ? (
  <div className="flex gap-1 items-center">
@@ -153,6 +151,7 @@ export function RobotSection({ liveStatuses }: { liveStatuses: Record<string, st
  </div>
  ) : (
  <div className="flex gap-1">
+ <button className={BTN("bg-[#FFCE99]/32 text-white/[0.6] border-white/[0.1] hover:text-white/90")} title="이 행만 새로고침" onClick={() => refreshRow(r.robot_id)}>↻</button>
  <button className={BTN("bg-[#FFCE99]/32 text-white/[0.75] border-white/[0.1] hover:text-white/90")} onClick={() => startEdit(r)}>수정</button>
  <button className={BTN("bg-[#FFCE99]/32 text-red-800 border-white/[0.1] hover:text-white/90")} onClick={() => setDelConfirm(r.robot_id)}>삭제</button>
  </div>

@@ -21,16 +21,11 @@ import { useKeyboardControl } from "../../hooks/useKeyboardControl";
 import LidarCanvas from "../explore/LidarCanvas";
 import {
  PanelCard, Section, BatteryBar, NoData,
-} from "./BigPinkyPanel";
+} from "./shared";
 
 // ── 유틸 ─────────────────────────────────────────────────────────────────────
 
-const r2d = (r: number) => (r * 180) / Math.PI;
-const f = (n: number, d = 2) => n.toFixed(d);
-
-function quatToYaw(q: { x: number; y: number; z: number; w: number }) {
- return Math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y ** 2 + q.z ** 2));
-}
+import { quatToYaw, r2d, f } from "../../utils/quaternion";
 
 // ── 모터 상태 ─────────────────────────────────────────────────────────────────
 

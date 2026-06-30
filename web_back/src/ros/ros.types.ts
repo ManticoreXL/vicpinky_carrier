@@ -74,6 +74,14 @@ export const SUBSCRIBED_TOPICS: RosTopicConfig[] = [
   { name: '/pose',                      messageType: 'geometry_msgs/PoseWithCovarianceStamped' },
   { name: '/plan',                      messageType: 'nav_msgs/Path' },
 
+  // omx 비전 적재 감지 — SUPPLY 태스크 완료 신호 (허브에서 /omx/vision/is_loaded 로 노출)
+  { name: '/omx/vision/is_loaded',      messageType: 'std_msgs/Bool' },
+
+  // 정찰(tb3_01) — 맵 + 조난자 보고 (victim/report: JSON 문자열 가정)
+  { name: '/tb3_01/map',                messageType: 'nav_msgs/OccupancyGrid' },
+  { name: '/victim/report',             messageType: 'std_msgs/String' },
+  { name: '/victim/confirmed',          messageType: 'geometry_msgs/PoseStamped' }, // 사람 확정 — map 프레임 좌표(프론트 임시 표시)
+
   // VicPinky (geometry_msgs/Twist — TwistStamped 아님)
   { name: '/vicpinky/cmd_vel',          messageType: 'geometry_msgs/Twist' },
   { name: '/vicpinky/joint_states',     messageType: 'sensor_msgs/JointState' },

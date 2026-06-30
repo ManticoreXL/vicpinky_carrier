@@ -4,19 +4,20 @@ import { RosMessage } from "../../hooks/useNestSocket";
 import type { FNode, FEdge, ActivePath, RobotPos } from "../TopologyMapView";
 import type { StaticMapInfo } from "./types";
 import { TB3_ROBOTS, NODE_COLOR, ROBOT_COLORS, CHARGE_PATH_COLOR } from "./constants";
-import { worldToCanvas, quatToYaw } from "./geometry";
+import { worldToCanvas } from "./geometry";
+import { quatToYaw } from "../../utils/quaternion";
 import { drawRobotMarker } from "./markers";
 
-// 현재 맵에 배정된 활성 경로만 추리고, 로봇별 경로 색을 계산.
+// 현재 맵에 있는(robot.location) 활성 경로만 추리고, 로봇별 경로 색을 계산.
 // (충전 임무는 전용 색, 그 외는 로봇별 색 순환)
 export function buildActivePathColors(
   activePaths: ActivePath[],
-  assignments: Record<string, string>,
+  robotMaps: Record<string, string>, // robotId → robot.location(맵)
   selectedMap: string,
 ) {
   const filteredApaths = activePaths.filter(({ robotId }) => {
-    const assigned = assignments[robotId];
-    return !assigned || assigned === selectedMap;
+    const m = robotMaps[robotId];
+    return !m || m === selectedMap; // location 이 현재 맵(또는 미상)인 경로만
   });
   const robotColorMap: Record<string, string> = {};
   filteredApaths.forEach(({ robotId, taskType }, i) => {
@@ -31,13 +32,13 @@ export function drawPlanPaths(
   info: StaticMapInfo,
   scale: number,
   rosMessages: Record<string, RosMessage>,
-  assignments: Record<string, string>,
+  robotMaps: Record<string, string>, // robotId → robot.location(맵)
   selectedMap: string,
   selectedBots: Set<string>,
 ) {
   for (const robot of TB3_ROBOTS) {
-    const robotAssignedMap = assignments[robot.id];
-    if (robotAssignedMap && robotAssignedMap !== selectedMap) continue;
+    const robotMap = robotMaps[robot.id];
+    if (robotMap && robotMap !== selectedMap) continue; // location 다르면 안 그림
     const planData = rosMessages[`/${robot.id}/plan`]?.data as {
       poses?: Array<{ pose?: { position?: { x?: number; y?: number } } }>
     } | undefined;
@@ -89,9 +90,11 @@ export function drawTopologyOverlay(
     hoveredNodeId: string | null;
     lockedSet: Set<string>;
     rosMessages: Record<string, RosMessage>;
+    robotMaps: Record<string, string>; // robotId → robot.location(맵) — 마커 필터 기준
+    selectedMap: string;
   },
 ) {
-  const { topoNodes, topoEdges, robPos, filteredApaths, robotColorMap, hoveredNodeId, lockedSet, rosMessages } = data;
+  const { topoNodes, topoEdges, robPos, filteredApaths, robotColorMap, hoveredNodeId, lockedSet, rosMessages, robotMaps, selectedMap } = data;
 
   // active 경로 맵 구성
   const activeNodeMap: Record<string, string> = {};
@@ -221,7 +224,8 @@ export function drawTopologyOverlay(
     const rc = ar ? robotColorMap[ar] : null;
     const isHov = n.node_id === hoveredNodeId;
     const isLock = lockedSet.has(n.node_id);
-    const r = rc ? 9 : isHov ? 8 : 6;
+    const isInit = n.initPosition === true;
+    const r = rc ? 9 : isHov ? 8 : isInit ? 8 : 6;
 
     if (rc) {
       ctx.beginPath();
@@ -229,16 +233,34 @@ export function drawTopologyOverlay(
       ctx.fillStyle = rc + "33";
       ctx.fill();
     }
+    // 초기위치 노드: 호박색 헤일로
+    if (isInit && !isLock && !rc) {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r + 5, 0, Math.PI * 2);
+      ctx.fillStyle = "#fbbf2433";
+      ctx.fill();
+    }
 
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
-    ctx.fillStyle = isLock ? "#dc2626" : (NODE_COLOR[n.type] ?? "#888");
+    ctx.fillStyle = isLock ? "#dc2626" : isInit ? "#fbbf24" : (NODE_COLOR[n.type] ?? "#888");
     ctx.fill();
 
-    if (rc || isHov || isLock) {
-      ctx.strokeStyle = isLock ? "#fca5a5" : (rc ?? "#fff");
-      ctx.lineWidth = isLock ? 2 : rc ? 2.5 : 1.5;
+    if (rc || isHov || isLock || isInit) {
+      ctx.strokeStyle = isLock ? "#fca5a5" : isInit ? "#f59e0b" : (rc ?? "#fff");
+      ctx.lineWidth = isLock ? 2 : (rc || isInit) ? 2.5 : 1.5;
       ctx.stroke();
+    }
+
+    // 초기위치 노드: 중앙 별(★) 마커
+    if (isInit && !isLock) {
+      ctx.save();
+      ctx.fillStyle = "#7c2d12";
+      ctx.font = `bold ${Math.round(r * 1.3)}px serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText("★", cx, cy + 0.5);
+      ctx.restore();
     }
 
     // 잠긴 노드: X 마커
@@ -253,8 +275,8 @@ export function drawTopologyOverlay(
     }
 
     // 라벨
-    ctx.fillStyle = isLock ? "#fca5a5" : (rc ?? (isHov ? "#fff" : "#ffffffcc"));
-    ctx.font = (rc || isLock) ? "bold 9px monospace" : "9px monospace";
+    ctx.fillStyle = isLock ? "#fca5a5" : isInit ? "#fbbf24" : (rc ?? (isHov ? "#fff" : "#ffffffcc"));
+    ctx.font = (rc || isLock || isInit) ? "bold 9px monospace" : "9px monospace";
     ctx.textAlign = "left";
     ctx.textBaseline = "bottom";
     ctx.fillText(n.node_id, cx + r + 2, cy);
@@ -268,6 +290,10 @@ export function drawTopologyOverlay(
     ...Object.keys(robPos).filter(id => !tb3IdSet.has(id)),
   ])];
   nonTb3Ids.forEach((robotId, i) => {
+    // robot.location 이 현재 맵인 로봇만 표시 (다른 맵 로봇의 잔여 마커 제거 — TB3 마커와 동일 규칙)
+    const robotMap = robotMaps[robotId];
+    if (robotMap && robotMap !== selectedMap) return;
+
     const color = ROBOT_COLORS[i % ROBOT_COLORS.length];
 
     // 1) AMCL (맵 프레임 — 정확)
@@ -560,20 +586,20 @@ export function drawActivePaths(
   }
 }
 
-// ── TB3 로봇 마커 (amcl_pose, 현재 맵 배정 로봇만) ──────────────────────
+// ── TB3 로봇 마커 (amcl_pose, robot.location 이 현재 맵인 로봇만) ──────────────────────
 export function drawTb3Markers(
   ctx: CanvasRenderingContext2D,
   canvas: HTMLCanvasElement,
   info: StaticMapInfo,
   scale: number,
   rosMessages: Record<string, RosMessage>,
-  assignments: Record<string, string>,
+  robotMaps: Record<string, string>, // robotId → robot.location(맵) — 마커는 실제 위치 맵 기준
   selectedMap: string,
   selectedBots: Set<string>,
 ) {
   for (const robot of TB3_ROBOTS) {
-    const robotAssignedMap2 = assignments[robot.id];
-    if (robotAssignedMap2 && robotAssignedMap2 !== selectedMap) continue;
+    const robotMap = robotMaps[robot.id];
+    if (robotMap && robotMap !== selectedMap) continue;
     const amcl = rosMessages[`/${robot.id}/amcl_pose`]?.data as {
       pose?: { pose?: { position?: { x?: number; y?: number }; orientation?: { x?: number; y?: number; z?: number; w?: number } } }
     } | undefined;

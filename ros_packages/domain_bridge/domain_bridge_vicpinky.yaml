@@ -46,6 +46,9 @@ topics:
     to_domain: 49
     remap: /vicpinky/ramp_state
 
+  # ── /ramp_control 액션은 아래 actions: 섹션이 통째로 중계(goal/result/cancel + feedback/status) ──
+  #   (이전의 _action/feedback·status 토픽 분해는 actions: 와 중복되어 제거)
+
   # /tf, /tf_static — 네트워크 부하로 중계하지 않음 (필요 시 활성화)
   # /tf:
   #   type: tf2_msgs/msg/TFMessage
@@ -64,22 +67,25 @@ topics:
     qos:
       reliability: reliable
 
-services:
+  # ⚠ 제거됨: /tb3_01../tb3_04/cmd_vel 을 from_domain:40(vicpinky 도메인)에서 중계하던 항목.
+  #   잘못된 설정이었다 — tb3 cmd_vel 의 올바른 downlink 는 from=49(허브)이고 각 tb3 파일이 담당한다.
+  #   여기 있던 항목은 로봇 도메인에 쓰이지 않는 /tb3_0X/cmd_vel(Twist) 유령 토픽만 만들었다.
 
-  # ── DOWNLINK 서비스: 허브(49) → vicpinky(40) ──
+services:
   /vicpinky/run_diagnosis:
     type: std_srvs/srv/Trigger
     from_domain: 49
     to_domain: 40
 
+# ✅ domain_bridge 0.5.0 은 actions: 섹션을 지원한다 (navigate_to_pose 로 검증). 분해 불필요.
+#   방향: navigate 와 동일하게 from=허브(49), to=로봇(40) — 로봇에 실서버, 허브가 클라이언트.
+#   marker_trace 는 vicpinky_carrier_interfaces 재빌드(MarkerTrace.action) 후 동일하게 추가.
 actions:
-
-  # ── DOWNLINK 액션: 허브(49) → vicpinky(40) ──
   /ramp_control:
     type: vicpinky_carrier_interfaces/action/RampControl
-    from_domain: 49
-    to_domain: 40
-
+    from_domain: 49     # 허브(클라이언트) — navigate_to_pose 와 동일 방향
+    to_domain: 40       # 로봇(서버, 네임스페이스 없이 /ramp_control 서버)
+    #remap: /ramp_control   # 양쪽 다 /ramp_control 이라 remap 불필요
   # carrier_msgs 미빌드 — 빌드 후 주석 해제할 것
   # /vicpinky/carrier_task:
   #   type: carrier_msgs/action/CarrierTask

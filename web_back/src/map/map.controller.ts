@@ -43,6 +43,18 @@ export class MapController {
     return res.json(this.mapService.listStaticMaps());
   }
 
+  /** 라이브(SLAM) 맵을 정적 맵으로 저장 → Fleet 정적맵 목록에 노출 */
+  @Post(':botId/save-static')
+  saveStatic(
+    @Param('botId') botId: string,
+    @Body() body: { name?: string },
+    @Res() res: Response,
+  ) {
+    const result = this.mapService.saveStaticMap(botId, body?.name ?? '');
+    res.set('Access-Control-Allow-Origin', '*');
+    return res.status(result.ok ? HttpStatus.OK : HttpStatus.BAD_REQUEST).json(result);
+  }
+
   /** 로봇별 현재 맵 할당 목록 */
   @Get('assignments')
   getAssignments(@Res() res: Response) {
@@ -59,6 +71,21 @@ export class MapController {
     const result = await this.mapService.assignMap(body.robotId, body.mapName);
     res.set('Access-Control-Allow-Origin', '*');
     return res.status(result.ok ? HttpStatus.OK : HttpStatus.INTERNAL_SERVER_ERROR).json(result);
+  }
+
+  /** 맵 스트림 on/off 상태 조회 */
+  @Get('stream')
+  getMapStream(@Res() res: Response) {
+    res.set('Access-Control-Allow-Origin', '*');
+    return res.json({ enabled: this.mapService.isMapStream() });
+  }
+
+  /** 맵 스트림 on/off — OFF면 /map(slam) 처리/전송 중지(라이브 갱신 멈춤, 마지막 캐시 유지) */
+  @Post('stream')
+  setMapStream(@Body() body: { enabled: boolean }, @Res() res: Response) {
+    this.mapService.setMapStream(!!body?.enabled);
+    res.set('Access-Control-Allow-Origin', '*');
+    return res.json({ enabled: this.mapService.isMapStream() });
   }
 
   /** 정적 PGM 맵 → PNG 이미지 */

@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, Fragment } from "react";
 import { api } from "./api";
 import { TH, TD, INP, BTN } from "./styles";
 import { SectionHeader, ErrBar, TableWrap } from "./common";
+import { usePolling } from "./usePolling";
 import type { FleetMap } from "./types";
 
 export function MapSection() {
@@ -24,6 +25,7 @@ export function MapSection() {
  }, []);
 
  useEffect(() => { void load(); }, [load]);
+ usePolling(load, 2000, !adding && !initEdit && !addInit);   // 항상 DB에서 받아와 새로 그림 (편집 중 제외)
 
  async function addMap() {
  if (!addMapId.trim()) { setErr("map_id는 필수입니다"); return; }

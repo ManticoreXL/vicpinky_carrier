@@ -5,3 +5,7 @@ const HOST = window.location.hostname || "localhost";
 
 export const BACKEND_URL = `http://${HOST}:3001`;
 export const ROSBRIDGE_URL = `ws://${HOST}:9090`;
+
+// 라즈베리파이 lerobot 모방학습 비전(MJPEG) 직접 주소 — 브라우저가 파이와 같은 LAN일 때 폴백 연결용.
+// 백엔드 프록시(/api/vision/policy-stream)가 안 되면 이 주소로 직접 붙는다.
+export const POLICY_VISION_URL = "http://10.10.14.24:5000";

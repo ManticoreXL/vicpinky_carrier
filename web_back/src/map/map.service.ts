@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { RosService } from '../ros/ros.service';
-import { TaskManagerService } from '../fms/task-manager.service';
+import { CoreEventBus, CoreEvent } from '../core-events/core-events.service';
 import * as zlib from 'zlib';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -49,9 +49,13 @@ export class MapService implements OnModuleInit {
   // robotId → mapName
   private readonly robotAssignments = new Map<string, string>();
 
+  // 맵 스트림 on/off — OFF면 들어오는 /map(slam) 메시지의 처리/전송(buildPng+브로드캐스트)을 스킵한다.
+  // (라이브 갱신만 멈춤 — 마지막으로 캐시된 맵은 그대로 유지/표시. 기본 ON)
+  private mapStream = true;
+
   constructor(
     private readonly rosService: RosService,
-    private readonly taskManager: TaskManagerService,
+    private readonly bus: CoreEventBus,
   ) {}
 
   onModuleInit() {
@@ -76,6 +80,7 @@ export class MapService implements OnModuleInit {
         if (!m) return;
         botId = m[1];
       }
+      if (!this.mapStream) return; // 맵 스트림 OFF — 무거운 buildPng/브로드캐스트 스킵(마지막 캐시 유지)
       const raw = msg.data as { info?: MapInfo; data?: number[] };
       if (!raw?.info || !raw?.data?.length) return;
 
@@ -96,6 +101,24 @@ export class MapService implements OnModuleInit {
 
   onClear(cb: (botId: string) => void) {
     this.clearCbs.push(cb);
+  }
+
+  // ── 맵 스트림 on/off ──────────────────────────────────────────────────────────
+  setMapStream(on: boolean): void {
+    this.mapStream = on;
+    this.logger.log(`[맵 스트림] ${on ? 'ON — /map 수신 처리' : 'OFF — /map 처리/전송 중지(마지막 캐시 유지)'}`);
+  }
+  isMapStream(): boolean { return this.mapStream; }
+
+  /**
+   * 현재 캐시된 맵 메타 목록 (botId, info, timestamp).
+   * /map은 latched(transient_local)라 신규 클라이언트 접속 시 라이브 갱신이 없을 수 있어,
+   * 게이트웨이가 이 목록으로 초기 상태를 보내 화면이 'MAP NO DATA' 대신 즉시 렌더되게 한다.
+   */
+  listCachedMaps(): { botId: string; info: MapInfo; timestamp: number }[] {
+    return [...this.maps.entries()].map(([botId, s]) => ({
+      botId, info: s.info, timestamp: s.timestamp,
+    }));
   }
 
   // ── 맵 캐시 삭제 + slam_toolbox 리셋 ─────────────────────────────────────
@@ -170,6 +193,31 @@ export class MapService implements OnModuleInit {
       `free_thresh: 0.196`,
       '',
     ].join('\n');
+  }
+
+  /**
+   * 라이브(SLAM) 맵을 정적 맵으로 저장 → MAPS_DIR/<name>.pgm + <name>.yaml.
+   * 저장 후 listStaticMaps()에 잡혀 Fleet(NavMapCanvas) 정적맵 목록에 노출된다.
+   */
+  saveStaticMap(botId: string, rawName: string): { ok: boolean; name?: string; message: string } {
+    const pgm = this.getPgm(botId);
+    if (!pgm) return { ok: false, message: `${botId} 라이브 맵 없음 — 맵 수신 후 저장하세요` };
+    // 파일명 정리(영숫자/_/- 만 허용, 경로탈출 방지)
+    const name = ((rawName || '').trim().replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 64)) || `${botId}_map`;
+    const yaml = this.getYaml(botId, `${name}.pgm`);
+    if (!yaml) return { ok: false, message: `${botId} 맵 메타 생성 실패` };
+    try {
+      if (!fs.existsSync(MAPS_DIR)) fs.mkdirSync(MAPS_DIR, { recursive: true });
+      fs.writeFileSync(path.join(MAPS_DIR, `${name}.pgm`), pgm);
+      fs.writeFileSync(path.join(MAPS_DIR, `${name}.yaml`), yaml, 'utf8');
+      this.staticCache.delete(name); // 덮어쓰기 시 캐시 무효화
+      this.logger.log(`[${botId}] 라이브 맵 → 정적 맵 저장: ${name} (${MAPS_DIR})`);
+      return { ok: true, name, message: `정적 맵 저장 완료: ${name}` };
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      this.logger.error(`정적 맵 저장 실패: ${message}`);
+      return { ok: false, message };
+    }
   }
 
   // ── PNG 생성 (순수 Node.js, 외부 패키지 없음) ─────────────────────────────
@@ -278,8 +326,8 @@ export class MapService implements OnModuleInit {
     this.saveAssignments();
     this.staticCache.delete(mapName);
 
-    // 맵 전환: 기존 태스크 취소 + 위치·캐시 초기화
-    await this.taskManager.handleMapChange(robotId);
+    // 맵 전환 통지 — FMS가 구독해 진행 태스크 취소 + 위치·캐시 초기화(Map은 FMS를 직접 모름)
+    this.bus.emit(CoreEvent.ROBOT_MAP_REASSIGNED, { robotId });
 
     this.logger.log(`[${robotId}] 맵 할당 → ${mapName} (로봇이 직접 map_server 관리)`);
     return { ok: true, message: '맵 할당 완료' };

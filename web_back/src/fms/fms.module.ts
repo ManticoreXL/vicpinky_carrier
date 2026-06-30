@@ -1,65 +1,62 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
-import { Task, TaskSchema } from './task.schema';
-import { FmsService } from './fms.service';
+import { TaskHistory, TaskHistorySchema } from './task.schema';
+import { TaskRepositoryService } from './task-repository.service';
+import { TaskStatusService } from './task-status.service';
 import { FmsController } from './fms.controller';
 import { TaskManagerService } from './task-manager.service';
 import { TaskManagerEventsService } from '../fms-events/task-manager-events.service';
 import { RobotStateService } from '../fms-state/robot-state.service';
 import { RobotTaskQueueService } from '../fms-state/robot-task-queue.service';
-import { RotationStateService } from '../fms-state/rotation-state.service';
-import { GlobalTaskQueueService } from './queue/global-task-queue.service';
-import { ChargingService } from './charging/charging.service';
-import { NavGoalService } from './navigation/nav-goal.service';
-import { NodeLockService } from './node-lock/node-lock.service';
-import { NavRecoveryService } from './navigation/nav-recovery.service';
-import { NavigationService } from './navigation/navigation.service';
-import { DispatchService } from './dispatch/dispatch.service';
-import { FallDetectionService } from './monitor/fall-detection.service';
-import { RobotTelemetryService } from './monitor/robot-telemetry.service';
-import { RobotMonitorService } from './monitor/robot-monitor.service';
-import { SupplyTaskHandler } from './dispatch/task-handlers/supply-task.handler';
-import { NavigationTaskHandler } from './dispatch/task-handlers/navigation-task.handler';
+import { GlobalTaskQueueService } from './global-task-queue.service';
+import { ChargingService } from './charging.service';
+import { NodeLockService } from './node-lock.service';
+import { TaskExecutionService } from './task-execution.service';
+import { TaskPlannerService } from './task-planner.service';
+import { RobotMonitorService } from './robot-monitor.service';
+import { AutoTaskService } from './auto-task.service';
+import { AutoDispatcherService } from './auto-dispatcher.service';
+import { AutoChargerService } from './auto-charger.service';
 import { RosModule } from '../ros/ros.module';
 import { FleetModule } from '../fleet.module';
-import { AiModule } from '../ai/ai.module';
-// RagService는 AiModule에서 export됨
+import { CoreEventsModule } from '../core-events/core-events.module';
+import { TaskCatalogModule } from '../task-catalog/task-catalog.module';
 
 @Module({
   imports: [
-    MongooseModule.forFeature([{ name: Task.name, schema: TaskSchema }]),
+    MongooseModule.forFeature([{ name: TaskHistory.name, schema: TaskHistorySchema }]),
     RosModule,
     FleetModule,
-    forwardRef(() => AiModule),
+    CoreEventsModule, // 맵 재배정 이벤트 구독(→ handleMapChange) — Map 모듈 역참조 제거용
+    TaskCatalogModule, // 저장된 Task 정의/시퀀스 로드(runSequence)
   ],
   controllers: [FmsController],
   providers: [
-    FmsService,
+    TaskRepositoryService,
+    TaskStatusService,
     // 상태 저장(leaf)
     TaskManagerEventsService,
     RobotStateService,
     RobotTaskQueueService,
-    RotationStateService,
     // 큐
     GlobalTaskQueueService,
-    // 자동충전
+    // 충전소 점유 조회
     ChargingService,
-    // 주행/경로
-    NavGoalService,
     NodeLockService,
-    NavRecoveryService,
-    NavigationService,
-    // 배차 + 태스크별 핸들러
-    DispatchService,
-    SupplyTaskHandler,
-    NavigationTaskHandler,
-    // 감지/감시
-    FallDetectionService,
-    RobotTelemetryService,
+    // 주행/실행 (NavGoal+NavPublish+Navigation+RosPlan 통합)
+    TaskExecutionService,
+    // 할당 + 태스크별 처리 (Dispatch+Nav/Supply 핸들러+SupplyVision 통합)
+    TaskPlannerService,
+    // 모니터링 (Monitor+Telemetry+FallDetection 통합)
     RobotMonitorService,
+    // ROS 데이터 → 태스크 자동 생성 규칙 엔진(틀)
+    AutoTaskService,
+    // 자동 디스패처/자동 충전 (TaskManagerService에서 분리)
+    AutoDispatcherService,
+    AutoChargerService,
     // 오케스트레이터(파사드)
     TaskManagerService,
   ],
-  exports: [FmsService, TaskManagerService],
+  exports: [TaskRepositoryService, TaskManagerService],
 })
 export class FmsModule {}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type { RosMessage } from "./useNestSocket";
+import { batteryPercent } from "../utils/battery";
 
 // ── 상수 ──────────────────────────────────────────────────────────────────────
 
@@ -37,9 +38,8 @@ function getBatteryPct(
 ): number | null {
  const topic = `/${robotId}/battery_state`;
  const data = rosMessages[topic]?.data as { percentage?: number } | undefined;
- if (data?.percentage == null) return null;
- // TB3 펌웨어는 0~100, 일부 장치는 0~1 — 양쪽 대응
- return data.percentage > 1 ? data.percentage : data.percentage * 100;
+ // 0~1/0~100 정규화 + 범위검증(음수/garbage→null, 100~110→100). 글리치는 알림에서 무시됨.
+ return batteryPercent(data?.percentage);
 }
 
 let idCounter = 0;

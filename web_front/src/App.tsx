@@ -8,33 +8,43 @@ import RobotSidebar from "./components/RobotSidebar";
 import VicPinkyPanel from "./components/panels/BigPinkyPanel";
 import PinkyBotPanel from "./components/panels/PinkyBotPanel";
 import TurtlebotPanel from "./components/panels/TurtlebotPanel";
+import RobotStagePanel from "./components/RobotStagePanel";
+import { batteryPercent } from "./utils/battery";
 import OmxPanel from "./components/panels/OmxPanel";
 import ExploreView from "./views/ExploreView";
 import FmsView from "./views/FmsView";
 import TaskManagerView from "./views/TaskManagerView";
 import FlowView from "./views/FlowView";
 import AdminView from "./views/AdminView";
-import BatteryAlertModal from "./components/BatteryAlertModal";
-import FallAlertModal from "./components/FallAlertModal";
-import NoPathAlertModal from "./components/NoPathAlertModal";
-import ControlCameraPanel from "./components/ControlCameraPanel";
+import SuitabilityView from "./views/SuitabilityView";
+import QueueTestView from "./views/QueueTestView";
+import BuilderView from "./views/BuilderView";
+import GlobalTaskQueueBar from "./components/GlobalTaskQueueBar";
+import BatteryAlertModal from "./components/modals/BatteryAlertModal";
+import FallAlertModal from "./components/modals/FallAlertModal";
+import TaskFailedAlertModal from "./components/modals/TaskFailedAlertModal";
+import NoPathAlertModal from "./components/modals/NoPathAlertModal";
+import LowBatteryAlertModal from "./components/modals/LowBatteryAlertModal";
+import BatteryChargedModal from "./components/modals/BatteryChargedModal";
+import ControlCameraPanel from "./components/cameras/ControlCameraPanel";
 import { useBatteryAlerts } from "./hooks/useBatteryAlerts";
 import { useThrottled } from "./hooks/useThrottled";
 import AiAssistant from "./components/AiAssistant";
 import MobileRobotControl from "./components/MobileRobotControl";
+import PolicyVisionPanel from "./components/cameras/PolicyVisionPanel";
 
-type AppMode = "control" | "explore" | "fms" | "tasks" | "flow" | "admin";
+type AppMode = "control" | "explore" | "fms" | "tasks" | "flow" | "admin" | "suitability" | "queue" | "builder";
 
 export default function App() {
- const { connected, error, subscribe, publish } = useRos();
+ const { connected, error, subscribe } = useRos();
  const {
  emitCmdVel, emitPublish, emitAction, cancelAction, callService,
- emitFmsDispatch, emitFmsCancel, emitFmsAutoCharge, emitFmsRegister, emitFmsRelease, emitNodeLock,
+ emitFmsDispatch, emitFmsAutoCharge, emitFmsRegister, emitNodeLock,
  emitNavInitialPose,
  nestConnected, rosMessages, socket,
  activeGoals, actionFeedbacks, actionResults,
  mapTimestamps, mapInfos,
- fmsTasks, tmAlerts, ackTmAlert, setRobotHome,
+ fmsTasks, tmAlerts, ackTmAlert, setRobotHome, emitReturnHome,
  robots, robotStatuses, lockedNodes,
  } = useNestSocket();
 
@@ -56,6 +66,11 @@ export default function App() {
  const isTasks   = appMode === "tasks";
  const isFlow    = appMode === "flow";
  const isAdmin   = appMode === "admin";
+ const isSuitability = appMode === "suitability";
+ const isQueue   = appMode === "queue";
+ const isBuilder = appMode === "builder";
+ // 글로벌 태스크 큐 바를 상단에 띄울 모드 (태스크/플릿/정찰/적합도/테스트)
+ const showQueueBar = isTasks || isFms || isExplore || isSuitability || isQueue;
 
  return (
    <div className="flex flex-col h-screen bg-transparent text-[#521C0D] overflow-hidden relative font-sans min-w-0">
@@ -73,7 +88,7 @@ export default function App() {
          </div>
          <div className="hidden sm:block">
            <h1 className="text-sm font-semibold text-white leading-none tracking-tight">
-             {isExplore ? "재난 모니터링" : isTasks ? "태스크 관리" : isFms ? "플릿 명령 할당" : isFlow ? "작업 흐름도" : isAdmin ? "시스템 설정" : "로봇 제어"}
+             {isExplore ? "재난 모니터링" : isTasks ? "태스크 관리" : isFms ? "플릿 명령 할당" : isFlow ? "작업 흐름도" : isAdmin ? "시스템 설정" : isSuitability ? "적합 로봇 판정" : isQueue ? "테스트 / 이벤트" : isBuilder ? "시나리오 빌더" : "로봇 제어"}
            </h1>
            <p className="text-[10px] text-white/[0.55] leading-none mt-1 tracking-widest">
              통합 관제 센터
@@ -89,6 +104,9 @@ export default function App() {
          <ModeBtn mode="flow"    active={appMode === "flow"}    onClick={() => setAppMode("flow")}>흐름도</ModeBtn>
          <ModeBtn mode="explore" active={appMode === "explore"} onClick={() => setAppMode("explore")}>정찰</ModeBtn>
          <ModeBtn mode="admin"   active={appMode === "admin"}   onClick={() => setAppMode("admin")}>관리</ModeBtn>
+         <ModeBtn mode="suitability" active={appMode === "suitability"} onClick={() => setAppMode("suitability")}>적합도</ModeBtn>
+         <ModeBtn mode="queue" active={appMode === "queue"} onClick={() => setAppMode("queue")}>테스트</ModeBtn>
+         <ModeBtn mode="builder" active={appMode === "builder"} onClick={() => setAppMode("builder")}>빌더</ModeBtn>
        </div>
 
        {/* 상태 표시 — 우측 */}
@@ -117,11 +135,40 @@ export default function App() {
        </div>
      </header>
 
+ {showQueueBar && <GlobalTaskQueueBar tasks={fmsTasks} />}
+
  {/* ── 본문 ──────────────────────────────────────────────────────────── */}
  <div className="flex flex-col sm:flex-row flex-1 overflow-hidden relative">
  {isAdmin ? (
  <div className="flex-1 overflow-hidden">
  <AdminView />
+ </div>
+ ) : isSuitability ? (
+ <div className="flex-1 overflow-hidden">
+ <SuitabilityView
+ rosMessages={displayMessages}
+ fmsTasks={fmsTasks}
+ robots={robots}
+ robotStatuses={robotStatuses}
+ emitFmsDispatch={emitFmsDispatch}
+ emitFmsRegister={emitFmsRegister}
+ />
+ </div>
+ ) : isQueue ? (
+ <div className="flex-1 overflow-hidden">
+ <QueueTestView
+ rosMessages={displayMessages}
+ fmsTasks={fmsTasks}
+ robots={robots}
+ robotStatuses={robotStatuses}
+ emitFmsDispatch={emitFmsDispatch}
+ emitFmsRegister={emitFmsRegister}
+ emitFmsAutoCharge={emitFmsAutoCharge}
+ />
+ </div>
+ ) : isBuilder ? (
+ <div className="flex-1 overflow-hidden">
+ <BuilderView robots={robots} />
  </div>
  ) : isFlow ? (
  <div className="flex-1 overflow-hidden">
@@ -132,15 +179,9 @@ export default function App() {
  <TaskManagerView
  rosMessages={displayMessages}
  fmsTasks={fmsTasks}
- socket={socket}
- emitFmsDispatch={emitFmsDispatch}
- emitFmsCancel={emitFmsCancel}
  emitFmsAutoCharge={emitFmsAutoCharge}
- emitFmsRegister={emitFmsRegister}
- emitFmsRelease={emitFmsRelease}
  robotStatuses={robotStatuses}
  tmAlerts={tmAlerts}
- ackTmAlert={ackTmAlert}
  robots={robots}
  onSelectRobotInFleet={(robotId) => {
    setSelectedRobot(robotId);
@@ -154,18 +195,11 @@ export default function App() {
  rosMessages={displayMessages}
  fmsTasks={fmsTasks}
  socket={socket}
- emitFmsDispatch={emitFmsDispatch}
- emitFmsCancel={emitFmsCancel}
- emitFmsAutoCharge={emitFmsAutoCharge}
- emitFmsRegister={emitFmsRegister}
- emitFmsRelease={emitFmsRelease}
  emitNavInitialPose={emitNavInitialPose}
  tmAlerts={tmAlerts}
- ackTmAlert={ackTmAlert}
  setRobotHome={setRobotHome}
  emitNodeLock={emitNodeLock}
  lockedNodes={lockedNodes}
- focusRobotId={selectedRobot}
  robots={robots}
  robotStatuses={robotStatuses}
  />
@@ -178,6 +212,13 @@ export default function App() {
  mapTimestamps={mapTimestamps}
  mapInfos={mapInfos}
  socket={socket}
+ fmsTasks={fmsTasks}
+ robots={robots}
+ robotStatuses={robotStatuses}
+ emitNavInitialPose={emitNavInitialPose}
+ setRobotHome={setRobotHome}
+ emitNodeLock={emitNodeLock}
+ lockedNodes={lockedNodes}
  />
  </div>
  ) : (
@@ -223,14 +264,12 @@ export default function App() {
  <OmxPanel
  subscribe={subscribe}
  publish={socketPublish}
- emitAction={emitAction}
- cancelAction={cancelAction}
- activeGoals={activeGoals}
- actionFeedbacks={actionFeedbacks}
- actionResults={actionResults}
  callService={callService}
  />
  ) : selectedRobot.startsWith("tb3") ? (
+ <>
+ {/* 제어 화면 stage 표시 — 프론트에서만 /<botId>/robot_state 직접 구독(기존 로직 무관) */}
+ <RobotStagePanel botId={selectedRobot} />
  <TurtlebotPanel
  subscribe={subscribe}
  publish={socketPublish}
@@ -244,6 +283,7 @@ export default function App() {
  actionResults={actionResults}
  callService={callService}
  />
+ </>
  ) : selectedRobot ? (
  <GenericRobotPanel
  robotId={selectedRobot}
@@ -257,8 +297,11 @@ export default function App() {
  )}
  </main>
 
- <div className="hidden sm:block z-10 p-8">
- <ControlCameraPanel selectedRobot={selectedRobot} socket={socket} />
+ <div className="hidden sm:block z-10 p-4 min-w-0">
+ {/* omx는 우측 WebRTC 카메라 대신 정책 추론 비전(MJPEG) 표시 */}
+ {selectedRobot === "omx"
+ ? <PolicyVisionPanel />
+ : <ControlCameraPanel selectedRobot={selectedRobot} socket={socket} />}
  </div>
  </>
  )}
@@ -266,6 +309,7 @@ export default function App() {
 
  <BatteryAlertModal notifications={notifications} onConfirm={confirmNotification} />
  <FallAlertModal alerts={tmAlerts} onConfirm={ackTmAlert} />
+ <TaskFailedAlertModal alerts={tmAlerts} onConfirm={ackTmAlert} />
  <NoPathAlertModal
  alerts={tmAlerts}
  onSwitchManual={(robotId, alertId) => {
@@ -274,6 +318,22 @@ export default function App() {
  ackTmAlert(alertId);
  }}
  onDismiss={ackTmAlert}
+ />
+ <LowBatteryAlertModal
+ alerts={tmAlerts}
+ onAutoCharge={(robotId, alertId) => {
+ if (robotId) emitFmsAutoCharge(robotId);
+ ackTmAlert(alertId);
+ }}
+ onConfirm={ackTmAlert}
+ />
+ <BatteryChargedModal
+ alerts={tmAlerts}
+ onReturnHome={(robotId, alertId) => {
+ if (robotId) emitReturnHome(robotId);
+ ackTmAlert(alertId);
+ }}
+ onConfirm={ackTmAlert}
  />
  <AiAssistant socket={socket} />
 
@@ -312,9 +372,7 @@ function GenericRobotPanel({
  const p = (topic: string) => rosMessages[`/${robotId}/${topic}`]?.data;
 
  const batData = p("battery_state") as { percentage?: number } | undefined;
- const batPct = batData?.percentage != null
- ? Math.round(batData.percentage > 1 ? batData.percentage : batData.percentage * 100)
- : null;
+ const batPct = batteryPercent(batData?.percentage);
 
  const odom = p("odom") as { pose?: { pose?: { position?: { x?: number; y?: number }; orientation?: { z?: number; w?: number } } } } | undefined;
  const pos = odom?.pose?.pose?.position;

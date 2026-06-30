@@ -1,20 +1,38 @@
 # omx (domain 45) ↔ hub (domain 49)
 # remap 규칙: key = to_domain 발행명, remap = from_domain 구독명
-
+name: domain_bridge_omx
 topics:
 
   # ── UPLINK: domain 45 → domain 49 ──────────────────────────────────────────
-  /omx/joint_states:
+  /joint_states:
     type: sensor_msgs/msg/JointState
     from_domain: 45
     to_domain: 49
-    remap: /joint_states
+    remap: /omx/joint_states
 
-  /omx/follower_state:
+  /follower_state:
     type: sensor_msgs/msg/JointState
     from_domain: 45
     to_domain: 49
-    remap: /follower_state
+    remap: /omx/follower_state
+
+  /vision/is_loaded:        # 로봇(45) /vision/is_loaded 발행 → 허브(49) /omx/vision/is_loaded. 적재 감지(true=적재됨)
+    type: std_msgs/msg/Bool
+    from_domain: 45
+    to_domain: 49
+    remap: /omx/vision/is_loaded
+
+  /vision/object_red:       # 로봇(45) /vision/object_red 발행 → 허브(49) /omx/vision/object_red. 빨강 ROI 물체 감지
+    type: std_msgs/msg/Bool
+    from_domain: 45
+    to_domain: 49
+    remap: /omx/vision/object_red
+
+  /vision/object_blue:      # 로봇(45) /vision/object_blue 발행 → 허브(49) /omx/vision/object_blue. 파랑 ROI 물체 감지
+    type: std_msgs/msg/Bool
+    from_domain: 45
+    to_domain: 49
+    remap: /omx/vision/object_blue
 
   # /omx/tf:
   #   type: tf2_msgs/msg/TFMessage
@@ -33,10 +51,16 @@ topics:
     type: std_msgs/msg/Float32MultiArray
     from_domain: 49
     to_domain: 45
-    remap: /omx/joint_commands
+    remap: /joint_commands
 
-  /cmd_vel:
-    type: geometry_msgs/msg/TwistStamped
+  /omx/vision/start_blue:   # 허브(49) 발행 → 로봇(45)에서 /vision/start_blue 로. 파랑 추론 시작
+    type: std_msgs/msg/Bool
     from_domain: 49
     to_domain: 45
-    remap: /omx/cmd_vel
+    remap: /vision/start_blue
+
+  /omx/vision/start_red:    # 허브(49) 발행 → 로봇(45)에서 /vision/start_red 로. 빨강 추론 시작
+    type: std_msgs/msg/Bool
+    from_domain: 49
+    to_domain: 45
+    remap: /vision/start_red

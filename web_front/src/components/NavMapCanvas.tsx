@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import type { Socket } from "socket.io-client";
-import { RosMessage } from "../hooks/useNestSocket";
+import { RosMessage, type RobotInfo } from "../hooks/useNestSocket";
 import { BACKEND_URL } from "../config";
-import CameraFeed from "./CameraFeed";
+import CameraFeed from "./cameras/CameraFeed";
 import { snapNodes } from "./TopologyMapView";
 import type { FNode, FEdge, ActivePath, RobotPos } from "./TopologyMapView";
 import type { StaticMapInfo, DragState } from "./navmap/types";
 import { TB3_ROBOTS, SELECTABLE_ROBOTS, NODE_COLOR } from "./navmap/constants";
-import { worldToCanvas, canvasToWorld, distToSegment, quatToYaw } from "./navmap/geometry";
+import { worldToCanvas, canvasToWorld, distToSegment } from "./navmap/geometry";
 import { drawPreviewMarker } from "./navmap/markers";
 import { drawPlanPaths, drawTopologyOverlay, drawActivePaths, drawTb3Markers, buildActivePathColors } from "./navmap/renderers";
 
@@ -20,11 +20,12 @@ interface Props {
  onSetHome?: (robotId: string, x: number, y: number, yaw: number) => void;
  activePaths?: ActivePath[];
  robotPositions?: Record<string, RobotPos>;
+ robots?: RobotInfo[]; // 로봇별 location(맵) — 마커를 robot.location 기준으로 필터(단일 출처)
  onNodeClick?: (nodeId: string) => void;
  /** 선택된 노드 정보 패널에서 잠금/해제 토글 (소켓 node_lock → 우회 재경로 트리거) */
  onNodeLockToggle?: (nodeId: string) => void;
  lockedNodes?: Set<string>;
- /** 배차 전 미리보기 경로 (노드 ID 순서) — 점선으로 표시 */
+ /** 할당 전 미리보기 경로 (노드 ID 순서) — 점선으로 표시 */
  previewPath?: string[];
 }
 
@@ -32,7 +33,7 @@ interface Props {
 
 export default function NavMapCanvas({
  rosMessages, socket, onSetInitialPose, onSetHome,
- activePaths = [], robotPositions = {}, onNodeClick, onNodeLockToggle, lockedNodes = new Set(), previewPath = [],
+ activePaths = [], robotPositions = {}, robots = [], onNodeClick, onNodeLockToggle, lockedNodes = new Set(), previewPath = [],
 }: Props) {
  const canvasRef = useRef<HTMLCanvasElement>(null);
  const wrapRef = useRef<HTMLDivElement>(null);
@@ -50,7 +51,9 @@ export default function NavMapCanvas({
  const onNodeLockToggleRef = useRef(onNodeLockToggle);
  const lockedNodesRef = useRef<Set<string>>(lockedNodes);
  const previewPathRef = useRef<string[]>(previewPath);
- const assignmentsRef = useRef<Record<string, string>>({});
+ const lastVictimTs = useRef(0); // /victim/confirmed 중복 처리 방지
+ // 마커·경로·자동선택 필터 기준 — robot.location(단일 출처). assignments(수동 맵 배정)와 별개.
+ const robotLocationsRef = useRef<Record<string, string>>({});
  const selectedMapRef = useRef<string>("");
  const drawRef = useRef<() => void>(() => {});
 
@@ -61,16 +64,30 @@ export default function NavMapCanvas({
  const [mapInfo, setMapInfo] = useState<StaticMapInfo | null>(null);
  const [canvasReady, setCanvasReady] = useState(false);
  const [interactive, setInteractive] = useState(true);
- const [homeMode, setHomeMode] = useState(false);
- const [selectedBots, setSelectedBots] = useState<Set<string>>(new Set(["tb3_01"]));
+ const [homeMode] = useState(false);
+ const [selectedBots, setSelectedBots] = useState<Set<string>>(new Set()); // 기본 선택 없음(tb3_01 자동 활성화 해제)
  const [showCamera, setShowCamera] = useState(true);
  const [showTopology, setShowTopology] = useState(true);
  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
  const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
  const [topoStats, setTopoStats] = useState({ n: 0, e: 0 });
+ const [nodeRefresh, setNodeRefresh] = useState(0); // /victim/confirmed 시 토폴로지 재조회 트리거
 
  const base = BACKEND_URL.replace(/\/$/, "");
+
+ // 홈: 선택된 로봇들을 맵의 초기위치 노드(initPosition=true)로 초기위치 지정
+ const resetToMapHome = useCallback(async () => {
+ if (!selectedMap || selectedBots.size === 0) return;
+ try {
+ const nodes = await fetch(`${base}/api/fleet/topology/nodes?map_id=${selectedMap}`).then((r) => r.json());
+ const init = Array.isArray(nodes) ? nodes.find((n: { initPosition?: boolean }) => n.initPosition) : null;
+ if (!init) { console.warn(`[홈] 맵 "${selectedMap}"에 초기위치 노드(initPosition) 없음`); return; }
+ for (const robotId of selectedBots) {
+ onSetInitialPose(robotId, init.x, init.y, init.yaw ?? 0, selectedMap);
+ }
+ } catch (e) { console.error("[홈] 초기위치 지정 실패", e); }
+ }, [base, selectedMap, selectedBots, onSetInitialPose]);
 
  // keep refs in sync
  useEffect(() => { activePathsRef.current = activePaths; drawRef.current(); }, [activePaths]);
@@ -78,35 +95,56 @@ export default function NavMapCanvas({
  useEffect(() => { onNodeClickRef.current = onNodeClick; }, [onNodeClick]);
  useEffect(() => { onNodeLockToggleRef.current = onNodeLockToggle; }, [onNodeLockToggle]);
  useEffect(() => { previewPathRef.current = previewPath; drawRef.current(); }, [previewPath]);
+ // /victim/confirmed 새로 수신 시 토폴로지 재조회(백엔드가 VICTIM 노드 생성) — 살짝 지연 후
+ useEffect(() => {
+ const ts = rosMessages["/victim/confirmed"]?.timestamp;
+ if (!ts || ts === lastVictimTs.current) return;
+ lastVictimTs.current = ts;
+ const id = setTimeout(() => setNodeRefresh((n) => n + 1), 700);
+ return () => clearTimeout(id);
+ }, [rosMessages]);
  useEffect(() => { lockedNodesRef.current = lockedNodes; drawRef.current(); }, [lockedNodes]);
- useEffect(() => { assignmentsRef.current = assignments; }, [assignments]);
+ useEffect(() => { robotLocationsRef.current = Object.fromEntries(robots.filter((r) => r.location).map((r) => [r.robot_id, r.location as string])); }, [robots]);
  useEffect(() => { selectedMapRef.current = selectedMap; }, [selectedMap]);
 
  // ── 맵 목록 + 할당 로드 ──────────────────────────────────────────────────
 
  useEffect(() => {
- Promise.all([
- fetch(`${base}/api/map/static/list`).then((r) => r.json() as Promise<string[]>),
- fetch(`${base}/api/map/assignments`).then((r) => r.json() as Promise<Record<string, string>>),
- ])
- .then(([list, asgn]) => {
- setAvailableMaps(list);
- setAssignments(asgn);
- const initial = asgn["tb3_01"] ?? list[0] ?? "";
- if (initial) setSelectedMap(initial);
- })
- .catch(console.error);
+ let alive = true;
+ // 정적 맵 목록 1회 조회 (비어 있으면 반영 안 함 — 백엔드 재시작 중 빈 지도 방지).
+ // 자동 맵 선택 안 함(맵 선택 해제) — 사용자가 로봇을 선택하면 그 로봇 맵(robot.location)으로 전환된다.
+ const fetchList = async (): Promise<boolean> => {
+ try {
+ const [lr, ar] = await Promise.all([
+ fetch(`${base}/api/map/static/list`),
+ fetch(`${base}/api/map/assignments`),
+ ]);
+ if (lr.ok && ar.ok) {
+ const list = (await lr.json()) as string[];
+ const asgn = (await ar.json()) as Record<string, string>;
+ if (alive && Array.isArray(list) && list.length) { setAvailableMaps(list); setAssignments(asgn); return true; }
+ }
+ } catch { /* 재시도 */ }
+ return false;
+ };
+ // 첫 로딩 재시도(채워질 때까지)
+ const load = async (tries = 10) => {
+ for (let i = 0; i < tries && alive; i++) {
+ if (await fetchList()) return;
+ await new Promise((res) => setTimeout(res, 1200));
+ }
+ };
+ void load();
+ // 새로 저장된 정적 맵(정찰 탭 "Fleet에 저장")이 목록에 반영되도록 주기 갱신(선택 상태 유지)
+ const poll = setInterval(() => { void fetchList(); }, 15000);
+ return () => { alive = false; clearInterval(poll); };
  }, [base]);
 
- // ── 선택 로봇 변경 시 해당 로봇의 할당 맵으로 전환 ─────────────────────
-
- useEffect(() => {
- const firstBot = [...selectedBots][0];
- if (!firstBot || !assignments[firstBot]) return;
- const assignedMap = assignments[firstBot];
- if (assignedMap !== selectedMap) setSelectedMap(assignedMap);
- // eslint-disable-next-line react-hooks/exhaustive-deps
- }, [selectedBots, assignments]);
+ // ── 맵이 주(主), 터틀봇은 종속 ──────────────────────────────────────────────
+ // 맵은 사용자가 드롭다운으로 직접 선택하고(이게 단일 기준), 로봇 마커는 draw에서
+ // robot.location === 선택 맵 인 로봇만 그린다. 로봇을 선택해도 맵을 바꾸지 않는다.
+ // (이전: 선택 로봇의 location 으로 맵을 강제 전환 → robots 텔레메트리 갱신마다 재실행되어
+ //  수동 맵 선택이 로봇 위치로 되돌아가는 버그가 있었음. 제거함.)
 
  // ── 선택된 맵 로드 (정적 맵 + 토폴로지) ────────────────────────────────
 
@@ -162,6 +200,26 @@ export default function NavMapCanvas({
  img.src = `${base}/api/map/static/${selectedMap}/image`;
  }, [selectedMap, base]);
 
+ // 토폴로지 변경(예: /victim/confirmed로 VICTIM 노드 생성) 시 노드/엣지만 가볍게 재조회 (이미지 재로딩 없음)
+ useEffect(() => {
+ if (nodeRefresh === 0 || !selectedMap) return;
+ const snap = infoRef.current?.snapThreshold ?? 0.25;
+ Promise.all([
+ fetch(`${base}/api/fleet/topology/nodes?map_id=${selectedMap}`).then((r) => r.json()).catch(() => []),
+ fetch(`${base}/api/fleet/topology/edges`).then((r) => r.json()).catch(() => []),
+ ]).then(([ns, es]) => {
+ const nodes = Array.isArray(ns) ? (ns as FNode[]) : [];
+ const snappedNodes = snapNodes(nodes, snap);
+ const nodeIds = new Set(snappedNodes.map((n) => n.node_id));
+ const allEdges = Array.isArray(es) ? (es as FEdge[]) : [];
+ const edges = allEdges.filter((e) => nodeIds.has(e.startNode) && nodeIds.has(e.endNode));
+ topoNodesRef.current = snappedNodes;
+ topoEdgesRef.current = edges;
+ setTopoStats({ n: snappedNodes.length, e: edges.length });
+ drawRef.current();
+ });
+ }, [nodeRefresh, selectedMap, base]);
+
  // ── 캔버스 렌더 ───────────────────────────────────────────────────────────
 
  const draw = useCallback(() => {
@@ -190,15 +248,15 @@ export default function NavMapCanvas({
  ctx.fillRect(0, 0, canvas.width, canvas.height);
  }
 
- const assignments = assignmentsRef.current;
+ const robotMaps = robotLocationsRef.current; // 마커·경로·자동선택 모두 robot.location 기준(단일 출처)
  const selectedMap = selectedMapRef.current;
 
  // TB3 계획 경로(/plan)
- drawPlanPaths(ctx, info, scale, rosMessages, assignments, selectedMap, selectedBots);
+ drawPlanPaths(ctx, info, scale, rosMessages, robotMaps, selectedMap, selectedBots);
 
  // 활성 경로 필터 + 로봇별 색 (토폴로지·경로 오버레이가 공유)
  const { filteredApaths, robotColorMap } = buildActivePathColors(
- activePathsRef.current, assignments, selectedMap,
+ activePathsRef.current, robotMaps, selectedMap,
  );
 
  // 토폴로지 오버레이 (노드/엣지 + 비-TB3 로봇)
@@ -212,6 +270,8 @@ export default function NavMapCanvas({
  hoveredNodeId,
  lockedSet: lockedNodesRef.current,
  rosMessages,
+ robotMaps,
+ selectedMap,
  });
  }
 
@@ -223,7 +283,7 @@ export default function NavMapCanvas({
  topoNodes: topoNodesRef.current,
  });
 
- // 배차 전 경로 미리보기 (노란 점선)
+ // 할당 전 경로 미리보기 (노란 점선)
  const preview = previewPathRef.current;
  if (showTopology && preview.length > 1) {
  const pts = preview
@@ -241,8 +301,8 @@ export default function NavMapCanvas({
  }
  }
 
- // TB3 로봇 마커 (amcl_pose, 현재 맵 배정 로봇만)
- drawTb3Markers(ctx, canvas, info, scale, rosMessages, assignments, selectedMap, selectedBots);
+ // TB3 로봇 마커 (amcl_pose, robot.location 이 현재 맵인 로봇만)
+ drawTb3Markers(ctx, canvas, info, scale, rosMessages, robotMaps, selectedMap, selectedBots);
 
  // 드래그 중 프리뷰
  if (dragRef.current) {
@@ -382,7 +442,7 @@ export default function NavMapCanvas({
  // 우클릭은 위치추정(pose)/홈 지정 전용 — 기본 컨텍스트 메뉴만 막는다
  const onContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => e.preventDefault();
 
- const cameraBot = TB3_ROBOTS.find((r) => selectedBots.has(r.id))?.id ?? "tb3_01";
+ const cameraBot = TB3_ROBOTS.find((r) => selectedBots.has(r.id))?.id ?? null; // 선택 로봇 없으면 null → 카메라 닫음(폴백 제거)
  const cameraRobotMeta = TB3_ROBOTS.find((r) => r.id === cameraBot);
  const soloBot = selectedBots.size === 1 ? [...selectedBots][0] : null;
  const selectedPlanPoses = soloBot
@@ -432,7 +492,7 @@ export default function NavMapCanvas({
  assignLoading ? "border-white/[0.1] text-white/90" : "border-white/[0.1]"
  }`}
  >
- {availableMaps.length === 0 && <option value="">맵 없음</option>}
+ <option value="">{availableMaps.length === 0 ? "맵 없음" : "맵 선택"}</option>
  {availableMaps.map((m) => <option key={m} value={m}>{m}</option>)}
  </select>
  {assignLoading && (
@@ -512,17 +572,14 @@ export default function NavMapCanvas({
  {interactive ? "● 조작 중" : "○ 보기"}
  </button>
 
- {/* 홈 설정 */}
- {onSetHome && interactive && (
+ {/* 홈 — 선택 로봇을 맵 초기위치 노드로 이동(원클릭) */}
+ {interactive && (
  <button
- onClick={() => setHomeMode((v) => !v)}
- className={`px-3 py-1 text-xs font-bold tracking-wider border transition-all ${
- homeMode
- ? "border-white/[0.1] text-white/90 bg-green-950/20"
- : "border-white/[0.1] text-white/[0.55] hover:text-white/[0.75]"
- }`}
+ onClick={resetToMapHome}
+ title="선택된 로봇들을 맵의 초기위치로 이동"
+ className="px-3 py-1 text-xs font-bold tracking-wider border border-white/[0.1] text-white/[0.55] hover:text-white/90 transition-all"
  >
- {homeMode ? "● 홈 설정" : "⌂ 홈"}
+ ⌂ 홈
  </button>
  )}
 
@@ -539,15 +596,9 @@ export default function NavMapCanvas({
  ⬡ 노드{topoStats.n > 0 ? ` ${topoStats.n}` : ""}
  </button>
 
- {/* 조작 힌트 */}
+ {/* 조작 힌트 (L 목표 제거됨) */}
  {interactive && (
  <div className="flex items-center gap-3">
- <span className="flex items-center gap-1 text-xs ">
- <kbd className="px-1 py-0.5 border border-white/[0.1] text-white/[0.6] text-xs">L</kbd>
- <span className={homeMode ? "text-white/90/70" : "text-white/90/70"}>
- {homeMode ? "홈" : "목표"}
- </span>
- </span>
  <span className="flex items-center gap-1 text-xs ">
  <kbd className="px-1 py-0.5 border border-white/[0.1] text-white/[0.6] text-xs">R</kbd>
  <span className="text-white/90/70">초기위치</span>
@@ -654,8 +705,8 @@ export default function NavMapCanvas({
  </div>
  )}
 
- {/* 카메라 오버레이 */}
- {showCamera && socket && canvasReady && (
+ {/* 카메라 오버레이 — 선택 로봇(cameraBot) 있을 때만 */}
+ {showCamera && socket && canvasReady && cameraBot && (
  <div className="absolute bottom-3 right-3 w-56 z-10 shadow-2xl shadow-black/80 border border-white/[0.1]">
  <div className="flex items-center justify-between px-2 py-1 bg-[#FFCE99]/32 border-b border-white/[0.1]">
  <span

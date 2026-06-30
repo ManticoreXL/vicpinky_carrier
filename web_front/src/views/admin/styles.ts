@@ -9,19 +9,26 @@ export const BTN = (color: string) =>
   `px-2 py-0.5 text-xs font-bold tracking-wider rounded border transition-colors ${color}`;
 
 export const STATUS_COLOR: Record<RobotStatus, string> = {
-  IDLE: "text-white/90",
-  MOVING: "text-white/90",
-  WORKING: "text-white/90",
-  ERROR: "text-white/90",
+  // 가용
+  IDLE: "text-emerald-600", PARKED: "text-emerald-600", LOADED: "text-emerald-600",
+  // 활성
+  WORKING: "text-amber-600", TO_CHARGE: "text-amber-600", CHARGING: "text-amber-600", WAITING_CHARGE: "text-amber-600",
+  RETURNING: "text-amber-600", TO_LOAD: "text-amber-600", LOADING: "text-amber-600", UNLOADING: "text-amber-600",
+  CARRIER_UP: "text-amber-600", CARRIER_DOWN: "text-amber-600",
+  // 보류/오류/오프라인
+  PAUSED: "text-amber-600",
+  ERROR: "text-rose-600",
   OFFLINE: "text-white/[0.68]",
 };
 
 export const TASK_STATUS_COLOR: Record<TaskStatus, string> = {
+  DRAFT: "text-violet-500",
   PENDING: "text-white/90",
-  ASSIGNED: "text-white/90",
-  RUNNING: "text-white/90",
-  COMPLETED: "text-white/90",
-  FAILED: "text-white/90",
+  ASSIGNED: "text-sky-500",
+  RUNNING: "text-emerald-600",
+  SUSPENDED: "text-amber-600",
+  COMPLETED: "text-white/[0.68]",
+  FAILED: "text-rose-600",
 };
 
 export const TASK_TYPE_COLOR: Record<TaskType, string> = {

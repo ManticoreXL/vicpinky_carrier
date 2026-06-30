@@ -44,14 +44,20 @@ topics:
     to_domain: 49
     remap: /tb3_03/imu
 
+  /victim/confirmed: # 사람 확정 신호 (로봇 43 → 허브 49, 동일 이름) — 프론트 임시 표시
+    type: geometry_msgs/msg/PoseStamped
+    from_domain: 43
+    to_domain: 49
+    remap: /victim/confirmed
+
   # ── DOWNLINK: 관제탑(49)에서 로봇(43)으로 명령 전송 ──
   /tb3_03/cmd_vel: # 비상 정지 및 조이스틱 수동 제어용
     type: geometry_msgs/msg/TwistStamped
     from_domain: 49
     to_domain: 43
     remap: /cmd_vel
-    qos:
-      reliability: reliable
+    # qos:
+    #   reliability: reliable
 
   /tb3_03/initialpose: # 서버에서 초기 위치 집어주기 (필수)
     type: geometry_msgs/msg/PoseWithCovarianceStamped
@@ -70,6 +76,38 @@ topics:
     from_domain: 49
     to_domain: 43
     remap: /speak_cmd
+
+  /tb3_03/headlight_cmd: # LED 헤드라이트 제어 (on/off/blink)
+    type: std_msgs/msg/String
+    from_domain: 49
+    to_domain: 43
+    remap: /headlight_cmd
+
+  # 서버(49) 맵 서버 → 로봇(43) /map 주입 (navigation-only, latched). 정찰 SLAM은 tb3_01.
+  /tb3_03/map:
+    type: nav_msgs/msg/OccupancyGrid
+    from_domain: 49
+    to_domain: 43
+    remap: /map
+    qos:
+      durability: transient_local
+      reliability: reliable
+      history: keep_last
+      depth: 1
+
+services:
+
+  /tb3_03/deploy:                    # 허브(49) 발행 → 로봇(43)에서 /deploy 서비스로 중계
+    type: turtlebot_state_msgs/srv/Deploy
+    from_domain: 49
+    to_domain: 43
+    remap: /deploy
+
+  /tb3_03/line_trace:                # 허브(49) 발행 → 로봇(43) /line_trace 서비스로 중계 (라인트레이서 on/off)
+    type: turtlebot_state_msgs/srv/LineTrace
+    from_domain: 49
+    to_domain: 43
+    remap: /line_trace
 
 actions:
 

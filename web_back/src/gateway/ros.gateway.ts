@@ -11,11 +11,13 @@ import {
 import { Logger, OnModuleInit } from '@nestjs/common';
 import { Server, Socket } from 'socket.io';
 import { RosService } from '../ros/ros.service';
+import { buildCmdVel } from '../ros/cmd-vel.util';
 import { MapService } from '../map/map.service';
 import { CommandService } from '../command/command.service';
 import { LogsService } from '../logs/logs.service';
-import { FmsService } from '../fms/fms.service';
-import type { CreateTaskDto } from '../fms/fms.service';
+import { TaskRepositoryService } from '../fms/task-repository.service';
+import type { CreateTaskDto } from '../fms/task.dto';
+import { TaskType } from '../fms/task.schema';
 import { TaskManagerService } from '../fms/task-manager.service';
 import { AiService } from '../ai/ai.service';
 import { TelemetryService } from '../telemetry/telemetry.service';
@@ -51,7 +53,7 @@ export class RosGateway
     private readonly mapService: MapService,
     private readonly commandService: CommandService,
     private readonly logsService: LogsService,
-    private readonly fmsService: FmsService,
+    private readonly taskRepo: TaskRepositoryService,
     private readonly taskManager: TaskManagerService,
     private readonly aiService: AiService,
     private readonly telemetryService: TelemetryService,
@@ -103,6 +105,12 @@ export class RosGateway
     } catch {
       client.emit('robots_init', []);
     }
+
+    // 캐시된 맵 상태 전송 — /map은 latched라 접속 중 라이브 갱신이 없을 수 있으므로,
+    // 신규 클라이언트가 곧바로 맵을 렌더(‘MAP NO DATA’ 방지)하도록 현재 캐시를 1회 보낸다.
+    for (const m of this.mapService.listCachedMaps()) {
+      client.emit('map_updated', { botId: m.botId, info: m.info, timestamp: m.timestamp });
+    }
   }
 
   handleDisconnect(client: Socket) {
@@ -150,23 +158,7 @@ export class RosGateway
     @MessageBody() payload: { botId: string; linear: number; angular: number },
     @ConnectedSocket() _client: Socket,
   ) {
-    const isVicPinky = payload.botId === 'vicpinky';
-    this.rosService.publish({
-      topicName: `/${payload.botId}/cmd_vel`,
-      messageType: isVicPinky ? 'geometry_msgs/Twist' : 'geometry_msgs/TwistStamped',
-      message: isVicPinky
-        ? {
-            linear:  { x: payload.linear,  y: 0.0, z: 0.0 },
-            angular: { x: 0.0, y: 0.0, z: payload.angular },
-          }
-        : {
-            header: { stamp: { sec: 0, nanosec: 0 }, frame_id: '' },
-            twist: {
-              linear:  { x: payload.linear,  y: 0.0, z: 0.0 },
-              angular: { x: 0.0, y: 0.0, z: payload.angular },
-            },
-          },
-    });
+    this.rosService.publish(buildCmdVel(payload.botId, payload.linear, payload.angular));
   }
 
   // ── 프론트 → rosbridge 연결 상태 요청 ───────────────────────────────────
@@ -290,22 +282,30 @@ export class RosGateway
   // FMS (Fleet Management System)
   // ══════════════════════════════════════════════════════════════════════════
 
-  /** TaskManager 경유 — 우선순위 큐 → 배터리/온라인 검증 → 자동 할당 */
+  /** 단일 명령 — 지정 robotId에 태스크 1건을 생성·즉시 실행(자동 할당 없음). robotId(preferredRobotId) 필수. */
   @SubscribeMessage('fms_dispatch_task')
   async handleFmsDispatch(
     @MessageBody() payload: CreateTaskDto,
-  ) {
-    await this.taskManager.enqueue(payload);
-  }
-
-  /** 자동충전 — 프론트는 robotId만 보낸다. 충전소 선택/점유 검사/배차는 백엔드가 수행 */
-  @SubscribeMessage('fms_auto_charge')
-  async handleFmsAutoCharge(
-    @MessageBody() { robotId }: { robotId: string },
     @ConnectedSocket() client: Socket,
   ) {
-    const result = await this.taskManager.autoCharge(robotId);
-    client.emit('fms_auto_charge_result', { robotId, ...result });
+    const task = await this.taskManager.enqueue(payload);
+    const taskId = String((task as any)._id);
+    const result = await this.taskManager.dispatchTask(taskId);
+    client.emit('fms_dispatch_result', { taskId, ...result });
+  }
+
+  /** 충전 — 사용자가 로봇과 충전소 노드를 직접 지정해 CHARGE 1건을 즉시 실행(자동 선택/예약 없음). */
+  @SubscribeMessage('fms_auto_charge')
+  async handleFmsCharge(
+    @MessageBody() { robotId, chargerNodeId }: { robotId: string; chargerNodeId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const task = await this.taskManager.enqueue({
+      type: TaskType.CHARGE, targetNode: chargerNodeId, preferredRobotId: robotId, priority: 1,
+    });
+    const taskId = String((task as any)._id);
+    const result = await this.taskManager.dispatchTask(taskId);
+    client.emit('fms_auto_charge_result', { robotId, targetNode: chargerNodeId, taskId, ...result });
   }
 
   /** 충전소에 머무는 로봇 정보(id + 배터리) 조회 — mapId 미지정 시 첫 배정 맵 사용 */
@@ -319,7 +319,7 @@ export class RosGateway
     client.emit('fms_charger_status', occupants);
   }
 
-  /** 등록만 — 배차하지 않고 DRAFT 상태로 보관 (관제가 나중에 수동 배차) */
+  /** 등록만 — 할당하지 않고 DRAFT 상태로 보관 (관제가 나중에 수동 할당) */
   @SubscribeMessage('fms_register_task')
   async handleFmsRegister(
     @MessageBody() payload: CreateTaskDto,
@@ -327,7 +327,7 @@ export class RosGateway
     await this.taskManager.register(payload);
   }
 
-  /** DRAFT 태스크를 배차 큐에 투입 (PENDING 전환 → 자동 배정) */
+  /** DRAFT 태스크를 PENDING으로 전환(아직 실행 안 됨 — 사용자가 dispatchTask로 실행). */
   @SubscribeMessage('fms_release_task')
   async handleFmsRelease(
     @MessageBody() { taskId }: { taskId: string },
@@ -350,7 +350,17 @@ export class RosGateway
     this.server.emit('task_manager_home_set', { robotId, x, y, yaw });
   }
 
-  /** 노드 잠금/해제 — 잠금 시 해당 노드 경유 로봇 자동 우회 재경로 */
+  /** 초기위치(홈)로 복귀 — 등록된 홈 좌표로 goal 발행 */
+  @SubscribeMessage('fms_return_home')
+  handleReturnHome(
+    @MessageBody() { robotId }: { robotId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const result = this.taskManager.returnHomeNow(robotId);
+    client.emit('fms_return_home_result', { robotId, ...result });
+  }
+
+  /** 노드 잠금/해제 — 표시 전용(자동 우회 없음). 잠긴 노드는 다음 명령의 경로계산에서 회피된다. */
   @SubscribeMessage('node_lock')
   async handleNodeLock(
     @MessageBody() { nodeId, isLocked }: { nodeId: string; isLocked: boolean },
@@ -372,7 +382,7 @@ export class RosGateway
     @ConnectedSocket() client: Socket,
   ) {
     const [tasks, lockedNodeIds] = await Promise.all([
-      this.fmsService.list(filters),
+      this.taskRepo.list(filters),
       this.taskManager.getLockedNodeIds(),
     ]);
     client.emit('fms_tasks', tasks);

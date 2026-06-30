@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { RosService } from '../ros/ros.service';
+import { buildCmdVel } from '../ros/cmd-vel.util';
 
 // ── 타입 ─────────────────────────────────────────────────────────────────────
 
@@ -26,7 +27,7 @@ interface OllamaResponse {
 
 // ── 안전 한계 ──────────────────────────────────────────────────────────────────
 
-const MAX_LINEAR = 0.5; // m/s
+const MAX_LINEAR = 0.2; // m/s
 const MAX_ANGULAR = 1.5; // rad/s
 const PUBLISH_HZ = 10; // cmd_vel 발행 주기
 
@@ -192,25 +193,7 @@ export class CommandService {
   // ── cmd_vel 발행 (로봇 타입별 메시지 형식) ────────────────────────────────
 
   private publishCmdVel(botId: string, linear: number, angular: number) {
-    const isVicPinky = botId === 'vicpinky';
-    this.rosService.publish({
-      topicName: `/${botId}/cmd_vel`,
-      messageType: isVicPinky
-        ? 'geometry_msgs/Twist'
-        : 'geometry_msgs/TwistStamped',
-      message: isVicPinky
-        ? {
-            linear: { x: linear, y: 0.0, z: 0.0 },
-            angular: { x: 0.0, y: 0.0, z: angular },
-          }
-        : {
-            header: { stamp: { sec: 0, nanosec: 0 }, frame_id: '' },
-            twist: {
-              linear: { x: linear, y: 0.0, z: 0.0 },
-              angular: { x: 0.0, y: 0.0, z: angular },
-            },
-          },
-    });
+    this.rosService.publish(buildCmdVel(botId, linear, angular));
   }
 
   private sleep(ms: number) {

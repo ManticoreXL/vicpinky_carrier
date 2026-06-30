@@ -11,7 +11,7 @@
  *   DOMAIN_BRIDGE_DIR=/path npm run ros:bridge
  */
 import * as path from 'path';
-import { parseBridgeDir, summarizeBridgeMap } from '../src/ros/domain-bridge.parser';
+import { parseBridgeDir, summarizeBridgeMap } from '../src/ros/domain-bridge/domain-bridge.parser';
 
 const dir =
   process.env.DOMAIN_BRIDGE_DIR ??

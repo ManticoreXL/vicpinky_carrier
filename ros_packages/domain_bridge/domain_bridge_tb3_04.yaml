@@ -50,8 +50,8 @@ topics:
     from_domain: 49
     to_domain: 44
     remap: /cmd_vel
-    qos:
-      reliability: reliable
+    # qos:
+    #   reliability: reliable
 
   /tb3_04/initialpose: # 서버에서 초기 위치 집어주기 (필수)
     type: geometry_msgs/msg/PoseWithCovarianceStamped
@@ -70,6 +70,33 @@ topics:
     from_domain: 49
     to_domain: 44
     remap: /speak_cmd
+
+  /tb3_04/headlight_cmd: # LED 헤드라이트 제어 (on/off/blink)
+    type: std_msgs/msg/String
+    from_domain: 49
+    to_domain: 44
+    remap: /headlight_cmd
+
+  # 서버(49) 맵 서버 → 로봇(44) /map 주입 (navigation-only, latched)
+  /tb3_04/map:
+    type: nav_msgs/msg/OccupancyGrid
+    from_domain: 49
+    to_domain: 44
+    remap: /map
+    qos:
+      durability: transient_local
+      reliability: reliable
+      history: keep_last
+      depth: 1
+
+services:
+
+  # ── DOWNLINK 서비스: 관제탑(49) → 로봇(44) ──
+  /tb3_04/line_trace:                 # 허브(49) 발행 → 로봇(44) /line_trace 서비스로 중계 (라인트레이서 on/off)
+    type: turtlebot_state_msgs/srv/LineTrace
+    from_domain: 49
+    to_domain: 44
+    remap: /line_trace
 
 actions:
 

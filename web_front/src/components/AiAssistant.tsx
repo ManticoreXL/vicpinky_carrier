@@ -254,7 +254,7 @@ export default function AiAssistant({ socket }: Props) {
 
       {/* 에이전트 패널 */}
       {open && (
-        <div className="fixed bottom-24 right-6 z-50 w-96 flex flex-col
+        <div className="fixed bottom-24 right-6 z-50 w-96 max-w-[92vw] flex flex-col
           glass-panel border-white/[0.1] shadow-2xl
           rounded-2xl overflow-hidden"
           style={{ maxHeight: "70vh" }}

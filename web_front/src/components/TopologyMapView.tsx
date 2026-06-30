@@ -20,6 +20,7 @@ export interface FNode {
  y: number;
  yaw: number;
  isLocked?: boolean;
+ initPosition?: boolean;
 }
 
 export interface FEdge {
