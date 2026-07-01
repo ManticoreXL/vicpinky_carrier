@@ -13,55 +13,6 @@ name: domain_bridge_vicpinky
 
 topics:
 
-  /ramp_state:
-    type: vicpinky_carrier_interfaces/msg/RampState
-    from_domain: 40
-    to_domain: 41
-    remap: /ramp_state
-
-  /ramp_state:
-    type: vicpinky_carrier_interfaces/msg/RampState
-    from_domain: 40
-    to_domain: 42
-    remap: /ramp_state
-
-  /ramp_state:
-    type: vicpinky_carrier_interfaces/msg/RampState
-    from_domain: 40
-    to_domain: 43
-    remap: /ramp_state
-
-  /ramp_state:
-    type: vicpinky_carrier_interfaces/msg/RampState
-    from_domain: 40
-    to_domain: 44
-    remap: /ramp_state
-
-  # 로봇의 현재 상태 빅핑키로 불러오기
-  /robot_state:
-    type: turtlebot_state_msgs/msg/RobotState
-    from_domain: 41
-    to_domain: 40
-    remap: /tb3_01/robot_state
-
-  /robot_state:
-    type: turtlebot_state_msgs/msg/RobotState
-    from_domain: 42
-    to_domain: 40
-    remap: /tb3_02/robot_state
-
-  /robot_state:
-    type: turtlebot_state_msgs/msg/RobotState
-    from_domain: 43
-    to_domain: 40
-    remap: /tb3_03/robot_state
-
-  /robot_state:
-    type: turtlebot_state_msgs/msg/RobotState
-    from_domain: 44
-    to_domain: 40
-    remap: /tb3_04/robot_state
-
   # 터틀에게 cmd_vel 보내기
   /tb3_01/cmd_vel:
     type: geometry_msgs/msg/TwistStamped
@@ -87,50 +38,17 @@ topics:
     to_domain: 44
     remap: /cmd_vel
 
-  # 터틀에게 cmd_vel 보내기
-  /tb3_01/vicpinky_signal:
-    type: turtlebot_state_msgs/msg/VicpinkySignal
-    from_domain: 40
-    to_domain: 41
-    remap: /vicpinky_signal
 
-  /tb3_02/vicpinky_signal:
-    type: turtlebot_state_msgs/msg/VicpinkySignal
-    from_domain: 40
-    to_domain: 42
-    remap: /vicpinky_signal
-    
-  /tb3_03/vicpinky_signal:
-    type: turtlebot_state_msgs/msg/VicpinkySignal
-    from_domain: 40
-    to_domain: 43
-    remap: /vicpinky_signal
-    
-  /tb3_04/vicpinky_signal:
-    type: turtlebot_state_msgs/msg/VicpinkySignal
-    from_domain: 40
-    to_domain: 44
-    remap: /vicpinky_signal
+# actions:
 
-
-services:
-
-  # ── DOWNLINK 서비스: 허브(49) → vicpinky(40) ──
-  # /vicpinky/run_diagnosis:
-  #   type: std_srvs/srv/Trigger
-  #   from_domain: 49
-  #   to_domain: 40
-
-actions:
-
-  # ── DOWNLINK 액션: 허브(49) → vicpinky(40) ──
+  #── DOWNLINK 액션: 허브(49) → vicpinky(40) ──
   # /ramp_control:
   #   type: vicpinky_carrier_interfaces/action/RampControl
   #   from_domain: 49
   #   to_domain: 40
 
-  # carrier_msgs 미빌드 — 빌드 후 주석 해제할 것
-  # /vicpinky/carrier_task:
+  # # carrier_msgs 미빌드 — 빌드 후 주석 해제할 것
+  # /carrier_task:
   #   type: carrier_msgs/action/CarrierTask
-  #   from_domain: 49
-  #   to_domain: 40
+  #   from_domain: 40
+  #   to_domain: 49

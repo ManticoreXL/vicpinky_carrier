@@ -33,7 +33,7 @@ class CentralParkingController(Node):
         # ── 1. ROS 2 파라미터 선언 ──
         # self.declare_parameter('parking_id', 13)           
         # self.declare_parameter('robot_id', 14)              
-        self.declare_parameter('camera_index', 2)          
+        self.declare_parameter('camera_index', 6)          
         # self.declare_parameter('robot_namespace', '')      
 
         # 제어 게인 및 임계치 파라미터화
@@ -47,7 +47,7 @@ class CentralParkingController(Node):
         self.declare_parameter('waypoint_offset', 80.0)    
         self.declare_parameter('waypoint_threshold', 20.0) 
         self.declare_parameter('heading_threshold_deg', 1.5) 
-        self.declare_parameter('park_dist_threshold_px', 55.0)
+        self.declare_parameter('park_dist_threshold_px', 40.0)
         
         self.declare_parameter('target_lock_frames', 20)   
         self.declare_parameter('theta_filter_len', 10)     
@@ -260,6 +260,7 @@ class CentralParkingController(Node):
         try:
             while(True):
                 feedback_msg.current_state = f"터틀봇 인식 : {self.chase_marker_start}, 현재 단계 : {self.state}"
+                goal_handle.publish_feedback(feedback_msg)
                 if self.state == 4:
                     if self.action_goal == 'L' and self.load_seq == 0:
                         self.state = 1

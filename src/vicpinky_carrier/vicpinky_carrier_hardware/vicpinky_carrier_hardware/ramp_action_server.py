@@ -38,7 +38,7 @@ class RampControlServer(Node):
 
         self.motor=MirrorMotorControl('/dev/open_rb_ramp',12,13)
         self.motor.set_profile_acc(3)
-        self.motor.set_profile_vel(30)
+        self.motor.set_profile_vel(50)
 
     def timer_callback(self):
         # 타이머 콜백 함수
@@ -52,15 +52,19 @@ class RampControlServer(Node):
                 l_over = self.motor.motor_overload_check(0)
                 r_over = self.motor.motor_overload_check(1)
                 if l_over or r_over:
+                    self.motor.set_angle(self.current_angle)
                     if l_over: self.motor.reboot(0)
                     if r_over: self.motor.reboot(1)
                     time.sleep(1)
                     self.motor.set_torque()
                     time.sleep(0.5)
+                    self.motor.set_profile_acc(3)
+                    self.motor.set_profile_vel(50)
+                    self.motor.set_angle(self.goal_angle)
                 # 기존 코드
                 self.current_angle , _ = self.motor.read_angle()
                 self.current_load ,_ = self.motor.read_load()
-                if self.motor.is_moving() or abs(self.goal_angle - self.motor.read_angle()[0]) > 50:
+                if self.motor.is_moving() or abs(self.goal_angle - self.current_angle) > 50:
                     pass
                 else:
                     self.is_moving = False
@@ -72,7 +76,7 @@ class RampControlServer(Node):
     def publish_state(self):
         msg = RampState()
         msg.ramp_state = self.current_ramp_state
-        msg.ramp_angle = self.current_angle * 2 * 3.141592 / 4096
+        msg.ramp_angle = (self.current_angle - 2048) * 2 * 3.141592 / 4096
         self.state_publisher.publish(msg)
 
     def execute_callback(self, goal_handle):
@@ -92,7 +96,7 @@ class RampControlServer(Node):
             self.get_logger().info("Invalid command. Please enter [O]pen / [C]lose.")
             result.success = False
             result.final_state = self.current_ramp_state
-            result.final_angle, _ = self.motor.read_angle()
+            result.final_angle = self.current_angle
             goal_handle.abort()
             return result
         
@@ -106,12 +110,12 @@ class RampControlServer(Node):
             time.sleep(0.05) 
             feedback_msg.current_angle = self.current_angle
             feedback_msg.current_load = self.current_load
-            if self.current_load > 80:
+            if self.current_load > 100:
                 load_count = load_count + 1
                 if load_count > 7 :
                     self.get_logger().info("Motor overload. Stop motor.")
                     target_angle = self.current_angle
-                    self.goal_angle = target_angle-self.current_load
+                    self.goal_angle = target_angle-int(self.current_load/2)
                     self.motor.set_angle(self.goal_angle)
                     load_count = 0
             else:
@@ -122,7 +126,7 @@ class RampControlServer(Node):
         goal_handle.succeed()
         result.success = True
         result.final_state = self.current_ramp_state
-        result.final_angle, _ = self.motor.read_angle()
+        result.final_angle = self.current_angle
         self.get_logger().info(f"Ramp control action succeeded. Final state: {result.final_state}")
         return result
     
