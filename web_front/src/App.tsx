@@ -88,7 +88,7 @@ export default function App() {
          </div>
          <div className="hidden sm:block">
            <h1 className="text-sm font-semibold text-white leading-none tracking-tight">
-             {isExplore ? "재난 모니터링" : isTasks ? "태스크 관리" : isFms ? "플릿 명령 할당" : isFlow ? "작업 흐름도" : isAdmin ? "시스템 설정" : isSuitability ? "적합 로봇 판정" : isQueue ? "테스트 / 이벤트" : isBuilder ? "시나리오 빌더" : "로봇 제어"}
+             {isExplore ? "재난 모니터링" : isTasks ? "태스크 관리" : isFms ? "플릿 명령 할당" : isFlow ? "작업 흐름도" : isAdmin ? "시스템 설정" : isSuitability ? "테스트봇 관리" : isQueue ? "테스트 / 이벤트" : isBuilder ? "시나리오 빌더" : "로봇 제어"}
            </h1>
            <p className="text-[10px] text-white/[0.55] leading-none mt-1 tracking-widest">
              통합 관제 센터
@@ -98,15 +98,13 @@ export default function App() {
 
        {/* 모드 전환 — 중앙 */}
        <div className="flex bg-[#FFCE99]/32 backdrop-blur-xl p-1 rounded-xl border border-white/[0.1] shadow-inner overflow-x-auto">
+         {/* nav 순서: 제어·태스크·플릿·정찰·테스트(구 적합도)·관리. 흐름도/기존 테스트(queue)/빌더는 nav에서 숨김(코드는 유지). */}
          <ModeBtn mode="control" active={appMode === "control"} onClick={() => setAppMode("control")}>제어</ModeBtn>
          <ModeBtn mode="tasks"   active={appMode === "tasks"}   onClick={() => setAppMode("tasks")}>태스크</ModeBtn>
          <ModeBtn mode="fms"     active={appMode === "fms"}     onClick={() => setAppMode("fms")}>플릿</ModeBtn>
-         <ModeBtn mode="flow"    active={appMode === "flow"}    onClick={() => setAppMode("flow")}>흐름도</ModeBtn>
          <ModeBtn mode="explore" active={appMode === "explore"} onClick={() => setAppMode("explore")}>정찰</ModeBtn>
+         <ModeBtn mode="suitability" active={appMode === "suitability"} onClick={() => setAppMode("suitability")}>테스트</ModeBtn>
          <ModeBtn mode="admin"   active={appMode === "admin"}   onClick={() => setAppMode("admin")}>관리</ModeBtn>
-         <ModeBtn mode="suitability" active={appMode === "suitability"} onClick={() => setAppMode("suitability")}>적합도</ModeBtn>
-         <ModeBtn mode="queue" active={appMode === "queue"} onClick={() => setAppMode("queue")}>테스트</ModeBtn>
-         <ModeBtn mode="builder" active={appMode === "builder"} onClick={() => setAppMode("builder")}>빌더</ModeBtn>
        </div>
 
        {/* 상태 표시 — 우측 */}

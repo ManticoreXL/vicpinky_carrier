@@ -229,11 +229,13 @@ export class TaskManagerService implements OnModuleInit, OnModuleDestroy {
     await this.taskRepo.setBatchRepeat(batchId, false); // 재시작 차단(먼저)
     for (const t of tasks) {
       if (!isTerminalStatus(t.status)) {
+        await this.nodeLock.lockNode(t.targetNode, false); // 각 스텝 목적지 잠금 해제 (연속=단건 묶음 → 단건 취소와 동일 정리)
         await this.taskStatus.setStatus(String((t as any)._id), TaskStatus.COMPLETED, this.events.server, { completedAt: new Date() });
       }
     }
     if (robotId) {
       this.robotTasks.clearActive(robotId); // 큐에서 active 제거
+      this.occupancy.release(robotId);      // 점유 해제 (단건 취소와 동일)
       await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
       this.events.broadcast('robot_status_changed', { robot_id: robotId, status: RobotStatus.IDLE });
     }

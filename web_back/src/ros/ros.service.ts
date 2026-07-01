@@ -293,7 +293,9 @@ export class RosService implements OnModuleInit, OnModuleDestroy {
       id,
       action: actionName,
       action_type: actionType,
-      goal,
+      // rosbridge(ROS2)는 goal 필드를 'args' 키에서 읽는다(send_action_goal.py: message.get("args")).
+      // 'goal' 로 보내면 빈 기본 goal 이 생성돼(예: target_string='') 로봇이 잘못된 값으로 처리됨.
+      args: goal,
       feedback: true,
     });
     this.flow(true, '액션goal', actionName, `id=${id} [${actionType}] ${this.fmt(goal)}`);
