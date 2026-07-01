@@ -33,7 +33,7 @@ class CentralParkingController(Node):
         # ── 1. ROS 2 파라미터 선언 ──
         # self.declare_parameter('parking_id', 13)           
         # self.declare_parameter('robot_id', 14)              
-        self.declare_parameter('camera_index', 6)          
+        self.declare_parameter('camera_index', 11)          
         # self.declare_parameter('robot_namespace', '')      
 
         # 제어 게인 및 임계치 파라미터화

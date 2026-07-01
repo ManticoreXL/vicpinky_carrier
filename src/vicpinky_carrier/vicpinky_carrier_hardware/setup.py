@@ -1,3 +1,5 @@
+import os
+from glob import glob
 from setuptools import find_packages, setup
 
 package_name = 'vicpinky_carrier_hardware'
@@ -10,6 +12,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -26,7 +29,7 @@ setup(
         'console_scripts': [
             'ramp_action_server = vicpinky_carrier_hardware.ramp_action_server:main',
             'marker_controller = vicpinky_carrier_hardware.marker_controller:main',
-            'central_controller = vicpinky_carrier_hardware.central_parking_control_jazzy:main',
+            'vicpinky_webrtc = vicpinky_carrier_hardware.vicpinky_webrtc:main',
         ],
     },
 )
