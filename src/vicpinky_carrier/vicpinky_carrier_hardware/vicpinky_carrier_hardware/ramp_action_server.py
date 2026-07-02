@@ -7,6 +7,8 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 # from std_msgs.msg import String
 import time
 
+from sensor_msgs.msg import JointState
+from std_msgs.msg import Header
 from vicpinky_carrier_interfaces.action import RampControl
 from vicpinky_carrier_interfaces.msg import RampState
 from vicpinky_carrier_hardware.ramp_driver import MirrorMotorControl
@@ -24,6 +26,10 @@ class RampControlServer(Node):
 
         self.timer_cb_group = MutuallyExclusiveCallbackGroup()
         self.action_cb_group = MutuallyExclusiveCallbackGroup()
+
+        self.joint_publisher = self.create_publisher(
+            JointState, 'joint_states', 10
+        )
 
         self.state_publisher = self.create_publisher(
             RampState, 'ramp_state', 10
@@ -44,6 +50,7 @@ class RampControlServer(Node):
         # 타이머 콜백 함수
         # 상태 퍼블리시
         self.publish_state()
+        self.publish_joint()
 
         # 경사로 상태 업데이트
         try:
@@ -76,8 +83,18 @@ class RampControlServer(Node):
     def publish_state(self):
         msg = RampState()
         msg.ramp_state = self.current_ramp_state
-        msg.ramp_angle = (self.current_angle - 2048) * 2 * 3.141592 / 4096
+        msg.ramp_angle = self.current_angle
         self.state_publisher.publish(msg)
+
+    def publish_joint(self):
+        msg = JointState()
+        msg.header = Header()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.name = ['ramp_holder_joint_l']
+        msg.position= [(self.current_angle - 2048) * 2 * 3.141592 / 4096]
+        msg.velocity = []
+        msg.effort = []
+        self.joint_publisher.publish(msg)
 
     def execute_callback(self, goal_handle):
         # 액션 요청시 실행하는 함수
