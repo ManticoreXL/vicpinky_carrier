@@ -86,12 +86,12 @@ https://github.com/user-attachments/assets/6f7efe83-0220-42bc-89b3-1b40f406feb6
   <table>
     <tr>
       <td align="center" width="50%">
-        <img src="assets/features/vicpinky/vicpinky_ramp_open.jpg" width="100%"/><br/>
-        <sub><b>경사로 열림</b></sub>
-      </td>
-      <td align="center" width="50%">
         <img src="assets/features/vicpinky/vicpinky_ramp_closed.jpg" width="100%"/><br/>
         <sub><b>경사로 닫힘</b></sub>
+      </td>
+      <td align="center" width="50%">
+        <img src="assets/features/vicpinky/vicpinky_ramp_open.jpg" width="100%"/><br/>
+        <sub><b>경사로 열림</b></sub>
       </td>
     </tr>
   </table>
@@ -126,7 +126,7 @@ https://github.com/user-attachments/assets/6f7efe83-0220-42bc-89b3-1b40f406feb6
         <sub><b>경사로 개폐</b></sub>
       </td>
       <td align="center" width="50%">
-        <!-- 라인트레이싱 GIF 추가 예정 -->
+        <img src="assets/features/vicpinky/vicpinky_line_trace.webp" 
         <sub><b>라인트레이싱 회수</b></sub>
       </td>
     </tr>
