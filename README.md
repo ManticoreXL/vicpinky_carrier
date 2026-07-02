@@ -30,8 +30,14 @@ Coming Soon...
 ## Key Features
 ### Turtlebot
 <div align="center">
-  <img src="assets/features/turtlebot/turtlebot_overview.jpg" width="80%"/><br/>
-  <sub><b>터틀봇</b></sub>
+  <table>
+    <tr>
+      <td align="center">
+        <img src="assets/features/turtlebot/turtlebot_overview.jpg" width="100%"/><br/>
+        <sub><b>터틀봇</b></sub>
+      </td>
+    </tr>
+  </table>
 </div>
 협소 공간에 투입되어 요구조자를 탐색하거나 구호품을 전달할 수 있는 자율주행 로봇입니다. 수행 목적에 따라 탐사용과 구호용으로 구분되어 운용됩니다. 탐사용 터틀봇은 가장 먼저 현장에 투입되어 내부를 자율적으로 탐사하며, 요구조자를 식별하면 구호용 터틀봇이 관제 서버를 통해 그 위치로 이동하여 구호품을 전달합니다.
 
@@ -76,8 +82,14 @@ https://github.com/user-attachments/assets/6f7efe83-0220-42bc-89b3-1b40f406feb6
 터틀봇의 하드웨어는 재난 현장에 적합하게 카메라, 전조등, 마이크 및 스피커를 탑재한 사양으로 개조되었습니다. 전조등으로 저조도 환경에서도 시야를 확보하고, 마이크와 스피커를 통한 STT/TTS로 요구조자와 간단한 의사소통을 수행할 수 있도록 하였습니다.
 
 <div align="center">
-  <img src="assets/features/turtlebot/yolo_model.webp" width="60%"/><br/>
-  <sub><b>YOLO 요구조자 탐지</b></sub>
+  <table>
+    <tr>
+      <td align="center">
+        <img src="assets/features/turtlebot/yolo_model.webp" width="100%"/><br/>
+        <sub><b>YOLO 요구조자 탐지</b></sub>
+      </td>
+    </tr>
+  </table>
 </div>
 요구조자 인식은 카메라 영상을 입력으로 YOLO 모델을 로컬에서 구동해 추론하는 방식입니다. 요구조자가 화면에 인식되면 관제 서버로 보고하는 동시에, SLAM으로 생성한 지도 위에 AMCL로 추정한 위치를 표기하여 구호용 터틀봇이 참고하여 이동할 수 있게 합니다.
 
@@ -126,7 +138,7 @@ https://github.com/user-attachments/assets/6f7efe83-0220-42bc-89b3-1b40f406feb6
         <sub><b>경사로 개폐</b></sub>
       </td>
       <td align="center" width="50%">
-        <img src="assets/features/vicpinky/vicpinky_line_trace.webp" 
+        <img src="assets/features/vicpinky/vicpinky_line_trace.webp" width="100%"/><br/>
         <sub><b>라인트레이싱 회수</b></sub>
       </td>
     </tr>
@@ -159,8 +171,14 @@ https://github.com/user-attachments/assets/6f7efe83-0220-42bc-89b3-1b40f406feb6
 터틀봇의 바구니에 구호품 상차를 수행하는 매니퓰레이터입니다.빅핑키의 주차 관제를 통해 터틀봇을 상차 위치에 정렬하면 그 위치를 기준으로 동작합니다. 사람의 조종 없이 모방학습으로 학습한 동작을 추론해 상차를 수행합니다.
 
 <div align="center">
-  <img src="assets/features/omx/omx_inference.webp" width="60%"/><br/>
-  <sub><b>OMX 자율 상차 추론</b></sub>
+  <table>
+    <tr>
+      <td align="center">
+        <img src="assets/features/omx/omx_inference.webp" width="100%"/><br/>
+        <sub><b>OMX 자율 상차 추론</b></sub>
+      </td>
+    </tr>
+  </table>
 </div>
 추론은 비동기 분산 구조로 동작합니다. 빅핑키 내부에 추가로 설치된 라즈베리파이는 실시간 모터 제어와 카메라 처리를 담당하고, 무거운 추론 연산은 호스트 PC의 GPU로 분리해 네트워크로 통신하며 동작하도록 설계하였습니다. 전체 루프는 이벤트 기반으로 동작하여, 평소에는 대기하다가 관제로부터 추론 시작 명령을 받으면 해당 작업에 맞는 사전학습 모델을 불러와 동작합니다.
 
