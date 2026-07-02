@@ -31,7 +31,7 @@ Coming Soon...
 ### Turtlebot
 <div align="center">
   <img src="assets/features/turtlebot/turtlebot_overview.jpg" width="80%"/><br/>
-  <sub><b>탐사용 터틀봇</b></sub>
+  <sub><b>터틀봇</b></sub>
 </div>
 협소 공간에 투입되어 요구조자를 탐색하거나 구호품을 전달할 수 있는 자율주행 로봇입니다. 수행 목적에 따라 탐사용과 구호용으로 구분되어 운용됩니다. 탐사용 터틀봇은 가장 먼저 현장에 투입되어 내부를 자율적으로 탐사하며, 요구조자를 식별하면 구호용 터틀봇이 관제 서버를 통해 그 위치로 이동하여 구호품을 전달합니다.
 
@@ -54,7 +54,7 @@ https://github.com/user-attachments/assets/6f7efe83-0220-42bc-89b3-1b40f406feb6
     <tr>
       <td align="center" width="50%">
         <img src="assets/features/turtlebot/turtlebot_speaker.jpg" width="100%"/><br/>
-        <sub><b>마이크 · 스피커</b></sub>
+        <sub><b>스피커</b></sub>
       </td>
       <td align="center" width="50%">
         <img src="assets/features/turtlebot/turtlebot_ir_sensor.jpg" width="100%"/><br/>
@@ -118,17 +118,50 @@ https://github.com/user-attachments/assets/6f7efe83-0220-42bc-89b3-1b40f406feb6
 </div>
 카메라는 3대가 장착되어 전방 카메라는 주행에 사용하고, 내부 카메라는 터틀봇이 승차했을 때 차내 위치를 제어하는 주차 관제용으로 사용합니다. OMX 카메라는 매니퓰레이터의 추론을 위해 사용합니다.
 
-(빅핑키 경사로 GIF) (라인트레이싱 GIF)
+<div align="center">
+  <table>
+    <tr>
+      <td align="center" width="50%">
+        <img src="assets/features/vicpinky/vicpinky_ramp_action.webp" width="100%"/><br/>
+        <sub><b>경사로 개폐</b></sub>
+      </td>
+      <td align="center" width="50%">
+        <!-- 라인트레이싱 GIF 추가 예정 -->
+        <sub><b>라인트레이싱 회수</b></sub>
+      </td>
+    </tr>
+  </table>
+</div>
 경사로는 장착된 DYNAMIXEL 모터 2개로 개폐하며, 경사로를 내려 터틀봇을 출입시킵니다. 터틀봇을 회수할 때는 경사로에 그어진 라인을 따라 라인트레이싱으로 올라오게 할 수 있습니다. 이렇게 진입한 터틀봇이 내부 카메라에 포착되면 주차 관제가 가능한 상태가 됩니다.
 
 (내부 주차 Webm)
 주차 관제는 OpenCV와 ArUco 마커 인식을 기반으로 터틀봇을 목표 지점까지 정밀 이동시키며, OMX 매니퓰레이터가 구호품을 상차하기 좋은 위치로 이동시킬 수도 있습니다.
 
 ### OMX Manipulator
-(OMX 정면) (OMX 측면) (OMX 후면)
+<div align="center">
+  <table>
+    <tr>
+      <td align="center" width="33%">
+        <img src="assets/features/omx/omx_left.jpg" width="100%"/><br/>
+        <sub><b>좌측면</b></sub>
+      </td>
+      <td align="center" width="33%">
+        <img src="assets/features/omx/omx_back.jpg" width="100%"/><br/>
+        <sub><b>후면</b></sub>
+      </td>
+      <td align="center" width="33%">
+        <img src="assets/features/omx/omx_right.jpg" width="100%"/><br/>
+        <sub><b>우측면</b></sub>
+      </td>
+    </tr>
+  </table>
+</div>
 터틀봇의 바구니에 구호품 상차를 수행하는 매니퓰레이터입니다.빅핑키의 주차 관제를 통해 터틀봇을 상차 위치에 정렬하면 그 위치를 기준으로 동작합니다. 사람의 조종 없이 모방학습으로 학습한 동작을 추론해 상차를 수행합니다.
 
-(OMX 추론 GIF)
+<div align="center">
+  <img src="assets/features/omx/omx_inference.webp" width="60%"/><br/>
+  <sub><b>OMX 자율 상차 추론</b></sub>
+</div>
 추론은 비동기 분산 구조로 동작합니다. 빅핑키 내부에 추가로 설치된 라즈베리파이는 실시간 모터 제어와 카메라 처리를 담당하고, 무거운 추론 연산은 호스트 PC의 GPU로 분리해 네트워크로 통신하며 동작하도록 설계하였습니다. 전체 루프는 이벤트 기반으로 동작하여, 평소에는 대기하다가 관제로부터 추론 시작 명령을 받으면 해당 작업에 맞는 사전학습 모델을 불러와 동작합니다.
 
 https://github.com/user-attachments/assets/345945a2-24c1-467c-bac8-298fbea5d490
