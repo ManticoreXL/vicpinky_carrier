@@ -67,11 +67,14 @@ export class RobotTaskQueueService {
     if (!next) next = await this.restartRepeatCycle(robotId); // 반복 연속 한 사이클 끝 → 재시작
     if (!next) return;
     this.logger.log(`[큐] ${robotId} 다음 태스크 실행 → ${next.task_id ?? ''}`);
-    // 호출 시점(모든 모듈 로드 후) 지연 require — 정적 import 순환 회피
+    await this.planner().planTask(String(next._id));
+  }
+
+  // 호출 시점(모든 모듈 로드 후) 지연 require — 정적 import 순환 회피
+  private planner(): TaskPlannerService {
     const { TaskPlannerService } =
       require('../fms/task-planner.service') as typeof import('../fms/task-planner.service');
-    const planner = this.moduleRef.get(TaskPlannerService, { strict: false });
-    await planner.planTask(String(next._id));
+    return this.moduleRef.get(TaskPlannerService, { strict: false });
   }
 
   // ── 시나리오 전진 (로봇 무관 순차) ─────────────────────────────────────────
@@ -86,10 +89,7 @@ export class RobotTaskQueueService {
       .exec();
     if (!next) { this.logger.log(`[시나리오] ${done.scenarioId} 전체 완료`); return; }
     this.logger.log(`[시나리오] ${done.scenarioId} 다음 스텝 → ${next.task_id ?? ''}`);
-    const { TaskPlannerService } =
-      require('../fms/task-planner.service') as typeof import('../fms/task-planner.service');
-    const planner = this.moduleRef.get(TaskPlannerService, { strict: false });
-    await planner.planTask(String(next._id));
+    await this.planner().planTask(String(next._id));
   }
 
   // ── 반복 연속 재시작 ───────────────────────────────────────────────────────

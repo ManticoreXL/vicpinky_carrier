@@ -32,6 +32,7 @@ import { AutoChargerService } from '../src/fms/auto-charger.service';
 import { AutoTaskService } from '../src/fms/auto-task.service';
 import { CoreEventBus } from '../src/core-events/core-events.service';
 import { TaskManagerService } from '../src/fms/task-manager.service';
+import { CollisionAvoidanceService } from '../src/collision-avoidance/collision-avoidance.service';
 import { TaskCatalogModule } from '../src/task-catalog/task-catalog.module';
 
 const MONGO = 'mongodb://127.0.0.1:27017/fms_charge_verify';
@@ -73,12 +74,12 @@ describe('수동 충전 (virtual test-bot + MongoDB)', () => {
       providers: [
         RobotService, TopologyService, PathfindingService, NodeOccupancyService, TelemetryService,
         RosService, VirtualRobotService,
-        { provide: DomainBridgeService, useValue: { getCapabilities: () => null } },
+        { provide: DomainBridgeService, useValue: { getCapabilities: () => null, getMap: () => ({ robots: [] }) } },
         TaskRepositoryService, TaskStatusService, TaskManagerEventsService, RobotStateService, RobotTaskQueueService,
         GlobalTaskQueueService, ChargingService, NodeLockService,
         TaskExecutionService, TaskPlannerService,
         RobotMonitorService, AutoDispatcherService, AutoChargerService, AutoTaskService,
-        TaskManagerService, CoreEventBus,
+        TaskManagerService, CoreEventBus, CollisionAvoidanceService,
       ],
     }).compile();
 

@@ -2,7 +2,6 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { TaskRepositoryService } from './task-repository.service';
 import { TaskStatusService } from './task-status.service';
 import { TaskStatus } from './task.schema';
-import { isTerminalStatus } from '../fms-shared/task-manager.helpers';
 import { RobotService } from '../robot/robot.service';
 import { RobotStatus } from '../robot/robot.schema';
 import { TelemetryService } from '../telemetry/telemetry.service';
@@ -133,7 +132,7 @@ export class RobotMonitorService implements OnModuleInit {
   }
 
   /**
-   * 로봇 보유 태스크 정리 (ERROR 전환 / 자동충전 선점 등 공용).
+   * 로봇 보유 태스크 정리 (ERROR 전환 시 — handleErrorTransition 전용).
    *  - 진행 중(RUNNING) 태스크 → FAILED + 같은 내용으로 새 PENDING 재등록(미배정)
    *  - 예정(PENDING/ASSIGNED)  → robot_id만 초기화해 글로벌 큐로 반납
    *  + 진행 주행 즉시 정지(cmd_vel=0) + 노드 잠금/점유 해제.
@@ -158,12 +157,9 @@ export class RobotMonitorService implements OnModuleInit {
       if (field && groupId) {
         if (doneGroups.has(groupId)) continue;
         doneGroups.add(groupId);
-        for (const gt of await this.taskRepo.findByGroupId(field, groupId)) {
-          if (isTerminalStatus(gt.status)) continue; // 이미 완료/실패 스텝은 유지
-          await this.nodeLock.lockNode(gt.targetNode, false);
-          await this.taskStatus.setStatus(String(gt._id), TaskStatus.FAILED, server, { completedAt: new Date(), errorMessage: `${reason} (${field === 'batchId' ? '연속' : '시나리오'} 전체 실패)` });
-          grouped++;
-        }
+        const failed = await this.taskStatus.failGroupRemainder(field, groupId, `${reason} (${field === 'batchId' ? '연속' : '시나리오'} 전체 실패)`, server);
+        for (const gt of failed) await this.nodeLock.lockNode(gt.targetNode, false);
+        grouped += failed.length;
         continue;
       }
 

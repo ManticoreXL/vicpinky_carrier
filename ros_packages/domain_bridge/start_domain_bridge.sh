@@ -36,12 +36,13 @@ echo "  tb3_03(43), tb3_04(44), omx(45) ↔ 서버(49)"
 echo "  (각 파일에 uplink + downlink 통합)"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# ── 액션 릴레이 ──
-# domain_bridge 는 액션(actions:)을 중계하지 못한다(0.5.0 미지원). /ramp_control 등 액션은
-# action_relay.py 가 허브(49)↔로봇(40)로 대신 중계한다. 위에서 source·FASTRTPS 를 그대로 상속한다.
+# ── 액션·서비스 릴레이 ──
+# domain_bridge 는 액션(actions:)/서비스(services:)를 중계하지 못한다(0.5.0 미지원). 각 yaml 의
+# actions:/services: 블록(ramp_control·navigate_to_pose·line_trace·deploy·run_diagnosis)은
+# action_relay.py 가 허브(49)↔로봇(40~44)로 대신 중계한다. 위에서 source·FASTRTPS 를 그대로 상속한다.
 python3 "$SCRIPT_DIR/action_relay.py" &
 RELAY_PID=$!
-echo "  액션 릴레이 시작 (PID $RELAY_PID) — /ramp_control 49↔40"
+echo "  액션·서비스 릴레이 시작 (PID $RELAY_PID) — navigate_to_pose·ramp_control·line_trace 등"
 # domain_bridge 종료(Ctrl+C) 시 릴레이도 함께 정리
 trap 'kill "$RELAY_PID" 2>/dev/null' EXIT INT TERM
 

@@ -1,8 +1,10 @@
 // TaskManagerService 타입
 
+import type { AlertType } from '../fms-events/alert';
+
 export interface TaskManagerAlert {
   id: string;
-  type: 'fall' | 'robot_offline' | 'task_failed' | 'no_path' | 'assigned' | 'completed' | 'info' | 'low_battery' | 'charged';
+  type: AlertType;
   taskId?: string;
   robotId?: string;
   message: string;

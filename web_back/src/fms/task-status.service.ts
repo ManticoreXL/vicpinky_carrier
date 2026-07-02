@@ -34,6 +34,27 @@ export class TaskStatusService {
     await this.taskModel.updateOne({ _id: taskId }, { status });
   }
 
+  // ── 그룹(연속/시나리오) 잔여 스텝 일괄 FAILED ─────────────────────────────
+  // 한 스텝이 실패/이탈하면 중간이 빠져 순서를 이어갈 수 없으므로 미완료 형제 전체를 종료한다.
+  // (task-execution.failTask · robot-monitor.releaseRobotTasks 공용)
+  /** 미완료(터미널 아님) 스텝을 모두 FAILED 처리하고 그 문서들을 반환한다 — 노드 잠금 해제 등 후처리는 호출측. */
+  async failGroupRemainder(
+    field: 'batchId' | 'scenarioId',
+    groupId: string,
+    reason: string,
+    server: Server | null,
+    exceptTaskId?: string,
+  ): Promise<TaskHistoryDocument[]> {
+    const tasks = await this.taskModel.find({ [field]: groupId }).sort({ seq: 1, createdAt: 1 }).exec();
+    const failed: TaskHistoryDocument[] = [];
+    for (const t of tasks) {
+      if (String(t._id) === exceptTaskId || isTerminalStatus(t.status)) continue;
+      await this.setStatus(String(t._id), TaskStatus.FAILED, server, { completedAt: new Date(), errorMessage: reason });
+      failed.push(t);
+    }
+    return failed;
+  }
+
   // ── 대기 이유 갱신 ────────────────────────────────────────────────────────
   async setWaitReason(taskId: string, reason: string): Promise<void> {
     await this.taskModel.updateOne({ _id: taskId }, { waitReason: reason });

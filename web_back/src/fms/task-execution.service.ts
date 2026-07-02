@@ -523,8 +523,9 @@ export class TaskExecutionService implements OnModuleInit {
     }
   }
 
-  // nav 실패(ABORTED 등) → 태스크 FAILED + 글로벌 큐 반납(새 PENDING 미배정) + 로봇 IDLE + 알림.
-  // 자동 재할당은 auto-dispatch ON일 때만(기본 OFF → 반납분은 큐에서 수동 dispatch 대기).
+  // nav 실패(ABORTED 등) → 태스크 FAILED + 로봇 IDLE + 알림.
+  //  - 단건: 글로벌 큐 반납(같은 내용 새 PENDING 미배정). 자동 재할당은 auto-dispatch ON일 때만(기본 OFF → 수동 dispatch 대기).
+  //  - 연속(batchId)/시나리오(scenarioId) 스텝: 그룹 전체(미완료) FAILED — 반납 없음(robot-monitor.releaseRobotTasks와 동일 정책).
   private async failTask(robotId: string, taskId: string, reason: string): Promise<void> {
     this.cancelNav(robotId);
     this.robotTasks.clearActive(robotId);
@@ -532,13 +533,25 @@ export class TaskExecutionService implements OnModuleInit {
     const task = await this.taskRepo.getTask(taskId);
     if (task?.targetNode) await this.nodeLock.lockNode(task.targetNode, false);
     await this.taskStatus.setStatus(taskId, TaskStatus.FAILED, this.events.server, { completedAt: new Date(), errorMessage: reason, rosCursor: task?.rosCursor ?? 0 }); // errorMessage는 DB 저장용, rosCursor로 실패 단계 표시
-    // 실패 작업을 글로벌 큐에 반납 — 원본은 위에서 FAILED로 이력 보존하고, 같은 내용의 새 PENDING(미배정)으로 재등록한다.
-    // (robot-monitor.releaseRobotTasks 의 RUNNING 반납과 공유: taskRepo.requeueFailedCopy)
-    if (task) await this.taskRepo.requeueFailedCopy(task);
+
+    const field: 'batchId' | 'scenarioId' | null = task?.batchId ? 'batchId' : task?.scenarioId ? 'scenarioId' : null;
+    if (task && field) {
+      // 그룹 스텝 실패 — 미완료 형제 전체 FAILED(완료 스텝 유지), 반납 없음.
+      const kind = field === 'batchId' ? '연속' : '시나리오';
+      const failed = await this.taskStatus.failGroupRemainder(field, (task.batchId ?? task.scenarioId)!, `${reason} (${kind} 전체 실패)`, this.events.server, taskId);
+      for (const gt of failed) await this.nodeLock.lockNode(gt.targetNode, false);
+      this.events.emit(Alert.taskFailed(taskId, robotId, `${robotId} 주행 실패 (${reason}) — ${kind} 잔여 ${failed.length}건 포함 전체 실패 처리했습니다`));
+      this.logger.warn(`[nav실패] ${robotId} task ${taskId} → FAILED (${reason}) → ${kind} 잔여 ${failed.length}건 전체 실패`);
+    } else {
+      // 단건 실패 작업은 글로벌 큐에 반납 — 원본은 위에서 FAILED로 이력 보존하고, 같은 내용의 새 PENDING(미배정)으로 재등록한다.
+      // (robot-monitor.releaseRobotTasks 의 RUNNING 반납과 공유: taskRepo.requeueFailedCopy)
+      if (task) await this.taskRepo.requeueFailedCopy(task);
+      this.events.emit(Alert.taskFailed(taskId, robotId, `${robotId} 주행 실패 (${reason}) — 작업을 글로벌 큐에 반납했습니다`));
+      this.logger.warn(`[nav실패] ${robotId} task ${taskId} → FAILED (${reason}) → 글로벌 큐 반납`);
+    }
+
     await this.robotService.updateStatus(robotId, RobotStatus.IDLE);
     this.events.broadcast('robot_status_changed', { robot_id: robotId, status: RobotStatus.IDLE });
-    this.events.emit(Alert.taskFailed(taskId, robotId, `${robotId} 주행 실패 (${reason}) — 작업을 글로벌 큐에 반납했습니다`));
-    this.logger.warn(`[nav실패] ${robotId} task ${taskId} → FAILED (${reason}) → 글로벌 큐 반납`);
   }
 
   private withFreshStamp(message: Record<string, unknown>): Record<string, unknown> {

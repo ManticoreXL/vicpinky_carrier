@@ -32,12 +32,13 @@ import { AutoChargerService } from '../src/fms/auto-charger.service';
 import { AutoTaskService } from '../src/fms/auto-task.service';
 import { CoreEventBus } from '../src/core-events/core-events.service';
 import { TaskManagerService } from '../src/fms/task-manager.service';
+import { CollisionAvoidanceService } from '../src/collision-avoidance/collision-avoidance.service';
 import { TaskCatalogModule } from '../src/task-catalog/task-catalog.module';
 import { VictimService } from '../src/victim/victim.service';
 
 const MONGO = 'mongodb://127.0.0.1:27017/fms_victim_verify';
 const BOT   = 'TEST-BOT1'; // 백엔드 내장 가상 테스트봇(구호 이동 수행)
-const SCOUT = 'tb3_03';    // 정찰봇 — /victim/confirmed 좌표의 맵 기준(VictimService 기본값)
+const SCOUT = 'tb3_01';    // 정찰봇 — /victim/confirmed 좌표의 맵 기준(VictimService 기본값)
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 async function waitFor(pred: () => Promise<boolean> | boolean, timeoutMs: number, label: string) {
@@ -76,12 +77,12 @@ describe('Victim 임시노드 (STATION 연결 + 이동 + cascade) — virtual te
       providers: [
         RobotService, TopologyService, PathfindingService, NodeOccupancyService, TelemetryService,
         RosService, VirtualRobotService,
-        { provide: DomainBridgeService, useValue: { getCapabilities: () => null } },
+        { provide: DomainBridgeService, useValue: { getCapabilities: () => null, getMap: () => ({ robots: [] }) } },
         TaskRepositoryService, TaskStatusService, TaskManagerEventsService, RobotStateService, RobotTaskQueueService,
         GlobalTaskQueueService, ChargingService, NodeLockService,
         TaskExecutionService, TaskPlannerService,
         RobotMonitorService, AutoDispatcherService, AutoChargerService, AutoTaskService,
-        TaskManagerService, CoreEventBus,
+        TaskManagerService, CoreEventBus, CollisionAvoidanceService,
         VictimService, // ← 테스트 대상
       ],
     }).compile();

@@ -177,20 +177,16 @@ export class AutoTaskService implements OnModuleInit {
     if (value === null || value === undefined) return !!actual;
     return actual === value || String(actual) === String(value);
   }
-  private passCooldownKey(key: string): boolean {
+  // ── 쿨다운 — 같은 키가 cooldownMs 안에 또 맞으면 막는다(중복 태스크 폭주 방지) ──
+  private passCooldownKey(key: string, cooldownMs = DEFAULT_COOLDOWN_MS): boolean {
     const now = Date.now();
-    if (now - (this.lastFired.get(key) ?? 0) < DEFAULT_COOLDOWN_MS) return false;
+    if (now - (this.lastFired.get(key) ?? 0) < cooldownMs) return false;
     this.lastFired.set(key, now);
     return true;
   }
 
-  // ── 쿨다운 — 같은 규칙+dedupKey가 cooldownMs 안에 또 맞으면 막는다(중복 태스크 폭주 방지) ──
   private passCooldown(rule: AutoTaskRule, dedupKey?: string): boolean {
-    const key = `${rule.id}:${dedupKey ?? ''}`;
-    const now = Date.now();
-    if (now - (this.lastFired.get(key) ?? 0) < (rule.cooldownMs ?? DEFAULT_COOLDOWN_MS)) return false;
-    this.lastFired.set(key, now);
-    return true;
+    return this.passCooldownKey(`${rule.id}:${dedupKey ?? ''}`, rule.cooldownMs ?? DEFAULT_COOLDOWN_MS);
   }
 
   // ── 태스크 실제 생성 — draft면 DRAFT(등록만), 아니면 PENDING(큐 투입 → AUTO DISPATCHER가 배정) ──

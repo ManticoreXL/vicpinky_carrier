@@ -35,12 +35,10 @@ import { TaskManagerService } from '../src/fms/task-manager.service';
 import { CollisionAvoidanceService } from '../src/collision-avoidance/collision-avoidance.service';
 import { TaskCatalogModule } from '../src/task-catalog/task-catalog.module';
 
-const MONGO = 'mongodb://127.0.0.1:27017/fms_stopbatch_verify';
+const MONGO = 'mongodb://127.0.0.1:27017/fms_failgroup_verify';
 const TB = 'TEST-BOT1';
-const BATCH = 'BATCH-STOP-1';
-const BN = 'BN'; // 배치 목적지 노드
 
-describe('연속(batch) 정지 시 목적지 노드 잠금 해제 + 점유 해제 — virtual + MongoDB', () => {
+describe('주행 실패(failTask) 그룹 정책 — 연속/시나리오는 한 스텝 실패 시 그룹 전체 FAILED(반납 없음), 단건은 글로벌 큐 반납', () => {
   let app: any;
   let taskManager: TaskManagerService;
   let topo: TopologyService;
@@ -48,6 +46,7 @@ describe('연속(batch) 정지 시 목적지 노드 잠금 해제 + 점유 해�
   let robotTasks: RobotTaskQueueService;
   let occupancy: NodeOccupancyService;
   let nodeLock: NodeLockService;
+  let exec: TaskExecutionService;
   let taskModel: any;
 
   jest.setTimeout(120_000);
@@ -88,11 +87,14 @@ describe('연속(batch) 정지 시 목적지 노드 잠금 해제 + 점유 해�
     robotTasks  = app.get(RobotTaskQueueService);
     occupancy   = app.get(NodeOccupancyService);
     nodeLock    = app.get(NodeLockService);
+    exec        = app.get(TaskExecutionService);
     taskModel   = app.get(getModelToken(TaskHistory.name));
 
     taskManager.setServer({ emit() {} } as any);
 
-    await topo.createNode({ node_id: BN, map_id: 'm', type: NodeType.WAYPOINT, x: 4, y: 0, yaw: 0, isLocked: false });
+    for (const id of ['BN1', 'BN2', 'BN3', 'SN1', 'SN2', 'SN3', 'ONE']) {
+      await topo.createNode({ node_id: id, map_id: 'm', type: NodeType.WAYPOINT, x: 1, y: 0, yaw: 0, isLocked: false });
+    }
     await robots.autoRegister(TB);
   });
 
@@ -101,34 +103,68 @@ describe('연속(batch) 정지 시 목적지 노드 잠금 해제 + 점유 해�
     try { await app?.close(); } catch { /* 타이머/Mongo close 경쟁 — 무해 */ }
   });
 
-  it('정지하면 RUNNING 스텝의 목적지 노드가 잠금 해제되고 점유도 풀린다', async () => {
-    // 연속(batch) 2건: 첫 스텝 RUNNING(active) + 둘째 PENDING — 같은 목적지 BN
-    await taskModel.create({ task_id: 'SB1', type: 'MOVE', status: TaskStatus.RUNNING, targetNode: BN, assignedRobotId: TB, preferredRobotId: TB, batchId: BATCH, seq: 0 });
-    await taskModel.create({ task_id: 'SB2', type: 'MOVE', status: TaskStatus.PENDING, targetNode: BN, assignedRobotId: TB, preferredRobotId: TB, batchId: BATCH, seq: 1 });
-    const t1 = await taskModel.findOne({ task_id: 'SB1' });
+  it('연속(batchId): 한 스텝 주행 실패 → 미완료 스텝 전부 FAILED, 새 PENDING 재등록 없음, 잠금·점유 해제 + 로봇 IDLE', async () => {
+    const BATCH = 'BATCH-FAIL-1';
+    const t1 = await taskModel.create({ task_id: 'BF1', type: 'MOVE', status: TaskStatus.RUNNING, targetNode: 'BN1', assignedRobotId: TB, preferredRobotId: TB, batchId: BATCH, seq: 0 });
+    await taskModel.create({ task_id: 'BF2', type: 'MOVE', status: TaskStatus.PENDING, targetNode: 'BN2', preferredRobotId: TB, batchId: BATCH, seq: 1 });
+    await taskModel.create({ task_id: 'BF3', type: 'MOVE', status: TaskStatus.PENDING, targetNode: 'BN3', preferredRobotId: TB, batchId: BATCH, seq: 2 });
     robotTasks.setActive(TB, String(t1._id));
 
-    // 실제 주행 중 상태 재현: 목적지 잠금 + 점유(도착 노드) 설정
-    await nodeLock.lockNode(BN, true);
-    occupancy.occupy(TB, BN);
+    // 실제 주행 중 상태 재현: 진행/예정 목적지 잠금 + 현재 노드 점유
+    await nodeLock.lockNode('BN1', true);
+    await nodeLock.lockNode('BN2', true);
+    occupancy.occupy(TB, 'BN1');
 
-    // 전제: 잠김 + 점유 상태
-    expect((await topo.findNodeById(BN))?.isLocked).toBe(true);
-    expect(occupancy.getOccupant(BN)).toBe(TB);
-    expect(occupancy.getOccupiedNode(TB)).toBe(BN);
+    await (exec as any).failTask(TB, String(t1._id), 'navigate_to_pose ABORTED @ BN1');
 
-    // 연속 정지
-    const res = await taskManager.stopBatch(BATCH);
-    expect(res.ok).toBe(true);
+    // 그룹 전체 FAILED — 반납(새 PENDING) 없음
+    for (const id of ['BF1', 'BF2', 'BF3']) {
+      expect((await taskModel.findOne({ task_id: id }))?.status).toBe(TaskStatus.FAILED);
+    }
+    expect(await taskModel.countDocuments({ batchId: BATCH })).toBe(3);
+    expect(await taskModel.countDocuments({ status: TaskStatus.PENDING })).toBe(0);
+    expect((await taskModel.findOne({ task_id: 'BF2' }))?.errorMessage).toContain('연속 전체 실패');
 
-    // 검증: 목적지 노드 잠금 해제
-    expect((await topo.findNodeById(BN))?.isLocked).toBe(false);
-    // 검증: 점유 해제 (노드·로봇 양방향)
-    expect(occupancy.getOccupant(BN)).toBeUndefined();
+    // 로봇 상태 정리: active 해제 + IDLE + 잠금·점유 해제
+    expect(robotTasks.getActive(TB)).toBeUndefined();
+    expect((await robots.findById(TB))?.status).toBe('IDLE');
+    expect((await topo.findNodeById('BN1'))?.isLocked).toBe(false);
+    expect((await topo.findNodeById('BN2'))?.isLocked).toBe(false);
     expect(occupancy.getOccupiedNode(TB)).toBeUndefined();
-    // 검증: 두 스텝 모두 COMPLETED, active 비고 로봇 IDLE
-    expect((await taskModel.findOne({ task_id: 'SB1' }))?.status).toBe(TaskStatus.COMPLETED);
-    expect((await taskModel.findOne({ task_id: 'SB2' }))?.status).toBe(TaskStatus.COMPLETED);
+  });
+
+  it('시나리오(scenarioId): 한 스텝 주행 실패 → 완료 스텝은 유지, 미완료 스텝 전부 FAILED, 반납 없음', async () => {
+    const SCN = 'SCN-FAIL-1';
+    await taskModel.create({ task_id: 'SF1', type: 'MOVE', status: TaskStatus.COMPLETED, targetNode: 'SN1', assignedRobotId: TB, scenarioId: SCN, seq: 0 });
+    const t2 = await taskModel.create({ task_id: 'SF2', type: 'MOVE', status: TaskStatus.RUNNING, targetNode: 'SN2', assignedRobotId: TB, scenarioId: SCN, seq: 1 });
+    await taskModel.create({ task_id: 'SF3', type: 'MOVE', status: TaskStatus.PENDING, targetNode: 'SN3', scenarioId: SCN, seq: 2 });
+    robotTasks.setActive(TB, String(t2._id));
+
+    await (exec as any).failTask(TB, String(t2._id), 'navigate_to_pose ABORTED @ SN2');
+
+    expect((await taskModel.findOne({ task_id: 'SF1' }))?.status).toBe(TaskStatus.COMPLETED); // 이미 완료된 스텝은 유지
+    expect((await taskModel.findOne({ task_id: 'SF2' }))?.status).toBe(TaskStatus.FAILED);
+    expect((await taskModel.findOne({ task_id: 'SF3' }))?.status).toBe(TaskStatus.FAILED);
+    expect((await taskModel.findOne({ task_id: 'SF3' }))?.errorMessage).toContain('시나리오 전체 실패');
+    expect(await taskModel.countDocuments({ scenarioId: SCN })).toBe(3); // 새 PENDING 재등록 없음
+    expect(await taskModel.countDocuments({ status: TaskStatus.PENDING })).toBe(0);
+    expect(robotTasks.getActive(TB)).toBeUndefined();
+    expect((await robots.findById(TB))?.status).toBe('IDLE');
+  });
+
+  it('단건: 주행 실패 → 원본 FAILED + 같은 내용의 새 PENDING(미배정) 1건 반납', async () => {
+    const t = await taskModel.create({ task_id: 'ONE1', type: 'MOVE', status: TaskStatus.RUNNING, targetNode: 'ONE', assignedRobotId: TB, preferredRobotId: TB });
+    robotTasks.setActive(TB, String(t._id));
+
+    await (exec as any).failTask(TB, String(t._id), 'navigate_to_pose ABORTED @ ONE');
+
+    expect((await taskModel.findOne({ task_id: 'ONE1' }))?.status).toBe(TaskStatus.FAILED);
+    const requeued = await taskModel.find({ status: TaskStatus.PENDING });
+    expect(requeued).toHaveLength(1); // 단건만 글로벌 큐 반납
+    expect(requeued[0].targetNode).toBe('ONE');
+    expect(requeued[0].assignedRobotId ?? null).toBeNull(); // 미배정 — 수동 dispatch 대기
+    expect(requeued[0].batchId ?? null).toBeNull();
+    expect(requeued[0].scenarioId ?? null).toBeNull();
     expect(robotTasks.getActive(TB)).toBeUndefined();
     expect((await robots.findById(TB))?.status).toBe('IDLE');
   });

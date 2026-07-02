@@ -104,11 +104,6 @@ export class TaskRepositoryService {
     await this.taskModel.updateOne({ _id: taskId }, { $set: { targetNode: node } });
   }
 
-  // ── 연속(batchId)/시나리오(scenarioId) 전체 태스크 — 그룹 단위 처리(예: 그룹 통째 FAILED)용 ──
-  async findByGroupId(field: 'batchId' | 'scenarioId', id: string): Promise<TaskHistoryDocument[]> {
-    return this.taskModel.find({ [field]: id }).exec();
-  }
-
   // ── 자동 디스패처 대상 — 단건(연속/시나리오 아님) DRAFT/PENDING, 우선순위순 ──
   // 지정 로봇 있으면 그 로봇으로 자동 실행, 없으면 최우선 가용 로봇 자동 배정(호출부에서 분기).
   async findAutoDispatchable(): Promise<Array<{ _id: unknown; type: TaskType; targetNode: string; status: TaskStatus; preferredRobotId: string | null }>> {

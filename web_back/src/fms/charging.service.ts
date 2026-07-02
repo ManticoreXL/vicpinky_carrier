@@ -17,8 +17,8 @@ export interface ChargerOccupant {
  * 충전소 점유 현황 조회 (모니터링 전용).
  *
  * 수동 충전 모델: 사용자가 로봇을 충전소 노드로 직접 보낸다(일반 CHARGE 태스크 → 도착 시 CHARGING).
- * 자동 최근접 선택·원자 예약·만석 자동대기·곧빌충전소 큐등록은 모두 제거됨. 어느 충전소에 어떤
- * 로봇이 있는지는 NodeOccupancyService(도달 노드 점유)를 진실의 원천으로 삼아 조회만 제공한다.
+ * 최근접 선택·만석 대기 등 자동 충전 오케스트레이션은 이 서비스가 아니라 AutoChargerService 담당.
+ * 여기는 어느 충전소에 어떤 로봇이 있는지를 DB(robot.lastNode/isLocked) 기준으로 조회만 제공한다.
  */
 @Injectable()
 export class ChargingService {

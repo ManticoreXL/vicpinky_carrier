@@ -95,6 +95,12 @@ export class TaskPlannerService implements OnModuleInit {
       await this.taskStatus.setWaitReason(taskId, `로봇 ${robotId} 오류(ERROR) 상태 — 복구 후 재지정 필요`);
       return { ok: false, message: `로봇 ${robotId} 오류 상태 — 할당 불가` };
     }
+    // 충전(CHARGE) 출발 — 보유(배정) 태스크를 글로벌 큐로 반납(미배정 PENDING)해 다른 로봇이 이어받을 수 있게 한다.
+    // 연속/시나리오에 포함된 충전 스텝은 예외 — 묶음의 나머지 스텝을 흩뜨리면 안 되므로 반납하지 않는다.
+    if (task.type === TaskType.CHARGE && !task.batchId && !task.scenarioId) {
+      await this.returnRobotTasks(robotId, taskId, null, '충전');
+    }
+
     // 커스텀 혼합 스텝(rosPlan)이 박혀 있으면 타입과 무관하게 경로계산 없이 그대로 실행한다.
     //  - PAUSE/RECALL은 예외(선점 동작 우선).
     //  - SUPPLY도 rosPlan이 있으면 커스텀 스텝 우선, 없으면 기존 보급(start_inference) 분기로 폴백.
@@ -200,9 +206,9 @@ export class TaskPlannerService implements OnModuleInit {
     return this.handleNav(robot, task, taskId);
   }
 
-  // 보유 태스크 반납 — 진행 중 주행 즉시 정지 + 노드 잠금 해제 + PENDING(미배정) 재투입
+  // 보유 태스크 반납 — 진행 중 주행 즉시 정지 + 노드 잠금 해제 + PENDING(미배정) 재투입 (복귀·충전 출발 공용)
   // exceptScenarioId: 같은 시나리오의 형제 스텝은 반납에서 제외(시나리오 순서 보존)
-  private async returnRobotTasks(robotId: string, exceptTaskId: string, exceptScenarioId?: string | null): Promise<void> {
+  private async returnRobotTasks(robotId: string, exceptTaskId: string, exceptScenarioId?: string | null, label = '복귀'): Promise<void> {
     const tasks = (await this.taskRepo.findReturnableByRobot(robotId))
       .filter((t) => String(t._id) !== exceptTaskId)
       .filter((t) => !exceptScenarioId || t.scenarioId !== exceptScenarioId);
@@ -214,8 +220,8 @@ export class TaskPlannerService implements OnModuleInit {
     }
     this.robotTasks.clearActive(robotId);
     if (tasks.length) {
-      this.events.emit(Alert.info(`${robotId} 복귀 — 보유 태스크 ${tasks.length}건 글로벌 큐 반납`, { robotId }));
-      this.logger.log(`[복귀] ${robotId} 보유 태스크 ${tasks.length}건 반납`);
+      this.events.emit(Alert.info(`${robotId} ${label} — 보유 태스크 ${tasks.length}건 글로벌 큐 반납`, { robotId }));
+      this.logger.log(`[${label}] ${robotId} 보유 태스크 ${tasks.length}건 반납`);
     }
   }
 

@@ -85,13 +85,16 @@ export class AutoChargerService {
     // 2) 빈 충전소 — DB 기반(잠김 isLocked + 로봇 위치 lastNode). 둘 다 아니면 빔.
     let free = await this.charging.getFreeChargers(mapId);
 
-    // 3) 충전 필요 로봇 — 하던 작업이 있으면 끝낼 때까지 기다린다(선점 안 함). 즉 작업 중(hasActive)·충전/복귀/오류/정지 중은 제외.
-    //    배터리 낮은 순. (작업 끝나 IDLE이 되면 다음 틱에 자동으로 충전 이동)
+    // 3) 충전 필요 로봇 — 하던 작업이 있으면 끝낼 때까지 기다린다(선점 안 함). 충전/복귀/오류/정지 중도 제외.
+    //    큐 깊이(배정 PENDING + 진행 중 1건)가 0인 "완전히 노는" 로봇만 — 작업 완료 처리(active 해제)와
+    //    다음 착수(dispatchNext) 사이 틈에 충전이 끼어들어 남은 큐를 반납해버리는 레이스를 막는다(큐가 항상 우선).
+    //    배터리 낮은 순. (큐가 다 비어 IDLE이 되면 다음 틱에 자동으로 충전 이동)
     const blocked = [RobotStatus.TO_CHARGE, RobotStatus.CHARGING, RobotStatus.RETURNING, RobotStatus.ERROR, RobotStatus.PAUSED, RobotStatus.OFFLINE];
+    const depths = await this.robotTasks.queueDepths();
     const needy = mapRobots
       .filter((r) =>
         this.monitor.needsCharge(r.robot_id) && r.online && this.isDrivable(r.robot_id) &&
-        !blocked.includes(r.status) && !this.robotTasks.hasActive(r.robot_id))
+        !blocked.includes(r.status) && (depths.get(r.robot_id) ?? 0) === 0)
       .sort((a, b) => (this.robotState.getCache(a.robot_id)?.batteryPct ?? 100) - (this.robotState.getCache(b.robot_id)?.batteryPct ?? 100));
 
     for (const robot of needy) {
