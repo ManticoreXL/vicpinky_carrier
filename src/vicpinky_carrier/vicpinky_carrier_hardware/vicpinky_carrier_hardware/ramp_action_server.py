@@ -83,7 +83,7 @@ class RampControlServer(Node):
     def publish_state(self):
         msg = RampState()
         msg.ramp_state = self.current_ramp_state
-        msg.ramp_angle = self.current_angle
+        msg.ramp_angle = float(self.current_angle)
         self.state_publisher.publish(msg)
 
     def publish_joint(self):

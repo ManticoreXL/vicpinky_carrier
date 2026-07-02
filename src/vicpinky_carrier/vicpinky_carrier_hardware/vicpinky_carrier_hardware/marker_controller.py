@@ -479,7 +479,7 @@ class CentralParkingController(Node):
                     target_ang = 0.0
 
             if not self.chase_marker_start:
-                print("[TRACK] 5-YIELD. 제어권 미회수 상태 (라인트레이서 제어 위임 중)", flush=True)
+                # print("[TRACK] 5-YIELD. 제어권 미회수 상태 (라인트레이서 제어 위임 중)", flush=True)
                 self._show_frame(frame)
                 return
 
@@ -523,7 +523,7 @@ class CentralParkingController(Node):
 
         # print("[TRACK] 5. _show_frame 호출 직전", flush=True)
         self._show_frame(frame)
-        print(f"[TRACK] 6. 루프 정상 완료 {self.current_goal, self.goal_index}", flush=True)
+        # print(f"[TRACK] 6. 루프 정상 완료 {self.current_goal, self.goal_index}", flush=True)
 
     def emergency_stop(self):
         self.get_logger().info("🛑 [안전 시스템] 원격 강제 정지 및 비디오 인터페이스 해제")

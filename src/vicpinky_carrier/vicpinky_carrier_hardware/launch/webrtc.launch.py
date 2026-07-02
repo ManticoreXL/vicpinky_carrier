@@ -1,7 +1,10 @@
 import os
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, TimerAction
+from launch.actions import (
+    DeclareLaunchArgument, ExecuteProcess, RegisterEventHandler,
+)
+from launch.event_handlers import OnProcessExit
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -69,6 +72,21 @@ def generate_launch_description():
         respawn_delay=3.0,
     )
 
+    # video10 / video11 이 실제로 1프레임을 낼 때까지 대기하는 프로브
+    wait_for_loopback = ExecuteProcess(
+        cmd=[
+            'bash', '-c',
+            'for d in /dev/video10 /dev/video11; do '
+            '  until timeout 2 ffmpeg -nostdin -loglevel error '
+            '        -f v4l2 -i "$d" -frames:v 1 -f null - >/dev/null 2>&1; do '
+            '    echo "waiting for $d ..."; sleep 0.5; '
+            '  done; echo "$d ready"; '
+            'done'
+        ],
+        name='wait_for_loopback',
+        output='screen',
+    )
+
     # ── 스트림 1: 전방 주행 카메라 (/dev/video0) ────────────────
     webrtc_front = Node(
         package='vicpinky_carrier_hardware',
@@ -96,9 +114,11 @@ def generate_launch_description():
     )
 
     # ── webrtc 노드는 ffmpeg가 loopback을 채운 뒤 시작 ─────────
-    delayed_webrtc = TimerAction(
-        period=LaunchConfiguration('startup_delay'),
-        actions=[webrtc_front, webrtc_internal],
+    start_webrtc = RegisterEventHandler(
+        OnProcessExit(
+            target_action=wait_for_loopback,
+            on_exit=[webrtc_front, webrtc_internal],
+        )
     )
 
     return LaunchDescription([
@@ -112,5 +132,6 @@ def generate_launch_description():
         loopback_b_arg,
         startup_delay_arg,
         camera_split,
-        delayed_webrtc,
+        wait_for_loopback,
+        start_webrtc,
     ])
