@@ -140,7 +140,7 @@ class ReverseLineFollowerNode(Node):
             self.current_turn_angular = 0.0
             status = "⬇️ 후진 직진 (정중앙 주행 / 검은 바닥 안착)"
 
-        elif state == (1, 0):
+        elif state == (0, 1):
             target_sign = self.LEFT_TURN_SIGN
             if self.current_turn_angular * target_sign <= 0:
                 self.current_turn_angular = self.base_turn_angular * target_sign
@@ -153,7 +153,7 @@ class ReverseLineFollowerNode(Node):
             twist_msg.twist.angular.z = self.current_turn_angular
             status = f"🔄 좌회전 보정 (후면 우측 이동, angular={self.current_turn_angular:.2f})"
 
-        elif state == (0, 1):
+        elif state == (1, 0):
             target_sign = self.RIGHT_TURN_SIGN
             if self.current_turn_angular * target_sign <= 0:
                 self.current_turn_angular = self.base_turn_angular * target_sign
