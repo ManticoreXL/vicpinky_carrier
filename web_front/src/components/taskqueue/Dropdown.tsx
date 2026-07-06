@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { type RankedRobot } from "../../utils/robotRanking";
 import { INP, robotIcon, type Opt } from "./shared";
+import { isTestBot } from "../../robots";
 
 // 추천 랭킹 1건 → 리치 옵션 행(순위 배지·아이콘·상태칩·거리·배터리). 1위는 ★ 강조.
 export function rankRowLabel(r: RankedRobot): ReactNode {
@@ -21,9 +22,10 @@ export function rankRowLabel(r: RankedRobot): ReactNode {
 }
 
 // 추천 랭킹 → 드롭다운 옵션(추천 순서). 공급은 omx만, 그 외 omx 제외. 오프라인은 비활성.
+// 가상 테스트봇은 운영 배정 선택지에서 제외한다.
 export function rankingToOptions(ranking: RankedRobot[], isSupply: boolean): Opt[] {
   return ranking
-    .filter((r) => (isSupply ? r.robotId.startsWith("omx") : !r.robotId.startsWith("omx")))
+    .filter((r) => !isTestBot(r.robotId) && (isSupply ? r.robotId.startsWith("omx") : !r.robotId.startsWith("omx")))
     .map((r) => ({ value: r.robotId, label: rankRowLabel(r), selectedLabel: `#${r.rank} ${r.robotId}`, disabled: !r.online || !!r.error }));
 }
 

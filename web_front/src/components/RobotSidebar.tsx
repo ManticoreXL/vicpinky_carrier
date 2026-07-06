@@ -2,6 +2,7 @@ import { useThrottled } from "../hooks/useThrottled";
 import { robotStatusKo, robotStatusColor, robotStatusDot, isRobotOnline } from "../utils/statusLabel";
 import type { RosMessage } from "../hooks/useNestSocket";
 import type { RobotInfo } from "../hooks/useNestSocket";
+import { isTestBot } from "../robots";
 
 interface Props {
  robots: RobotInfo[];
@@ -12,6 +13,7 @@ interface Props {
 
 export default function RobotSidebar({ robots, selectedRobot, onSelect, rosMessages }: Props) {
  const displayMessages = useThrottled(rosMessages, 800);
+ const shown = robots.filter(r => !isTestBot(r.robot_id)); // 운영 함대 목록 — 가상 테스트봇 제외
 
  return (
   <aside className="w-full sm:w-60 flex-none glass-panel border-b sm:border-b-0 sm:border-r border-white/[0.1] flex flex-col overflow-hidden sm:overflow-y-auto">
@@ -20,15 +22,15 @@ export default function RobotSidebar({ robots, selectedRobot, onSelect, rosMessa
     <div className="flex items-center justify-between mt-1">
      <span className="text-sm font-semibold text-white/80 tracking-widest uppercase">Units</span>
      <span className="px-1.5 py-0.5 bg-orange-500/10 rounded text-[10px] text-orange-600 font-bold
-                      border border-orange-500/20">{robots.length}</span>
+                      border border-orange-500/20">{shown.length}</span>
     </div>
    </div>
 
    <div className="flex flex-row sm:flex-col gap-2 sm:gap-1 sm:flex-1 overflow-x-auto sm:overflow-x-hidden overflow-y-hidden sm:overflow-y-auto p-3">
-    {robots.length === 0 ? (
+    {shown.length === 0 ? (
      <p className="px-3 py-8 text-xs text-white/[0.4] text-center italic">스캔 중...</p>
     ) : (
-     robots.map(robot => (
+     shown.map(robot => (
       <RobotItem
        key={robot.robot_id}
        robot={robot}

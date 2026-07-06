@@ -14,3 +14,11 @@ export const ROBOTS = [
   { id: "TEST-BOT3", domain: 101, type: "test" },
   { id: "TEST-BOT4", domain: 102, type: "test" },
 ] as const;
+
+// 가상 테스트봇 판별 — 운영 화면 표시에서만 숨기는 용도.
+// 백엔드 소켓으로 받는 실시간 목록(RobotInfo)엔 type 필드가 없어, id 패턴으로 단일 판별한다.
+export const isTestBot = (id: string): boolean => /^TEST-?BOT/i.test(id);
+
+// 운영 화면 표시용 로스터 — 테스트봇 제외.
+// (적합도 탭·큐테스트·빌더 등 테스트 전용 화면은 ROBOTS 원본을 그대로 사용한다.)
+export const OPERATIONAL_ROBOTS = ROBOTS.filter((r) => !isTestBot(r.id));

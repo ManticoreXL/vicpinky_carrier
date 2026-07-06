@@ -4,6 +4,7 @@ import { taskTypeKo, taskStatusKo } from "../../utils/statusLabel";
 import { type RankedRobot, fetchRobotRanking } from "../../utils/robotRanking";
 import { TYPE_COLOR, statusPill, statusDot, cardBorder, robotIcon, fmtDateTime } from "./shared";
 import { Dropdown, rankingToOptions } from "./Dropdown";
+import { isTestBot } from "../../robots";
 
 // 커스텀 태스크 스텝(단계) 표시
 const STEP_KO: Record<string, string> = { move: "이동", service: "서비스", action: "액션", topic: "토픽", wait: "대기", supply: "보급" };
@@ -139,7 +140,7 @@ export function TaskMiniCard({ task: t, robots, onDispatch, onDelete, onResume, 
                 onOpen={() => void fetchRobotRanking(t.targetNode, t.type).then(setRanking)}
                 options={[{ value: "", label: "추천 로봇" }, ...(ranking.length
                   ? rankingToOptions(ranking, t.type === "SUPPLY")
-                  : robots.filter((r) => t.type === "SUPPLY" ? r.startsWith("omx") : !r.startsWith("omx")).map((r) => ({ value: r, label: r })))]} />
+                  : robots.filter((r) => !isTestBot(r) && (t.type === "SUPPLY" ? r.startsWith("omx") : !r.startsWith("omx"))).map((r) => ({ value: r, label: r })))]} />
               <button disabled={!robotSel} onClick={() => onDispatch(t._id, robotSel)}
                 className="flex-none px-2.5 py-1 text-[11px] font-extrabold rounded-lg bg-sky-500 text-white border border-sky-300/50 hover:bg-sky-400 disabled:opacity-40 disabled:cursor-not-allowed">
                 할당

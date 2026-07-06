@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import axios from 'axios';
-import { RagService } from './rag.service';
+import { LlmContextService } from './llm-context.service';
 
 export interface AgentAction {
   tool:   string;
@@ -15,9 +15,9 @@ export interface AgentResult {
 }
 
 /**
- * EXAONE 기반 RAG 챗 어시스턴트.
+ * EXAONE 기반 챗 어시스턴트.
  *
- * function-calling(도구 호출)을 사용하지 않는다. RAG 컨텍스트만으로 한국어 답변을 생성하는
+ * function-calling(도구 호출)을 사용하지 않는다. DB 컨텍스트만으로 한국어 답변을 생성하는
  * 조회/설명 전용이다. (로봇 제어·태스크 발행은 UI/테스트 탭에서 직접 수행)
  */
 @Injectable()
@@ -27,7 +27,7 @@ export class AgentService implements OnModuleInit {
   // EXAONE 단일 모델 (Qwen·도구호출 제거)
   private readonly model = process.env.OLLAMA_CHAT_MODEL ?? process.env.OLLAMA_NL_MODEL ?? 'exaone3.5:latest';
 
-  constructor(private readonly ragService: RagService) {}
+  constructor(private readonly contextService: LlmContextService) {}
 
   // ── 시작 시 모델 적재 상태 검증 ──
   async onModuleInit(): Promise<void> {
@@ -48,13 +48,13 @@ export class AgentService implements OnModuleInit {
 
   // ── 메인 엔트리 — RAG 컨텍스트 기반 한국어 답변 (도구 호출 없음) ──────────────
   async run(userText: string): Promise<AgentResult> {
-    const ragContext = await this.ragService.buildContext();
-    const reply = await this.chat(userText, ragContext);
+    const context = await this.contextService.buildContext();
+    const reply = await this.chat(userText, context);
     return { reply, actions: [], mode: 'text' };
   }
 
   // ── EXAONE 대화 (RAG) ────────────────────────────────────────────────────────
-  private async chat(userText: string, ragContext: string): Promise<string> {
+  private async chat(userText: string, context: string): Promise<string> {
     const systemPrompt = `[최우선 규칙 — 반드시 준수]
 1. 반드시 한국어로만 답변하세요. 영어·중국어·일본어 등 다른 언어 절대 사용 금지.
 2. 아래 [현재 시스템 상태] 데이터에 있는 정보만 사용하세요. 데이터에 없는 내용은 절대 추측하거나 생성하지 마세요.
@@ -66,7 +66,7 @@ export class AgentService implements OnModuleInit {
 당신은 로봇 관제 시스템(FMS) AI 어시스턴트입니다.
 
 [현재 시스템 상태]
-${ragContext}`;
+${context}`;
 
     try {
       const res = await axios.post(`${this.ollamaUrl}/v1/chat/completions`, {

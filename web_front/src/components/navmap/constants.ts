@@ -8,13 +8,9 @@ export const TB3_ROBOTS = [
 ] as const;
 
 // 지도에서 초기위치(원점)/홈/맵 지정 대상으로 선택 가능한 로봇.
-// TB3 + rosbridge 미경유 가상 테스트봇(TEST-BOT). 마커/카메라 렌더링은 TB3_ROBOTS만 사용.
+// 운영 지도에는 가상 테스트봇을 노출하지 않는다(테스트봇 제어는 적합도 탭 전용).
 export const SELECTABLE_ROBOTS = [
   ...TB3_ROBOTS,
-  { id: "TEST-BOT1", label: "TEST1", color: "#22d3ee" },
-  { id: "TEST-BOT2", label: "TEST2", color: "#06b6d4" },
-  { id: "TEST-BOT3", label: "TEST3", color: "#0ea5e9" },
-  { id: "TEST-BOT4", label: "TEST4", color: "#14b8a6" },
 ] as const;
 
 export const NODE_COLOR: Record<string, string> = {

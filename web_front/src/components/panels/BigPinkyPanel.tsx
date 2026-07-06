@@ -20,6 +20,7 @@ import RampControl from "./RampControl";
 import MarkerTrace from "./MarkerTrace";
 import LidarCanvas from "../explore/LidarCanvas";
 import { useKeyboardControl } from "../../hooks/useKeyboardControl";
+import { usePersistedFlag } from "../../hooks/usePersistedFlag";
 import type {
  RosMessage,
  ActionGoalPayload,
@@ -53,6 +54,7 @@ export default function VicPinkyPanel({
  callService,
 }: Props) {
  const [scanTab, setScanTab] = useState<"scan" | "scan_filtered">("scan");
+ const [showExtras, toggleExtras] = usePersistedFlag("panel.showExtras", false); // LIDAR·액션 표시 토글(패널 공유)
  const [keyboardActive, setKeyboardActive] = useState(false);
  const [diagStatus, setDiagStatus] = useState<DiagStatus>("idle");
  const diagTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -133,6 +135,12 @@ export default function VicPinkyPanel({
  return (
  <div className="max-w-2xl">
  <PanelCard title="VicPinky" icon="🚛" accent="amber" badge="vicpinky">
+        {/* 보기 토글 — LIDAR·액션 표시/숨김 (usePersistedFlag 공유) */}
+        <div className="flex justify-end mb-3">
+          <button onClick={toggleExtras} className="px-3 py-1 text-xs font-semibold tracking-wide border border-white/[0.1] bg-[#FFCE99]/14 text-white/[0.7] hover:text-white/90 hover:border-white/[0.2] transition-colors">
+            {showExtras ? "− LIDAR · 액션 숨기기" : "+ LIDAR · 액션 표시"}
+          </button>
+        </div>
 
  {/* ── 2열 센서 그리드 ──────────────────────────────────────────── */}
  <div className="grid grid-cols-2 gap-4">
@@ -215,6 +223,7 @@ export default function VicPinkyPanel({
  </div>
 
  {/* ── LIDAR (raw / filtered 탭) ─────────────────────────────────── */}
+        {showExtras && (
  <Section label="LIDAR Scan">
  {/* 탭 */}
  <div className="flex gap-1 mb-3">
@@ -268,6 +277,7 @@ export default function VicPinkyPanel({
  </div>
  </div>
  </Section>
+        )}
 
  {/* ── cmd_vel 수신 표시 (Twist) ────────────────────────────────── */}
  <Section label="cmd_vel 수신 (geometry_msgs/Twist)">
@@ -347,6 +357,7 @@ export default function VicPinkyPanel({
  </Section>
 
  {/* ── Action ─────────────────────────────────────────────────────── */}
+        {showExtras && (
  <ActionPanel
  robotNamespace="vicpinky"
  emitAction={emitAction}
@@ -355,6 +366,7 @@ export default function VicPinkyPanel({
  actionFeedbacks={actionFeedbacks}
  actionResults={actionResults}
  />
+        )}
 
  </PanelCard>
  </div>

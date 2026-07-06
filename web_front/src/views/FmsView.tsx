@@ -3,7 +3,7 @@ import type { Socket } from "socket.io-client";
 import { RosMessage, FmsTask, TaskManagerAlert, RobotInfo } from "../hooks/useNestSocket";
 import NavMapCanvas from "../components/NavMapCanvas";
 import { type RobotPos } from "../components/TopologyMapView";
-import { ROBOTS } from "../robots";
+import { OPERATIONAL_ROBOTS } from "../robots";
 
 interface Props {
  rosMessages: Record<string, RosMessage>;
@@ -41,11 +41,11 @@ export default function FmsView({
    })),
  [fmsTasks]);
 
- // 모든 로봇 좌표 — 라이브 텔레메트리(amcl→odom) 우선, 없으면 DB pose 폴백.
- // 가상 testbot처럼 토픽을 안 쏘는 로봇도 DB에 저장된 위치로 그려진다(모든 로봇 공통).
+ // 로봇 좌표 — 라이브 텔레메트리(amcl→odom) 우선, 없으면 DB pose 폴백.
+ // 운영 지도에는 가상 테스트봇을 표시하지 않는다(OPERATIONAL_ROBOTS = 테스트봇 제외).
  const robotPositions = useMemo(() => {
  const result: Record<string, RobotPos> = {};
- ROBOTS.forEach(r => {
+ OPERATIONAL_ROBOTS.forEach(r => {
   // AMCL 우선 (맵 프레임 — 좌표계 일치)
   const amcl = rosMessages[`/${r.id}/amcl_pose`]?.data as any;
   const amclPos = amcl?.pose?.pose?.position;

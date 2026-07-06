@@ -33,8 +33,8 @@ function nearestNodeId(x: number, y: number, nodes: NodeDocument[]): string | nu
 }
 
 @Injectable()
-export class RagService {
-  private readonly logger = new Logger(RagService.name);
+export class LlmContextService {
+  private readonly logger = new Logger(LlmContextService.name);
 
   constructor(
     @InjectModel(TaskHistory.name)  private readonly taskModel:  Model<TaskHistoryDocument>,

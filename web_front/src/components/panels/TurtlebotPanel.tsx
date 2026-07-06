@@ -10,6 +10,7 @@ import {
 } from "./shared";
 import { useKeyboardControl } from "../../hooks/useKeyboardControl";
 import ActionPanel from "./ActionPanel";
+import { usePersistedFlag } from "../../hooks/usePersistedFlag";
 import { quatToYaw, quatToRoll, quatToPitch, r2d, f } from "../../utils/quaternion";
 
 type DiagStatus = "idle" | "loading" | "ok" | "error";
@@ -48,6 +49,7 @@ export default function TurtlebotPanel({
  callService,
 }: Props) {
  const [keyboardActive, setKeyboardActive] = useState(false);
+ const [showExtras, toggleExtras] = usePersistedFlag("panel.showExtras", false); // 액션 표시 토글(패널 공유)
  const [diagStatus, setDiagStatus] = useState<DiagStatus>("idle");
  const [diagResult, setDiagResult] = useState<DiagResult | null>(null);
  // 전개(Deploy) 서비스 — /{botId}/deploy (turtlebot_state_msgs/srv/Deploy)
@@ -198,6 +200,12 @@ export default function TurtlebotPanel({
  return (
  <div className="max-w-2xl">
  <PanelCard title={BOT_LABELS[botId] ?? botId} icon="🤖" accent="blue" badge={botId}>
+        {/* 보기 토글 — 액션 표시/숨김 (usePersistedFlag 공유) */}
+        <div className="flex justify-end mb-3">
+          <button onClick={toggleExtras} className="px-3 py-1 text-xs font-semibold tracking-wide border border-white/[0.1] bg-[#FFCE99]/14 text-white/[0.7] hover:text-white/90 hover:border-white/[0.2] transition-colors">
+            {showExtras ? "− 액션 숨기기" : "+ 액션 표시"}
+          </button>
+        </div>
 
  {/* ── 오프라인 배너 ─────────────────────────────────────────────── */}
  {!online && (
@@ -421,6 +429,7 @@ export default function TurtlebotPanel({
  </Section>
 
  {/* ── Action ──────────────────────────────────────────────────────── */}
+        {showExtras && (
  <ActionPanel
  robotNamespace={botId}
  emitAction={emitAction}
@@ -429,6 +438,7 @@ export default function TurtlebotPanel({
  actionFeedbacks={actionFeedbacks}
  actionResults={actionResults}
  />
+        )}
 
  {/* ── 음성 명령 (/speak_cmd) ─────────────────────────────────────── */}
  <SpeakCmdPanel botId={botId} publish={publish} />

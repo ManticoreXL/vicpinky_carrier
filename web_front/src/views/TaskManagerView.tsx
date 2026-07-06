@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import type { RosMessage, FmsTask, TaskManagerAlert, RobotInfo } from "../hooks/useNestSocket";
 import { BACKEND_URL } from "../config";
-import { ROBOTS } from "./taskmanager/constants";
+import { OPERATIONAL_ROBOTS as ROBOTS } from "../robots"; // 운영 화면 — 가상 테스트봇 제외
 import { useTopoNodes } from "../hooks/useTopoNodes";
 import { isOnline, computeNearest } from "./taskmanager/helpers";
 import { RobotMonitorCard } from "./taskmanager/components";

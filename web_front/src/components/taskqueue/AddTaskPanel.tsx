@@ -5,6 +5,7 @@ import { taskTypeKo } from "../../utils/statusLabel";
 import { type RankedRobot, fetchRobotRanking } from "../../utils/robotRanking";
 import { type FNode, TYPES, BATCH_TYPES, SCENARIO_TYPES, SUPPLY_ITEMS, TYPE_DOT, robotIcon } from "./shared";
 import { Picker } from "./Picker";
+import { isTestBot } from "../../robots";
 
 // 태스크 추가 — 버튼 위치에 떠 있는 플로팅 패널(포털). 유형/맵/목적지=검색 리스트, 수행로봇=카드.
 export function AddTaskPanel({ nodes, maps, anchorRect, onClose }: { nodes: FNode[]; maps: string[]; anchorRect: DOMRect | null; onClose: () => void }) {
@@ -81,7 +82,7 @@ export function AddTaskPanel({ nodes, maps, anchorRect, onClose }: { nodes: FNod
     return () => { alive = false; };
   }, [robotReady, mode, type, targetNode, noDest]);
 
-  const robotCards = ranking.filter((r) => (mode === "batch" ? !r.robotId.startsWith("omx") : isSupply ? r.robotId.startsWith("omx") : !r.robotId.startsWith("omx")));
+  const robotCards = ranking.filter((r) => !isTestBot(r.robotId) && (mode === "batch" ? !r.robotId.startsWith("omx") : isSupply ? r.robotId.startsWith("omx") : !r.robotId.startsWith("omx")));
   const onSelectType = (v: string) => { setType(v); setCustomId(""); setTargetNode(""); setRobotId(""); setErr(""); };
   const onSelectCustom = (id: string) => { setCustomId(id); setType(""); setTargetNode(""); setRobotId(""); setErr(""); };
   const mapItems = [{ v: "", l: "전체 맵" }, ...maps.map((m) => ({ v: m, l: m }))];
