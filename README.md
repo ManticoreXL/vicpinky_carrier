@@ -182,7 +182,16 @@ https://github.com/user-attachments/assets/6f7efe83-0220-42bc-89b3-1b40f406feb6
 </div>
 추론은 비동기 분산 구조로 동작합니다. 빅핑키 내부에 추가로 설치된 라즈베리파이는 실시간 모터 제어와 카메라 처리를 담당하고, 무거운 추론 연산은 호스트 PC의 GPU로 분리해 네트워크로 통신하며 동작하도록 설계하였습니다. 전체 루프는 이벤트 기반으로 동작하여, 평소에는 대기하다가 관제로부터 추론 시작 명령을 받으면 해당 작업에 맞는 사전학습 모델을 불러와 동작합니다.
 
-https://github.com/user-attachments/assets/345945a2-24c1-467c-bac8-298fbea5d490
+<div align="center">
+  <table>
+    <tr>
+      <td align="center">
+        <img src="assets/features/omx/omx_dashboard.webp" width="100%"/><br/>
+        <sub><b>OMX 추론 대시보드 화면</b></sub>
+      </td>
+    </tr>
+  </table>
+</div>
 
 작업 완료 여부는 비전 인식으로 스스로 판단합니다. 상단부 카메라 영상을 HSV 색공간에서 분석해 구호품의 적재 여부와 중심 정렬 상태를 실시간으로 평가하며, 순간적인 조명 변화나 가려짐은 타이머 기반 필터링으로 걸러냅니다. 적재와 정렬 조건이 동시에 충족되면 목표 달성으로 판단해 추론 루프를 안전하게 종료하고 다시 대기 상태로 돌아갑니다.
 
