@@ -230,19 +230,24 @@ class VoiceNode(Node):
         try:
             tts = gTTS(text=text, lang=self.tts_language, tld=self.tts_tld)
             tts.save(self.temp_audio_path)
-            
-            play_command = f"{self.audio_player_cmd} {self.temp_audio_path}"
-            subprocess.run(play_command, shell=True)
 
-            if os.path.exists(self.temp_audio_path):
-                os.remove(self.temp_audio_path)
-                
+            wav_path = self.temp_audio_path.replace('.mp3', '.wav')
+            # 48kHz, 2채널 WAV로 변환
+            subprocess.run(
+                f"ffmpeg -y -i {self.temp_audio_path} -ar 48000 -ac 2 {wav_path}",
+                shell=True, check=True
+            )
+            subprocess.run(f"aplay -D plughw:1,0 {wav_path}", shell=True)
+
+            for p in (self.temp_audio_path, wav_path):
+                if os.path.exists(p):
+                    os.remove(p)
         except Exception as e:
             self.get_logger().error(f"TTS Error: {e}")
-            
         finally:
             time.sleep(self.howling_delay)
             self.is_speaking = False
+
 
 # ALSA 에러 핸들러 시그니처
 ERROR_HANDLER_FUNC = CFUNCTYPE(None, c_char_p, c_int, c_char_p, c_int, c_char_p)
