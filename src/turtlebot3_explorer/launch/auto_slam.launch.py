@@ -122,6 +122,22 @@ def generate_launch_description():
         }],
     )
 
+    # ---- scan_normalizer (t=0) : LDS-02 스캔 포인트 수 변동 → slam_toolbox 드롭 방지 ----
+    #   /scan 을 고정 각도 격자로 리샘플하여 /scan_normalized 로 발행.
+    #   slam_params.yaml 의 scan_topic 이 /scan_normalized 를 보도록 되어 있어야 함.
+    scan_normalizer = Node(
+        package='turtlebot3_explorer',
+        executable='scan_normalizer',
+        name='scan_normalizer',
+        output='screen',
+        parameters=[{
+            'use_sim_time': ParameterValue(use_sim_time, value_type=bool),
+            'input_topic': '/scan',
+            'output_topic': '/scan_normalized',
+            'num_beams': 0,   # 0 = 첫 스캔 개수로 자동 고정
+        }],
+    )
+
     # ---- slam_toolbox (t=0) ----
     slam = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(slam_launch),
@@ -205,6 +221,7 @@ def generate_launch_description():
         cam_optical,       ### [추가]
         victim_mapper,     ### [변경] (PC: 투영/확정/마커/CSV)
         victim_obstacle,   ### [추가] (victim 회피 장애물 발행)
+        scan_normalizer,   ### [추가] (스캔 정규화 → slam 드롭 방지)
         slam,
         rviz,
         nav2,

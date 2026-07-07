@@ -34,6 +34,7 @@ setup(
             'victim_inspector = turtlebot3_explorer.victim_inspector:main',
             'victim_obstacle_publisher = turtlebot3_explorer.victim_obstacle_publisher:main',
             'victim_detector = turtlebot3_explorer.victim_detector:main',
+            'scan_normalizer = turtlebot3_explorer.scan_normalizer:main',
         ],
     },
 )
