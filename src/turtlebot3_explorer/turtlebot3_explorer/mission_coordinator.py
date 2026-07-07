@@ -79,6 +79,7 @@ class ExplorationCoordinator(Node):
         #   rear_front_pad: 시작점보다 살짝 앞까지 박스를 당길 여유(m). 0이면 시작점이 박스 앞면.
         #   (로봇 몸 길이만큼 앞도 막고 싶을 때 약간 줌)
         self.declare_parameter('rear_front_pad', 0.0)
+        self.declare_parameter('show_rear_marker', True)   # 출발선 뒤 금지박스를 RViz에 표시할지(기능과 무관, 시각화만)
         self.declare_parameter('max_return_attempts', 5)    # home 복귀를 이만큼 재시도 후 안 되면 현 위치 저장
         # ---- 강건성(실물) 파라미터 ----
         self.declare_parameter('goal_retry_delay', 3.0)          # 실패 후 다음 시도까지 대기(초)
@@ -113,6 +114,7 @@ class ExplorationCoordinator(Node):
         self.rear_left = _rl if _rl >= 0.0 else self.rear_width / 2.0
         self.rear_right = _rr if _rr >= 0.0 else self.rear_width / 2.0
         self.rear_front_pad = float(self.get_parameter('rear_front_pad').value)
+        self.show_rear_marker = bool(self.get_parameter('show_rear_marker').value)
         self.max_return_attempts = int(self.get_parameter('max_return_attempts').value)
         self.goal_retry_delay = float(self.get_parameter('goal_retry_delay').value)
         self.localization_timeout = float(self.get_parameter('localization_timeout').value)
@@ -523,6 +525,8 @@ class ExplorationCoordinator(Node):
     def _publish_rear_marker(self):
         """ 금지박스를 반투명 면(CUBE) + 테두리(LINE_STRIP)로 RViz 에 표시.
             맵/costmap 엔 영향 없는 시각화 전용. """
+        if not self.show_rear_marker:
+            return
         if self.start_pos is None or self.start_dir is None:
             return
         arr = MarkerArray()
