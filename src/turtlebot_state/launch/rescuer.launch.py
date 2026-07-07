@@ -45,6 +45,17 @@ def generate_launch_description():
         launch_arguments={'bot_id': bot_id}.items()
     )
 
+    state_node = Node(
+        package='turtlebot_state', 
+        executable='robot_state_manager',
+        name='robot_state_manager', 
+        output='screen',
+        parameters=[{
+            'bot_id': bot_id,
+            'marker_id': ParameterValue(marker_id, value_type=int),
+        }]
+    )
+
     # Nav2
     nav2_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(
@@ -56,18 +67,6 @@ def generate_launch_description():
         }.items(),
     )
     nav2_delayed = TimerAction(period=5.0, actions=[nav2_launch])
-
-    # 구호봇 로컬 상태 노드
-    state_node = Node(
-        package='turtlebot_state',
-        executable='rescuer_state_manager',
-        name='rescuer_state_manager',
-        output='screen',
-        parameters=[{
-            'bot_id': bot_id,
-            'marker_id': ParameterValue(marker_id, value_type=int),
-        }],
-    )
 
     return LaunchDescription([
         bot_id_arg,

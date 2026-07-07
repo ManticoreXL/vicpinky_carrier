@@ -9,11 +9,16 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup
 from rcl_interfaces.msg import SetParametersResult
 from std_msgs.msg import String
 from gtts import gTTS
+from ctypes import CDLL, CFUNCTYPE, c_char_p, c_int
 import speech_recognition as sr
+
 
 class VoiceNode(Node):
     def __init__(self):
         super().__init__('voice_node')
+
+        # ALSA 메시지 출력 삭제
+        suppress_alsa_errors()
 
         # 1. Parameter 선언 및 기본값 설정
         self.declare_parameter('stt_language', 'ko-KR')
@@ -225,19 +230,39 @@ class VoiceNode(Node):
         try:
             tts = gTTS(text=text, lang=self.tts_language, tld=self.tts_tld)
             tts.save(self.temp_audio_path)
-            
-            play_command = f"{self.audio_player_cmd} {self.temp_audio_path}"
-            subprocess.run(play_command, shell=True)
 
-            if os.path.exists(self.temp_audio_path):
-                os.remove(self.temp_audio_path)
-                
+            wav_path = self.temp_audio_path.replace('.mp3', '.wav')
+            # 48kHz, 2채널 WAV로 변환
+            subprocess.run(
+                f"ffmpeg -y -i {self.temp_audio_path} -ar 48000 -ac 2 {wav_path}",
+                shell=True, check=True
+            )
+            subprocess.run(f"aplay -D plughw:1,0 {wav_path}", shell=True)
+
+            for p in (self.temp_audio_path, wav_path):
+                if os.path.exists(p):
+                    os.remove(p)
         except Exception as e:
             self.get_logger().error(f"TTS Error: {e}")
-            
         finally:
             time.sleep(self.howling_delay)
             self.is_speaking = False
+
+
+# ALSA 에러 핸들러 시그니처
+ERROR_HANDLER_FUNC = CFUNCTYPE(None, c_char_p, c_int, c_char_p, c_int, c_char_p)
+
+def _py_error_handler(filename, line, function, err, fmt):
+    pass
+
+_c_error_handler = ERROR_HANDLER_FUNC(_py_error_handler)
+
+def suppress_alsa_errors():
+    try:
+        asound = CDLL('libasound.so.2')
+        asound.snd_lib_error_set_handler(_c_error_handler)
+    except OSError:
+        pass
 
 def main(args=None):
     rclpy.init(args=args)

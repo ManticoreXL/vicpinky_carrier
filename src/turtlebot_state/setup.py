@@ -30,8 +30,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
-            'rescuer_state_manager = turtlebot_state.rescuer_state_manager:main',
-            'explorer_state_manager = turtlebot_state.explorer_state_manager:main',
+            'robot_state_manager = turtlebot_state.robot_state_manager:main',
             'deploy_node = turtlebot_state.deploy_node:main',
             'line_tracer_node = turtlebot_state.line_tracer_node:main',
         ],

@@ -53,18 +53,6 @@ def generate_launch_description():
         launch_arguments={'bot_id': bot_id}.items()
     )
 
-    # 탐사봇 로컬 상태 노드
-    state_node = Node(
-        package='turtlebot_state', 
-        executable='explorer_state_manager',
-        name='explorer_state_manager', 
-        output='screen',
-        parameters=[{
-            'bot_id': bot_id,
-            'marker_id': ParameterValue(marker_id, value_type=int),
-        }]
-    )
-
     # ==========================================
     # 3. 카메라 및 YOLO 노드 (추가 기능)
     # ==========================================
@@ -113,6 +101,17 @@ def generate_launch_description():
                 }],
             ),
         ],
+    )
+
+    state_node = Node(
+        package='turtlebot_state', 
+        executable='robot_state_manager',
+        name='robot_state_manager', 
+        output='screen',
+        parameters=[{
+            'bot_id': bot_id,
+            'marker_id': ParameterValue(marker_id, value_type=int),
+        }]
     )
 
     # ==========================================
