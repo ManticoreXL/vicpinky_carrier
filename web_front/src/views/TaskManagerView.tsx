@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import type { RosMessage, FmsTask, TaskManagerAlert, RobotInfo } from "../hooks/useNestSocket";
 import { BACKEND_URL } from "../config";
-import { OPERATIONAL_ROBOTS as ROBOTS } from "../robots"; // 운영 화면 — 가상 테스트봇 제외
+import { ROBOTS as ALL_ROBOTS, OPERATIONAL_ROBOTS } from "../robots";
+import { useTestBots } from "../context/testbots";
 import { useTopoNodes } from "../hooks/useTopoNodes";
 import { isOnline, computeNearest } from "./taskmanager/helpers";
 import { RobotMonitorCard } from "./taskmanager/components";
@@ -21,13 +22,15 @@ interface Props {
   onSelectRobotInFleet: (robotId: string) => void;
 }
 
-const ROBOT_IDS = ROBOTS.map(r => r.id);
-
 // ── 메인 컴포넌트 ──────────────────────────────────────────────────────────────
 export default function TaskManagerView({
   rosMessages, fmsTasks, emitFmsAutoCharge,
   robotStatuses, tmAlerts, robots, onSelectRobotInFleet,
 }: Props) {
+  // 기본은 테스트봇 제외. 헤더 토글 ON이면 가상 테스트봇도 태스크 화면에 포함(로스터 반응형).
+  const { showTestBots } = useTestBots();
+  const ROBOTS = showTestBots ? ALL_ROBOTS : OPERATIONAL_ROBOTS;
+  const ROBOT_IDS = ROBOTS.map(r => r.id);
 
   // 글로벌 큐와 동일하게 — 백엔드 REST 호출만, 화면은 소켓으로 갱신
   const dispatch = async (taskId: string, robotId: string) => {
@@ -56,7 +59,7 @@ export default function TaskManagerView({
     if (!robotSearch.trim()) return ROBOTS;
     const q = robotSearch.toLowerCase();
     return ROBOTS.filter(r => r.id.toLowerCase().includes(q) || String(r.domain).includes(q));
-  }, [robotSearch]);
+  }, [robotSearch, ROBOTS]);
 
   // 로봇별 현재 수행 / 다음 예정(큐 seq 순) — 글로벌 큐 카드로 표시
   const robotBoards = useMemo(() => ROBOTS.map(r => {
@@ -66,7 +69,7 @@ export default function TaskManagerView({
       .filter(t => t.status === "PENDING")
       .sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0) || new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())[0] ?? null;
     return { robot: r, current, next };
-  }), [fmsTasks]);
+  }), [fmsTasks, ROBOTS]);
   // 온라인이거나 진행/예정 작업이 있는 로봇만 노출
   const shownBoards = robotBoards.filter(b => isOnline(robotStatuses, b.robot.id) || b.current || b.next);
 

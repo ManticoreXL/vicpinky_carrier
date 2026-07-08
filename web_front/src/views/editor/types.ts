@@ -12,7 +12,7 @@ export interface MapInfo {
 export interface FNode {
   node_id: string;
   map_id: string;
-  type: "WAYPOINT" | "STATION" | "CHARGER";
+  type: "WAYPOINT" | "STATION" | "CHARGER" | "VICTIM";
   x: number;
   y: number;
   yaw: number;

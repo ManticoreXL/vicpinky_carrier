@@ -6,7 +6,8 @@ import CameraFeed from "./cameras/CameraFeed";
 import { snapNodes } from "./TopologyMapView";
 import type { FNode, FEdge, ActivePath, RobotPos } from "./TopologyMapView";
 import type { StaticMapInfo, DragState } from "./navmap/types";
-import { TB3_ROBOTS, SELECTABLE_ROBOTS, NODE_COLOR } from "./navmap/constants";
+import { TB3_ROBOTS, SELECTABLE_ROBOTS, TEST_BOT_ROBOTS, NODE_COLOR } from "./navmap/constants";
+import { useTestBots } from "../context/testbots";
 import { worldToCanvas, canvasToWorld, distToSegment } from "./navmap/geometry";
 import { drawPreviewMarker } from "./navmap/markers";
 import { drawPlanPaths, drawTopologyOverlay, drawActivePaths, drawTb3Markers, buildActivePathColors } from "./navmap/renderers";
@@ -66,6 +67,9 @@ export default function NavMapCanvas({
  const [interactive, setInteractive] = useState(true);
  const [homeMode] = useState(false);
  const [selectedBots, setSelectedBots] = useState<Set<string>>(new Set()); // 기본 선택 없음(tb3_01 자동 활성화 해제)
+ const { showTestBots } = useTestBots();
+ // 헤더 토글 ON이면 테스트봇도 지도에서 선택 가능 → 초기위치(init pose)/홈/맵 배정 설정.
+ const selectableRobots = showTestBots ? [...SELECTABLE_ROBOTS, ...TEST_BOT_ROBOTS] : [...SELECTABLE_ROBOTS];
  const [showCamera, setShowCamera] = useState(true);
  const [showTopology, setShowTopology] = useState(true);
  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
@@ -508,19 +512,19 @@ export default function NavMapCanvas({
  <div className="flex">
  <button
  onClick={() => {
- const allIds = SELECTABLE_ROBOTS.map((r) => r.id);
+ const allIds = selectableRobots.map((r) => r.id);
  const allSelected = allIds.every((id) => selectedBots.has(id));
  setSelectedBots(allSelected ? new Set() : new Set(allIds));
  }}
  className={`px-2 py-0.5 text-xs font-bold border-r border-white/[0.1] transition-all ${
- SELECTABLE_ROBOTS.every((r) => selectedBots.has(r.id))
+ selectableRobots.every((r) => selectedBots.has(r.id))
  ? "bg-[#521C0D] text-[#F4E7E1]"
  : "text-white/[0.68] hover:text-white/90"
  }`}
  >
  ALL
  </button>
- {SELECTABLE_ROBOTS.map((r) => {
+ {selectableRobots.map((r) => {
  const isOn = selectedBots.has(r.id);
  const hasPos = rosMessages[`/${r.id}/amcl_pose`]?.data != null;
  const hasPlan = ((rosMessages[`/${r.id}/plan`]?.data as { poses?: unknown[] } | undefined)?.poses?.length ?? 0) > 0;
@@ -724,7 +728,7 @@ export default function NavMapCanvas({
  {/* 범례 (좌상단) */}
  {canvasReady && (
  <div className="absolute top-2 left-2 flex flex-col gap-1 bg-[#FFCE99]/14 backdrop-blur-xl/90 px-2 py-1.5 border border-[#521C0D]/10">
- {SELECTABLE_ROBOTS.map((r) => {
+ {selectableRobots.map((r) => {
  const isOn = selectedBots.has(r.id);
  const hasPos = rosMessages[`/${r.id}/amcl_pose`]?.data != null;
  const hasPlan = ((rosMessages[`/${r.id}/plan`]?.data as { poses?: unknown[] } | undefined)?.poses?.length ?? 0) > 0;

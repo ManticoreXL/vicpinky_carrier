@@ -22,3 +22,6 @@ export const isTestBot = (id: string): boolean => /^TEST-?BOT/i.test(id);
 // 운영 화면 표시용 로스터 — 테스트봇 제외.
 // (적합도 탭·큐테스트·빌더 등 테스트 전용 화면은 ROBOTS 원본을 그대로 사용한다.)
 export const OPERATIONAL_ROBOTS = ROBOTS.filter((r) => !isTestBot(r.id));
+
+// 가상 테스트봇 ID 목록 — 헤더 토글 ON 시 운영 화면(정찰 등)에 끼워 넣을 때 사용.
+export const TEST_BOT_IDS = ROBOTS.filter((r) => isTestBot(r.id)).map((r) => r.id);

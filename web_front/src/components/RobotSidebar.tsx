@@ -3,6 +3,7 @@ import { robotStatusKo, robotStatusColor, robotStatusDot, isRobotOnline } from "
 import type { RosMessage } from "../hooks/useNestSocket";
 import type { RobotInfo } from "../hooks/useNestSocket";
 import { isTestBot } from "../robots";
+import { useTestBots } from "../context/testbots";
 
 interface Props {
  robots: RobotInfo[];
@@ -13,7 +14,8 @@ interface Props {
 
 export default function RobotSidebar({ robots, selectedRobot, onSelect, rosMessages }: Props) {
  const displayMessages = useThrottled(rosMessages, 800);
- const shown = robots.filter(r => !isTestBot(r.robot_id)); // 운영 함대 목록 — 가상 테스트봇 제외
+ const { showTestBots } = useTestBots();
+ const shown = robots.filter(r => showTestBots || !isTestBot(r.robot_id)); // 운영 함대 목록 — 토글 ON이면 테스트봇 포함
 
  return (
   <aside className="w-full sm:w-60 flex-none glass-panel border-b sm:border-b-0 sm:border-r border-white/[0.1] flex flex-col overflow-hidden sm:overflow-y-auto">

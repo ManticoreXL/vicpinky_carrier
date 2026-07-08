@@ -5,6 +5,7 @@ import { type RankedRobot, fetchRobotRanking } from "../../utils/robotRanking";
 import { TYPE_COLOR, statusPill, statusDot, cardBorder, robotIcon, fmtDateTime } from "./shared";
 import { Dropdown, rankingToOptions } from "./Dropdown";
 import { isTestBot } from "../../robots";
+import { useTestBots } from "../../context/testbots";
 
 // 커스텀 태스크 스텝(단계) 표시
 const STEP_KO: Record<string, string> = { move: "이동", service: "서비스", action: "액션", topic: "토픽", wait: "대기", supply: "보급" };
@@ -21,6 +22,7 @@ export function TaskMiniCard({ task: t, robots, onDispatch, onDelete, onResume, 
   const canDelete = t.status === "DRAFT" || t.status === "PENDING"; // 대기 상태만 삭제 가능
   const [robotSel, setRobotSel] = useState(t.preferredRobotId && t.preferredRobotId !== "null" ? t.preferredRobotId : "");
   const [ranking, setRanking] = useState<RankedRobot[]>([]); // 드롭다운 펼칠 때 그 태스크 기준 추천
+  const { showTestBots } = useTestBots();
   const elapsed = t.startedAt && !t.completedAt ? Math.floor((Date.now() - new Date(t.startedAt).getTime()) / 1000) : null;
   const full = t.fullPath?.length ?? 0;
   const remain = t.pathQueue?.length ?? 0;
@@ -139,8 +141,8 @@ export function TaskMiniCard({ task: t, robots, onDispatch, onDelete, onResume, 
                 menuHeader={ranking.length ? "추천순 · 온라인 → 배터리40%↑ → 대기 → 근접" : undefined}
                 onOpen={() => void fetchRobotRanking(t.targetNode, t.type).then(setRanking)}
                 options={[{ value: "", label: "추천 로봇" }, ...(ranking.length
-                  ? rankingToOptions(ranking, t.type === "SUPPLY")
-                  : robots.filter((r) => !isTestBot(r) && (t.type === "SUPPLY" ? r.startsWith("omx") : !r.startsWith("omx"))).map((r) => ({ value: r, label: r })))]} />
+                  ? rankingToOptions(ranking, t.type === "SUPPLY", showTestBots)
+                  : robots.filter((r) => (showTestBots || !isTestBot(r)) && (t.type === "SUPPLY" ? r.startsWith("omx") : !r.startsWith("omx"))).map((r) => ({ value: r, label: r })))]} />
               <button disabled={!robotSel} onClick={() => onDispatch(t._id, robotSel)}
                 className="flex-none px-2.5 py-1 text-[11px] font-extrabold rounded-lg bg-sky-500 text-white border border-sky-300/50 hover:bg-sky-400 disabled:opacity-40 disabled:cursor-not-allowed">
                 할당

@@ -458,7 +458,7 @@ export default function TopologyEditor() {
     <div className="px-3 py-2 border-b border-white/[0.1]">
      <div className="text-xs text-white/[0.6] tracking-wide mb-1.5">범례</div>
      <div className="flex flex-col gap-1">
-      {[["WAYPOINT","#60a5fa"],["STATION","#fbbf24"],["CHARGER","#4ade80"]].map(([t,c]) => (
+      {[["WAYPOINT","#60a5fa"],["STATION","#fbbf24"],["CHARGER","#4ade80"],["VICTIM","#ef4444"]].map(([t,c]) => (
        <div key={t} className="flex items-center gap-2">
         <div className="w-3 h-3 rounded-full" style={{ background: c }} />
         <span className="text-xs text-white/[0.75]">{t}</span>
@@ -494,6 +494,7 @@ export default function TopologyEditor() {
         <option value="WAYPOINT">WAYPOINT</option>
         <option value="STATION">STATION</option>
         <option value="CHARGER">CHARGER</option>
+        <option value="VICTIM">VICTIM</option>
        </select>
       </Field>
       <Field label="x (m)">
@@ -558,6 +559,7 @@ export default function TopologyEditor() {
         <option value="WAYPOINT">WAYPOINT</option>
         <option value="STATION">STATION</option>
         <option value="CHARGER">CHARGER</option>
+        <option value="VICTIM">VICTIM</option>
        </select>
       </Field>
       <Field label="x (m)">

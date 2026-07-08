@@ -8,9 +8,18 @@ export const TB3_ROBOTS = [
 ] as const;
 
 // 지도에서 초기위치(원점)/홈/맵 지정 대상으로 선택 가능한 로봇.
-// 운영 지도에는 가상 테스트봇을 노출하지 않는다(테스트봇 제어는 적합도 탭 전용).
+// 운영 지도에는 기본적으로 가상 테스트봇을 노출하지 않는다(헤더 토글 ON이면 TEST_BOT_ROBOTS를 합쳐 노출).
 export const SELECTABLE_ROBOTS = [
   ...TB3_ROBOTS,
+] as const;
+
+// 가상 테스트봇 선택 칩 — 헤더 '테스트봇' 토글 ON일 때만 지도 선택 목록에 합류.
+// 선택되면 실로봇과 동일하게 맵 클릭으로 초기위치(init pose)/홈 설정, 맵 배정이 가능하다.
+export const TEST_BOT_ROBOTS = [
+  { id: "TEST-BOT1", label: "TEST-1", color: "#ec4899" },
+  { id: "TEST-BOT2", label: "TEST-2", color: "#14b8a6" },
+  { id: "TEST-BOT3", label: "TEST-3", color: "#f97316" },
+  { id: "TEST-BOT4", label: "TEST-4", color: "#a855f7" },
 ] as const;
 
 export const NODE_COLOR: Record<string, string> = {

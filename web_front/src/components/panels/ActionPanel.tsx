@@ -99,10 +99,11 @@ const ACTION_DEFS: Record<ActionKind, ActionDef> = {
 
 // ── 상태 표시 헬퍼 ──────────────────────────────────────────────────────────
 
+// ROS2 action_msgs/GoalStatus — 4=succeeded 5=canceled 6=aborted (3=canceling)
 const STATUS_LABELS: Record<number, { label: string; color: string }> = {
- 3: { label: "SUCCESS", color: "text-green-600" },
- 4: { label: "ABORTED", color: "text-white/90" },
+ 4: { label: "SUCCESS", color: "text-green-600" },
  5: { label: "CANCELLED", color: "text-white/[0.75]" },
+ 6: { label: "ABORTED", color: "text-white/90" },
 };
 
 // ── Props ──────────────────────────────────────────────────────────────────

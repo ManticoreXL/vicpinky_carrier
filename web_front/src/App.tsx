@@ -32,6 +32,7 @@ import { useThrottled } from "./hooks/useThrottled";
 import AiAssistant from "./components/AiAssistant";
 import MobileRobotControl from "./components/MobileRobotControl";
 import PolicyVisionPanel from "./components/cameras/PolicyVisionPanel";
+import { useTestBots } from "./context/testbots";
 
 type AppMode = "control" | "explore" | "fms" | "tasks" | "flow" | "admin" | "suitability" | "queue" | "builder";
 
@@ -58,6 +59,7 @@ export default function App() {
  const [selectedRobot, setSelectedRobot] = useState<string>("vicpinky");
  const [appMode, setAppMode] = useState<AppMode>("control");
  const [sidebarOpen, setSidebarOpen] = useState(false);
+ const { showTestBots, toggle: toggleTestBots } = useTestBots();
 
  const { notifications, confirmNotification } = useBatteryAlerts(rosMessages);
  const displayMessages = useThrottled(rosMessages, 1000);
@@ -119,6 +121,24 @@ export default function App() {
              </span>
            </div>
          )}
+
+         {/* 테스트봇 표시 토글 — 플릿·태스크 화면에 가상 테스트봇(TEST-BOT*)을 나타냈다 숨겼다 한다. */}
+         <button
+           onClick={toggleTestBots}
+           title="플릿·태스크 화면에 가상 테스트봇 표시/숨김"
+           className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border transition-all duration-300 ${
+             showTestBots
+               ? "border-amber-500/40 bg-amber-500/10"
+               : "border-white/[0.1] bg-[#FFCE99]/20 hover:bg-[#FFCE99]/32"
+           }`}
+         >
+           <span className="text-[11px] leading-none">🧪</span>
+           <span className={`text-[10px] font-semibold tracking-widest hidden sm:inline ${
+             showTestBots ? "text-amber-500" : "text-white/[0.5]"
+           }`}>
+             테스트봇 {showTestBots ? "ON" : "OFF"}
+           </span>
+         </button>
 
          <StatusBadge connected={connected} error={error} />
 

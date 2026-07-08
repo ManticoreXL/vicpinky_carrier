@@ -243,7 +243,8 @@ export class TaskPlannerService implements OnModuleInit {
     this.robotTasks.setActive(robotId, taskId);
     await this.taskStatus.assignToRobot(taskId, robotId, pathQueue, this.events.server!);
     await this.robotService.updateStatus(robotId, this.movingStatusFor(task.type));
-    await this.nodeLock.lockNode(task.targetNode, true);
+    // 목적지 노드는 잠그지 않는다 — 여러 로봇이 같은 목적지로 갈 수 있어야 하므로(경로계획 배제 금지).
+    // 충돌은 런타임 양보(checkNodeConflicts)로만 해결한다.
 
     await this.exec.startPlan(taskId, plan);                 // 첫 goal_pose 전송(이후 도착마다 advance)
     await this.taskStatus.setStatus(taskId, TaskStatus.RUNNING, this.events.server!);
@@ -263,7 +264,7 @@ export class TaskPlannerService implements OnModuleInit {
     this.robotTasks.setActive(robotId, taskId);
     await this.taskStatus.setStatus(taskId, TaskStatus.RUNNING, this.events.server!, { assignedRobotId: robotId, startedAt: new Date() });
     await this.robotService.updateStatus(robotId, this.movingStatusFor(task.type));
-    if (task.targetNode) await this.nodeLock.lockNode(task.targetNode, true);
+    // 목적지 노드는 잠그지 않는다 — 여러 로봇이 같은 목적지로 갈 수 있어야 하므로(경로계획 배제 금지).
     await this.exec.startPlan(taskId, plan);                  // 첫 스텝 전송(이후 완료마다 advance)
     this.events.emit(Alert.assigned(taskId, robotId, `${robotId} ← [${task.type}] 커스텀 스텝 ${plan.length}개 실행`));
     this.logger.log(`[커스텀] ${robotId} ← ${taskId} 커스텀 스텝 ${plan.length}개`);
@@ -277,7 +278,6 @@ export class TaskPlannerService implements OnModuleInit {
   private async resolveStep(step: RosStep, robotId: string, task: TaskHistoryDocument): Promise<RosStep> {
     const kind = step.kind ?? 'move';
     const bind = (t: string) => String(t ?? '').replace(/\{robot\}/g, robotId);
-    const suffix = String(step.topicName).replace(/^\/[^/]+\//, ''); // "/<seg>/" 제거 → 나머지
     let awaitNodeId = step.awaitNodeId ?? null;
     let message = step.message ?? {};
     if (awaitNodeId === '{target}') { // 목표지점 파라미터 — 실행 시 task.targetNode 로 해석
@@ -285,9 +285,14 @@ export class TaskPlannerService implements OnModuleInit {
       const n = awaitNodeId ? await this.topology.findNodeById(awaitNodeId) : null;
       if (n) message = { pose: { position: { x: n.x, y: n.y, z: 0 }, orientation: { x: 0, y: 0, z: 0, w: 1 } } };
     }
+    // bot_num 바인딩 — MarkerTrace 등 goal 에 bot_num 필드가 있으면 실행 로봇(tb3_0N)의 번호로 채운다.
+    const tb3n = robotId.match(/^tb3_0?(\d+)$/);
+    if (tb3n && message && typeof message === 'object' && 'bot_num' in message) {
+      message = { ...(message as Record<string, unknown>), bot_num: Number(tb3n[1]) };
+    }
     return {
       kind,
-      topicName:   kind === 'topic' ? bind(step.topicName) : `/${robotId}/${suffix}`,
+      topicName:   kind === 'topic' ? bind(step.topicName) : this.scopeStepTopic(bind(step.topicName), robotId),
       messageType: step.messageType,
       message,
       awaitNodeId,
@@ -300,6 +305,15 @@ export class TaskPlannerService implements OnModuleInit {
       endField:    step.endField ?? '',
       endValue:    step.endValue ?? null,
     };
+  }
+
+  // 스텝 topicName 로봇 스코핑 — '/robot/…' 플레이스홀더 세그먼트만 실행 로봇으로 치환한다.
+  // 이미 절대 전역 액션/서비스명(예: /marker_trace)은 그대로 유지 → 전역 액션 스텝 지원.
+  private scopeStepTopic(topic: string, robotId: string): string {
+    const ph = topic.match(/^\/robot\/(.+)$/);
+    if (ph) return `/${robotId}/${ph[1]}`;   // 플레이스홀더 → 실제 로봇
+    if (topic.startsWith('/')) return topic;  // 절대 전역명 유지
+    return `/${robotId}/${topic}`;            // 상대명 → 로봇 스코핑
   }
 
   // 경로 해석: 목적지 노드 → 출발 노드(robot.lastNode 우선, 없으면 AMCL 최근접) → A* 경로(pathQueue).

@@ -22,10 +22,10 @@ export function rankRowLabel(r: RankedRobot): ReactNode {
 }
 
 // 추천 랭킹 → 드롭다운 옵션(추천 순서). 공급은 omx만, 그 외 omx 제외. 오프라인은 비활성.
-// 가상 테스트봇은 운영 배정 선택지에서 제외한다.
-export function rankingToOptions(ranking: RankedRobot[], isSupply: boolean): Opt[] {
+// 가상 테스트봇은 기본적으로 운영 배정 선택지에서 제외 — showTestBots=true면 포함(헤더 토글).
+export function rankingToOptions(ranking: RankedRobot[], isSupply: boolean, showTestBots = false): Opt[] {
   return ranking
-    .filter((r) => !isTestBot(r.robotId) && (isSupply ? r.robotId.startsWith("omx") : !r.robotId.startsWith("omx")))
+    .filter((r) => (showTestBots || !isTestBot(r.robotId)) && (isSupply ? r.robotId.startsWith("omx") : !r.robotId.startsWith("omx")))
     .map((r) => ({ value: r.robotId, label: rankRowLabel(r), selectedLabel: `#${r.rank} ${r.robotId}`, disabled: !r.online || !!r.error }));
 }
 

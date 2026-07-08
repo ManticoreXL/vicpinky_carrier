@@ -41,6 +41,7 @@ export class VictimPhotoService implements OnModuleInit {
   private readonly ignored = new Set<string>(); // clear()로 비운 파일 — 같은 파일 재동기화 방지(세션 한정)
   private syncing = false;
   private debounce: NodeJS.Timeout | null = null;
+  private lastFailMsg: string | null = null; // 동일 실패 반복 시 WARN 스팸 억제(첫 1회만 WARN)
 
   constructor(
     private readonly ros: RosService,
@@ -121,9 +122,15 @@ export class VictimPhotoService implements OnModuleInit {
     this.syncing = true;
     const ssh = new NodeSSH();
     try {
-      const host = await this.resolveHost();
+      const { host, online } = await this.resolveTarget();
       if (!host) {
+        // 접속 대상 미상 — 조용히 건너뜀(폴링 스팸 방지). 설정은 ROBOT_SSH_HOST(또는 로봇 ip).
         return { ok: false, fetched: 0, total: this.photos.size, message: 'SSH 호스트 미상 — ROBOT_SSH_HOST(또는 로봇 ip) 설정 필요' };
+      }
+      if (!online) {
+        // 정찰 로봇 오프라인 → SSH는 반드시 8초 뒤 handshake 타임아웃. 시도하지 않고 건너뛴다.
+        this.logger.debug(`[victim-photo] 정찰 로봇(${SCOUT}) 오프라인 — 사진 동기화 건너뜀`);
+        return { ok: false, fetched: 0, total: this.photos.size, message: '정찰 로봇 오프라인 — 동기화 건너뜀' };
       }
       await ssh.connect({ host, port: SSH_PORT, username: SSH_USER, password: SSH_PASS, readyTimeout: 8000 });
       const ls = await ssh.execCommand(`ls -1 ${REMOTE_DIR}/victim_*.jpg 2>/dev/null`);
@@ -141,10 +148,15 @@ export class VictimPhotoService implements OnModuleInit {
         }
       }
       if (fetched) this.logger.log(`[victim-photo] 동기화 완료 — 새 사진 ${fetched}장 (총 ${this.photos.size})`);
+      this.lastFailMsg = null; // 성공 시 경고 재무장(다음 실패는 다시 1회 WARN)
       return { ok: true, fetched, total: this.photos.size };
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      this.logger.warn(`[victim-photo] 동기화 실패: ${message}`);
+      // 로봇 SSH 미기동/포트 차단 등으로 매 폴링(7초)마다 같은 실패가 반복될 수 있다.
+      // 첫 발생만 WARN으로 알리고, 동일 메시지 반복은 debug로 낮춰 스팸을 막는다.
+      if (message === this.lastFailMsg) this.logger.debug(`[victim-photo] 동기화 실패(반복): ${message}`);
+      else this.logger.warn(`[victim-photo] 동기화 실패: ${message}`);
+      this.lastFailMsg = message;
       return { ok: false, fetched: 0, total: this.photos.size, message };
     } finally {
       ssh.dispose();
@@ -152,11 +164,13 @@ export class VictimPhotoService implements OnModuleInit {
     }
   }
 
-  // SSH 접속 호스트 — env 우선, 없으면 정찰 로봇 DB의 ip.
-  private async resolveHost(): Promise<string> {
-    if (SSH_HOST) return SSH_HOST;
+  // SSH 접속 대상 — env(ROBOT_SSH_HOST) 우선, 없으면 정찰 로봇 DB의 ip.
+  //  online: 오프라인 로봇에 대한 무의미한 SSH 시도(→ 8초 handshake 타임아웃)를 막기 위해 함께 반환.
+  //  env로 호스트를 명시하면 DB 상태와 무관하게 시도한다(online=true).
+  private async resolveTarget(): Promise<{ host: string; online: boolean }> {
+    if (SSH_HOST) return { host: SSH_HOST, online: true };
     const r = await this.robots.findById(SCOUT);
     const ip = r?.ip;
-    return ip && ip !== 'auto' ? ip : '';
+    return { host: ip && ip !== 'auto' ? ip : '', online: r?.online !== false };
   }
 }

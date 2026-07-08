@@ -49,7 +49,7 @@ export interface ActionResultMsg {
   goalId: string;
   actionName: string;
   result: Record<string, unknown>;
-  status: number;              // 3=succeeded 4=aborted 5=canceled
+  status: number;              // ROS2 action_msgs/GoalStatus — 4=succeeded 5=canceled 6=aborted (3=canceling)
 }
 
 // ── 터틀봇 토픽 헬퍼 ────────────────────────────────────────────────────────

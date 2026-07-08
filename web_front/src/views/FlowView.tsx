@@ -87,7 +87,7 @@ function WorkflowChart() {
         <div className="flex flex-col items-center">
           <Arrow label="실 TB3 (tb3*)" />
           <Node label="navigate_to_pose 액션 result" cls={CLS.process} wide
-                impl="onNavResult: status===3 도착(SUCCEEDED) / ===4 실패(ABORTED) — amcl 임계 미사용" />
+                impl="onNavResult: status===4 도착(SUCCEEDED) / ===6 실패(ABORTED) — ROS2 GoalStatus, amcl 임계 미사용" />
         </div>
         <div className="flex flex-col items-center">
           <Arrow label="TEST / 기타 봇" />

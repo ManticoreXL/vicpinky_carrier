@@ -3,7 +3,8 @@ import type { Socket } from "socket.io-client";
 import { RosMessage, FmsTask, TaskManagerAlert, RobotInfo } from "../hooks/useNestSocket";
 import NavMapCanvas from "../components/NavMapCanvas";
 import { type RobotPos } from "../components/TopologyMapView";
-import { OPERATIONAL_ROBOTS } from "../robots";
+import { ROBOTS, OPERATIONAL_ROBOTS } from "../robots";
+import { useTestBots } from "../context/testbots";
 
 interface Props {
  rosMessages: Record<string, RosMessage>;
@@ -29,6 +30,7 @@ export default function FmsView({
  robotStatuses = {},
 }: Props) {
  // 맵 선택/배정과 맵별 마커 필터링은 NavMapCanvas가 자체적으로 담당한다(단일 소스).
+ const { showTestBots } = useTestBots();
 
  const activePaths = useMemo(() =>
   fmsTasks
@@ -42,10 +44,10 @@ export default function FmsView({
  [fmsTasks]);
 
  // 로봇 좌표 — 라이브 텔레메트리(amcl→odom) 우선, 없으면 DB pose 폴백.
- // 운영 지도에는 가상 테스트봇을 표시하지 않는다(OPERATIONAL_ROBOTS = 테스트봇 제외).
+ // 기본은 테스트봇 제외(OPERATIONAL_ROBOTS). 헤더 토글 ON이면 가상 테스트봇도 지도에 표시.
  const robotPositions = useMemo(() => {
  const result: Record<string, RobotPos> = {};
- OPERATIONAL_ROBOTS.forEach(r => {
+ (showTestBots ? ROBOTS : OPERATIONAL_ROBOTS).forEach(r => {
   // AMCL 우선 (맵 프레임 — 좌표계 일치)
   const amcl = rosMessages[`/${r.id}/amcl_pose`]?.data as any;
   const amclPos = amcl?.pose?.pose?.position;
@@ -61,7 +63,7 @@ export default function FmsView({
   }
  });
  return result;
- }, [rosMessages, robots]);
+ }, [rosMessages, robots, showTestBots]);
 
  // 맵별 필터링은 NavMapCanvas가 선택된 맵(selectedMap)+배정(assignments) 기준으로 단일 수행한다.
  // (여기서 mapId로 또 거르면 캔버스의 선택 맵과 어긋나 다른 맵 마커가 남거나 빠진다)

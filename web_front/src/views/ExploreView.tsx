@@ -10,6 +10,8 @@ import type { RosMessage, ActiveGoals, MapTimestamps, MapInfos, FmsTask, RobotIn
 import type { Socket } from "socket.io-client";
 
 import { BACKEND_URL as BACKEND } from "../config";
+import { TEST_BOT_IDS } from "../robots";
+import { useTestBots } from "../context/testbots";
 
 // 정찰은 이제 tb3_01 단독 운용 (맵·조난자 보고 모두 tb3_01에서)
 const TB3_IDS = ["tb3_01"] as const;
@@ -81,6 +83,9 @@ export default function ExploreView({
  rosMessages, mapTimestamps, mapInfos, socket,
 }: Props) {
  const [selectedBot, setSelectedBot] = useState<string>("tb3_01");
+ const { showTestBots } = useTestBots();
+ // 헤더 토글 ON이면 정찰 배치 목록에 가상 테스트봇도 포함.
+ const scoutIds = useMemo(() => showTestBots ? [...TB3_IDS, ...TEST_BOT_IDS] : [...TB3_IDS], [showTestBots]);
  const [events, setEvents] = useState<ExploreEvent[]>([]);
  const [missionStart] = useState(Date.now());
  const [elapsed, setElapsed] = useState(0);
@@ -216,9 +221,9 @@ export default function ExploreView({
  }, [selectedBot]);
 
  useEffect(() => {
- TB3_IDS.forEach((id) => {
+ scoutIds.forEach((id) => {
  const snap = getBotSnapshot(id, rosMessages);
- const label = TB3_LABELS[id];
+ const label = TB3_LABELS[id] ?? id;
  if (prevOnline.current[id] !== undefined && prevOnline.current[id] !== snap.online) {
  pushEvent(id, snap.online ? `${label} Uplink Restored` : `${label} Uplink Lost`, snap.online ? "info" : "warning");
  }
@@ -228,10 +233,10 @@ export default function ExploreView({
  }
  prevDetected.current[id] = snap.detected;
  });
- }, [rosMessages, pushEvent]);
+ }, [rosMessages, pushEvent, scoutIds]);
 
- const botSnaps = Object.fromEntries(TB3_IDS.map(id => [id, getBotSnapshot(id, rosMessages)]));
- const onlineCount = TB3_IDS.filter(id => botSnaps[id].online).length;
+ const botSnaps = Object.fromEntries(scoutIds.map(id => [id, getBotSnapshot(id, rosMessages)]));
+ const onlineCount = scoutIds.filter(id => botSnaps[id].online).length;
 
  return (
  <div className="flex flex-col h-full bg-transparent text-[#521C0D] overflow-hidden relative">
@@ -250,7 +255,7 @@ export default function ExploreView({
  </div>
 
  <div className="flex items-center gap-10">
- <StatChip label="정찰 로봇" value={`${onlineCount}/${TB3_IDS.length}`} color={onlineCount > 0 ? "text-white/90" : "text-white/90"} />
+ <StatChip label="정찰 로봇" value={`${onlineCount}/${scoutIds.length}`} color={onlineCount > 0 ? "text-white/90" : "text-white/90"} />
  <StatChip label="조난자" value={String(victims.length)} color={victims.length > 0 ? "text-rose-400" : "text-white/[0.4]"} />
  <StatChip label="경보" value={String(alertCount)} color={alertCount > 0 ? "text-white/90" : "text-white/[0.4]"} />
  {alertCount > 0 && (
@@ -265,9 +270,9 @@ export default function ExploreView({
  <aside className="w-full md:w-64 flex-none flex md:flex-col bg-[#FFCE99]/32 backdrop-blur-3xl border-r border-white/[0.1] overflow-y-auto">
  <PanelHeader icon="⬡" label="정찰 로봇" />
  <div className="p-4 space-y-3">
- {TB3_IDS.map(id => (
+ {scoutIds.map(id => (
  <DeploymentCard
- key={id} id={id} label={TB3_LABELS[id]} type="SCOUT"
+ key={id} id={id} label={TB3_LABELS[id] ?? id} type="SCOUT"
  online={botSnaps[id].online} isSelected={selectedBot === id}
  onClick={() => setSelectedBot(id)}
  telemetry={botSnaps[id].online ? `${botSnaps[id].batPct}% 전력` : "연결 끊김"}

@@ -17,6 +17,7 @@ import type { RobotCache } from '../fms-shared/task-manager.types';
 import { TaskExecutionService } from './task-execution.service';
 import { Quaternion } from '../geometry/pose';
 import { OFFLINE_AFTER_MS, FALL_THRESH_RAD, CHARGE_TARGET_PCT, LOW_BATTERY_PCT } from '../fms-shared/task-manager.constants';
+import { PathfindingService } from '../pathfinding/pathfinding.service';
 import { normalizeBatteryPct } from '../common/battery';
 
 // 명령(다운링크) 토픽 — 로봇 생존 신호가 아님(프론트 명령 루프백 제외)
@@ -48,6 +49,7 @@ export class RobotMonitorService implements OnModuleInit {
     private readonly nodeLock:     NodeLockService,
     private readonly rosService:   RosService,
     private readonly exec:         TaskExecutionService,
+    private readonly pathfinding:  PathfindingService,
   ) {}
 
   // ── ROS 토픽 → 로봇 상태 라우팅 ──────────────────────────────────────────────
@@ -108,6 +110,7 @@ export class RobotMonitorService implements OnModuleInit {
       this.events.emit(Alert.fall(robotId, `${robotId} 전복 감지 — roll ${(q.roll * 180 / Math.PI).toFixed(0)}° / pitch ${(q.pitch * 180 / Math.PI).toFixed(0)}° → ERROR`));
       this.logger.warn(`[전복] ${robotId} ERROR 전환`);
       void this.handleErrorTransition(robotId); // 보유 태스크 글로벌 큐 반납(진행분은 FAILED+재등록)
+      void this.autoCloseFallNode(robotId);     // 전복 위치 노드 자동 폐쇄 — 다른 로봇이 그 위험 지점 우회
       return;
     }
     void this.robotService.findById(robotId).then((robot) => {
@@ -117,6 +120,27 @@ export class RobotMonitorService implements OnModuleInit {
       this.lastFallAlert.delete(robotId);
       this.logger.log(`[전복복구] ${robotId} 자세 복귀 → IDLE`);
     });
+  }
+
+  // ── 전복 위치 자동 폐쇄 ───────────────────────────────────────────────────────
+  // 주행 중 IMU 이상(전복)으로 ERROR가 되면 로봇이 있던 위치의 노드를 자동 폐쇄(수동 폐쇄와 동일 isLocked).
+  // → 다른 로봇의 경로계획(findPath)이 그 위험 지점을 자연히 우회한다. 해제는 관리탭에서 수동으로.
+  private async autoCloseFallNode(robotId: string): Promise<void> {
+    try {
+      const robot = await this.robotService.findById(robotId);
+      const cache = this.robotState.getCache(robotId);
+      let nodeId: string | null = null;
+      if (cache?.posX != null && cache?.posY != null) {
+        nodeId = await this.pathfinding.findNearestNodeToPosition(cache.posX, cache.posY, robot?.location ?? undefined);
+      }
+      nodeId = nodeId ?? robot?.lastNode ?? null; // amcl 위치 없으면 마지막 도착 노드로 폴백
+      if (!nodeId) { this.logger.warn(`[전복폐쇄] ${robotId} 위치 노드 판별 실패 — 폐쇄 생략`); return; }
+      await this.nodeLock.lockNode(nodeId, true); // isLocked=true + node_lock_changed 브로드캐스트 (수동 폐쇄와 동일 경로)
+      this.events.emit(Alert.info(`${robotId} 전복 위치 '${nodeId}' 자동 폐쇄 — 다른 로봇 우회 (관리탭에서 수동 해제)`, { robotId }));
+      this.logger.warn(`[전복폐쇄] ${robotId} → 노드 '${nodeId}' 자동 잠금`);
+    } catch (e) {
+      this.logger.error(`[전복폐쇄] ${robotId} 자동 폐쇄 오류`, e as Error);
+    }
   }
 
   // ── 로봇 ERROR 전환 시 보유 태스크 글로벌 큐 반납 ────────────────────────────

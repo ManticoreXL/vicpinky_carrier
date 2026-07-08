@@ -375,7 +375,7 @@ export class TaskExecutionService implements OnModuleInit {
     if (!task || isTerminalStatus(task.status)) return;
     if (this.robotTasks.getActive(robotId) !== taskId) return;
     if (task.status === TaskStatus.SUSPENDED) return;
-    if (res.status === 4 || res.status === 5) { // ABORTED/CANCELED → 실패
+    if (res.status === 6 || res.status === 5) { // ABORTED(6)/CANCELED(5) → 실패 (ROS2 GoalStatus, 성공=4)
       await this.failTask(robotId, taskId, `액션 실패 (${step.topicName}, status=${res.status})`);
       return;
     }
@@ -497,13 +497,13 @@ export class TaskExecutionService implements OnModuleInit {
     if (this.robotTasks.getActive(robotId) !== taskId) return; // 취소/선점됨
     if (task.status === TaskStatus.SUSPENDED) return;          // 일시정지 — 보류(재개 대기)
 
-    if (res.status === 4) { // ABORTED — nav2 실패(장애물/경로없음/타임아웃) → 태스크 FAILED
+    if (res.status === 6) { // ABORTED(ROS2 GoalStatus=6) — nav2 실패(장애물/경로없음/타임아웃) → 태스크 FAILED
       await this.failTask(robotId, taskId, `navigate_to_pose ABORTED${nodeId ? ` @ ${nodeId}` : ''}`);
       return;
     }
-    if (res.status !== 3) return; // CANCELED(5)/기타 — 무시(의도된 취소 등)
+    if (res.status !== 4) return; // SUCCEEDED=4 만 도착 처리. CANCELING(3)/CANCELED(5)/기타 무시.
 
-    // SUCCEEDED(3) — 노드 도착
+    // SUCCEEDED(4) — 노드 도착
     if (!nodeId) { await this.advance(taskId); return; }
     const node = await this.topology.findNodeById(nodeId);
     if (!node) { this.logger.warn(`[nav] ${robotId} 도착 노드 "${nodeId}" 없음 — 다음 스텝`); await this.advance(taskId); return; }
