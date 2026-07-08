@@ -55,6 +55,7 @@ def generate_launch_description():
     rear_width = LaunchConfiguration('rear_width')
     rear_left = LaunchConfiguration('rear_left')
     rear_right = LaunchConfiguration('rear_right')
+    show_rear_marker = LaunchConfiguration('show_rear_marker')
 
     pkg_share = FindPackageShare('turtlebot3_explorer')
     # plain(네임스페이스 없는) 설정 파일
@@ -191,6 +192,7 @@ def generate_launch_description():
                     'rear_width': ParameterValue(rear_width, value_type=float),
                     'rear_left': ParameterValue(rear_left, value_type=float),
                     'rear_right': ParameterValue(rear_right, value_type=float),
+                    'show_rear_marker': ParameterValue(show_rear_marker, value_type=bool),
                 }],
             ),
         ],
@@ -217,6 +219,10 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'rear_right', default_value='-1.0',
             description='금지박스를 오른쪽으로 막을 거리(m). 음수면 미지정(rear_width 절반 사용).'),
+        DeclareLaunchArgument(
+            'show_rear_marker', default_value='true',
+            description='출발선 뒤 금지박스를 RViz에 표시할지(기능과 무관, 시각화만). '
+                        '영상 촬영 등에서 숨기려면 false.'),
         cam_mount,         ### [추가]
         cam_optical,       ### [추가]
         victim_mapper,     ### [변경] (PC: 투영/확정/마커/CSV)
