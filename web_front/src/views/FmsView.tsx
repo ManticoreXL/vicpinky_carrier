@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import type { Socket } from "socket.io-client";
 import { RosMessage, FmsTask, TaskManagerAlert, RobotInfo } from "../hooks/useNestSocket";
 import NavMapCanvas from "../components/NavMapCanvas";
+import RecognizedCaption from "../components/RecognizedText";
 import { type RobotPos } from "../components/TopologyMapView";
 import { ROBOTS, OPERATIONAL_ROBOTS } from "../robots";
 import { useTestBots } from "../context/testbots";
@@ -72,12 +73,18 @@ export default function FmsView({
  <div className="flex flex-col h-full bg-transparent overflow-hidden">
 
  {/* ── 지도 (전체화면) — 상단 바/토글/로봇목록 모두 제거 ── */}
- <div className="flex-1 flex flex-col overflow-hidden bg-[#FFCE99]/32">
+ <div className="flex-1 flex flex-col overflow-hidden bg-[#FFCE99]/32 relative">
  <NavMapCanvas
  rosMessages={rosMessages} socket={socket} onSetInitialPose={emitNavInitialPose} onSetHome={setRobotHome}
  activePaths={activePaths} robotPositions={robotPositions} robots={robots} lockedNodes={lockedNodes}
  onNodeLockToggle={n => emitNodeLock(n, !lockedNodes.has(n))}
  />
+ {/* ── 음성 인식 텍스트 오버레이 — 각 터틀봇 최신 텍스트(하나씩) ── */}
+ <div className="absolute bottom-3 left-3 z-10 flex flex-col items-start gap-1.5 max-w-[45%] pointer-events-none">
+ {ROBOTS.filter(r => r.type === "tb3").map(r => (
+ <RecognizedCaption key={r.id} robotId={r.id} rosMessages={rosMessages} showRobot />
+ ))}
+ </div>
  </div>
  </div>
  );

@@ -69,7 +69,7 @@ export function signalWaitStep(robotId: string, awaitTopic: string, awaitField =
   return { kind: 'wait', topicName: `/${robotId}/_wait`, messageType: '', message: {}, awaitNodeId: null, awaitKind: 'signal', waitMs: 0, awaitTopic, awaitField, awaitValue };
 }
 
-function goalPoseStep(robotId: string, n: PlanNode): RosStep {
+function goalPoseStep(robotId: string, n: PlanNode, yaw: number): RosStep {
   const now = Date.now() / 1000;
   return {
     kind: 'move',
@@ -77,14 +77,15 @@ function goalPoseStep(robotId: string, n: PlanNode): RosStep {
     messageType: 'geometry_msgs/PoseStamped',
     message: {
       header: { stamp: { sec: Math.floor(now), nanosec: 0 }, frame_id: 'map' },
-      pose: { position: { x: n.x, y: n.y, z: 0 }, orientation: Quaternion.fromYaw(n.yaw ?? 0).toObject() },
+      // 목표 방향(yaw)은 노드 저장값을 강제하지 않고 이동(진입) 방향으로 준다 — 위치만 따라가고 방향은 강제하지 않음.
+      pose: { position: { x: n.x, y: n.y, z: 0 }, orientation: Quaternion.fromYaw(yaw).toObject() },
     },
     awaitNodeId: n.node_id,
     awaitKind: 'arrival',
   };
 }
 
-export function buildRosPlan(robotId: string, type: TaskType, pathNodes: PlanNode[]): RosStep[] {
+export function buildRosPlan(robotId: string, type: TaskType, pathNodes: PlanNode[], fromXY?: { x: number; y: number }): RosStep[] {
   if (type === TaskType.SUPPLY) {
     return [{
       kind: 'supply',
@@ -95,7 +96,16 @@ export function buildRosPlan(robotId: string, type: TaskType, pathNodes: PlanNod
       awaitKind: 'vision_loaded',
     }];
   }
-  return pathNodes.map((n) => goalPoseStep(robotId, n));
+  // 각 노드의 목표 방향 = 이동 방향(이전 지점 → 현재 노드). 저장된 노드 yaw 는 쓰지 않는다.
+  // 첫 노드는 로봇의 현재 위치(fromXY)를 기준으로, 기준이 없으면 다음 노드 방향으로 대체.
+  return pathNodes.map((n, i) => {
+    const prev = i > 0 ? pathNodes[i - 1] : fromXY;
+    const next = pathNodes[i + 1];
+    let yaw = 0;
+    if (prev) yaw = Math.atan2(n.y - prev.y, n.x - prev.x);
+    else if (next) yaw = Math.atan2(next.y - n.y, next.x - n.x);
+    return goalPoseStep(robotId, n, yaw);
+  });
 }
 
 /**

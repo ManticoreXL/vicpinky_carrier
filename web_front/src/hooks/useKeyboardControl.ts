@@ -14,11 +14,13 @@ interface Props {
  angularSpeed?: number;
 }
 
+// 물리 키코드(e.code)로 매핑 — 한글 IME/대소문자/키보드 레이아웃과 무관하게 W/A/S/D가 잡힌다.
+// (e.key 로 매칭하면 한글 입력 모드에서 'ㅈ'/'Process' 등이 들어와 매칭 실패 → 0만 발행됨)
 const KEY_MAP: Record<string, { linear: number; angular: number }> = {
- w: { linear: 1.0, angular: 0.0 },
- s: { linear: -1.0, angular: 0.0 },
- a: { linear: 0.0, angular: 1.0 },
- d: { linear: 0.0, angular: -1.0 },
+ KeyW: { linear: 1.0, angular: 0.0 },
+ KeyS: { linear: -1.0, angular: 0.0 },
+ KeyA: { linear: 0.0, angular: 1.0 },
+ KeyD: { linear: 0.0, angular: -1.0 },
  ArrowUp: { linear: 1.0, angular: 0.0 },
  ArrowDown: { linear: -1.0, angular: 0.0 },
  ArrowLeft: { linear: 0.0, angular: 1.0 },
@@ -62,14 +64,14 @@ export function useKeyboardControl({
  }
 
  const onKeyDown = (e: KeyboardEvent) => {
- if (KEY_MAP[e.key]) {
+ if (KEY_MAP[e.code]) {
  e.preventDefault();
- pressedKeys.current.add(e.key);
+ pressedKeys.current.add(e.code);
  }
  };
 
  const onKeyUp = (e: KeyboardEvent) => {
- pressedKeys.current.delete(e.key);
+ pressedKeys.current.delete(e.code);
  // 모든 키 뗐을 때 정지
  if (pressedKeys.current.size === 0) {
  publish({ botId, linear: 0, angular: 0 });

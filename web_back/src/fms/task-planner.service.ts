@@ -238,7 +238,9 @@ export class TaskPlannerService implements OnModuleInit {
       const n = await this.topology.findNodeById(id);
       if (n) pathNodes.push({ node_id: id, x: n.x, y: n.y, yaw: n.yaw });
     }
-    const plan = buildRosPlan(robotId, task.type, pathNodes);
+    // 첫 노드의 이동 방향 기준점 — 로봇의 현재 노드 좌표(없으면 undefined → 다음 노드 방향으로 대체).
+    const startN = robot.lastNode ? await this.topology.findNodeById(robot.lastNode) : null;
+    const plan = buildRosPlan(robotId, task.type, pathNodes, startN ? { x: startN.x, y: startN.y } : undefined);
 
     this.robotTasks.setActive(robotId, taskId);
     await this.taskStatus.assignToRobot(taskId, robotId, pathQueue, this.events.server!);

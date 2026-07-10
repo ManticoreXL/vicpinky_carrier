@@ -10,6 +10,7 @@ import {
 } from "./shared";
 import { useKeyboardControl } from "../../hooks/useKeyboardControl";
 import ActionPanel from "./ActionPanel";
+import RecognizedCaption from "../RecognizedText";
 import { usePersistedFlag } from "../../hooks/usePersistedFlag";
 import { quatToYaw, quatToRoll, quatToPitch, r2d, f } from "../../utils/quaternion";
 
@@ -136,7 +137,7 @@ export default function TurtlebotPanel({
 
  // ── 키보드 조종 ──────────────────────────────────────────────────────────
  const handleCmdVel = useCallback((payload: CmdVelPayload) => emitCmdVel(payload), [emitCmdVel]);
- useKeyboardControl({ botId, enabled: keyboardActive, publish: handleCmdVel, linearSpeed: 0.03, angularSpeed: 1.0 });
+ useKeyboardControl({ botId, enabled: keyboardActive, publish: handleCmdVel, linearSpeed: 0.2, angularSpeed: 1.0 });
 
  useEffect(() => {
  const onEsc = (e: KeyboardEvent) => { if (e.key === "Escape") setKeyboardActive(false); };
@@ -214,6 +215,9 @@ export default function TurtlebotPanel({
  <span className="text-xs font-semibold text-red-600">오프라인 — 센서 데이터 수신 없음</span>
  </div>
  )}
+
+ {/* ── 음성 인식 텍스트 (최신 한 줄) ─────────────────────────────── */}
+ <RecognizedCaption robotId={botId} rosMessages={rosMessages} className="mb-4" />
 
  {/* ── 센서 그리드 (2열) ─────────────────────────────────────────── */}
  <div className="grid grid-cols-2 gap-4">

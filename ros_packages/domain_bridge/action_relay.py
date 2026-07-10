@@ -35,7 +35,7 @@ from rclpy.executors import MultiThreadedExecutor
 
 from action_msgs.msg import GoalStatus
 
-from vicpinky_carrier_interfaces.action import RampControl
+from vicpinky_carrier_interfaces.action import RampControl, MarkerTrace
 from nav2_msgs.action import NavigateToPose
 from turtlebot_state_msgs.srv import LineTrace, Deploy
 from std_srvs.srv import Trigger
@@ -51,7 +51,9 @@ ACTION_RELAYS = [
     {'hub_name': '/tb3_02/navigate_to_pose', 'robot_name': '/navigate_to_pose', 'type': NavigateToPose, 'hub_domain': 49, 'robot_domain': 42},
     {'hub_name': '/tb3_03/navigate_to_pose', 'robot_name': '/navigate_to_pose', 'type': NavigateToPose, 'hub_domain': 49, 'robot_domain': 43},
     {'hub_name': '/tb3_04/navigate_to_pose', 'robot_name': '/navigate_to_pose', 'type': NavigateToPose, 'hub_domain': 49, 'robot_domain': 44},
-    # {'hub_name': '/vicpinky/marker_trace', 'robot_name': '/marker_trace', 'type': MarkerTrace, 'hub_domain': 49, 'robot_domain': 40},
+    # 마커 추종 — vicpinky(40) /marker_trace 실서버 ↔ 허브(49) 프록시. ramp_control 과 동일하게 리맵 없음
+    # (프론트 MarkerTrace.tsx 와 로봇 서버 모두 네임스페이스 없는 /marker_trace 사용).
+    {'hub_name': '/marker_trace',            'robot_name': '/marker_trace',     'type': MarkerTrace,    'hub_domain': 49, 'robot_domain': 40},
 ]
 
 # 중계할 서비스 목록 — domain_bridge_*.yaml 의 (동작하지 않는) services: 섹션을 대체한다. 필드 구성 동일.

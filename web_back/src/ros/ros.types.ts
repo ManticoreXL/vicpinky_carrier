@@ -64,6 +64,7 @@ function tb3Topics(id: string): RosTopicConfig[] {
     { name: `/${id}/scan`,      messageType: 'sensor_msgs/LaserScan' },
     { name: `/${id}/amcl_pose`, messageType: 'geometry_msgs/PoseWithCovarianceStamped' },
     { name: `/${id}/plan`,      messageType: 'nav_msgs/Path' },
+    { name: `/${id}/recognized_text`, messageType: 'std_msgs/String' }, // STT 음성인식 텍스트 (제어/플릿 캡션 표시)
   ];
 }
 

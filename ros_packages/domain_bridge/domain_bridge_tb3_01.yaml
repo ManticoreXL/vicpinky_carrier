@@ -8,17 +8,27 @@ topics:
     to_domain: 49
     remap: /tb3_01/odom
 
-  # /tf: # 로봇의 실시간 부드러운 움직임 표시 (필수)
-  #   type: tf2_msgs/msg/TFMessage
-  #   from_domain: 41
-  #   to_domain: 49
-  #   remap: /tb3_01/tf
+  /tf: # 로봇 실시간 자세 — best_effort 중계 (로봇은 reliable 발행 유지, 브리지가 best_effort로 sub·재발행)
+    type: tf2_msgs/msg/TFMessage
+    from_domain: 41
+    to_domain: 49
+    remap: /tb3_01/tf
+    qos:
+      reliability: best_effort
+      durability: volatile
+      history: keep_last
+      depth: 100
 
-  # /tf_static:
-  #   type: tf2_msgs/msg/TFMessage
-  #   from_domain: 41
-  #   to_domain: 49
-  #   remap: /tb3_01/tf_static
+  /tf_static:
+    type: tf2_msgs/msg/TFMessage
+    from_domain: 41
+    to_domain: 49
+    remap: /tb3_01/tf_static
+    qos:
+      durability: transient_local
+      reliability: reliable
+      history: keep_last
+      depth: 1
 
   /amcl_pose: # 지도 위 로봇의 현재 정확한 좌표 (필수)
     type: geometry_msgs/msg/PoseWithCovarianceStamped
@@ -54,6 +64,17 @@ topics:
       reliability: reliable
       history: keep_last
       depth: 1
+
+  /recognized_text:
+    type: std_msgs/msg/String
+    from_domain: 41
+    to_domain: 49
+    remap: /tb3_01/recognized_text
+    qos:
+      reliability: reliable  
+      durability: volatile
+      history: keep_last
+      depth: 10
 
   /victim/report: # 조난자 좌표 보고 (로봇 41 → 허브 49, 동일 이름)
     type: std_msgs/msg/String
@@ -95,6 +116,12 @@ topics:
     remap: /headlight_cmd
 
 services:
+
+  /tb3_01/deploy:                    # 허브(49) 발행 → 로봇(43)에서 /deploy 서비스로 중계
+    type: turtlebot_state_msgs/srv/Deploy
+    from_domain: 49
+    to_domain: 41
+    remap: /deploy
 
   # ── DOWNLINK 서비스: 관제탑(49) → 로봇(41) ──
   /tb3_01/line_trace:                 # 허브(49) 발행 → 로봇(41) /line_trace 서비스로 중계 (라인트레이서 on/off)

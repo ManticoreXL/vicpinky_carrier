@@ -8,7 +8,7 @@ topics:
     to_domain: 49
     remap: /tb3_02/odom
 
-  # /tf: # 로봇의 실시간 부드러운 움직임 표시 (필수)
+  # /tf: # 로봇 실시간 자세 (HZ 큼 — 측정용)
   #   type: tf2_msgs/msg/TFMessage
   #   from_domain: 42
   #   to_domain: 49
@@ -19,6 +19,11 @@ topics:
   #   from_domain: 42
   #   to_domain: 49
   #   remap: /tb3_02/tf_static
+  #   qos:
+  #     durability: transient_local
+  #     reliability: reliable
+  #     history: keep_last
+  #     depth: 1
 
   /amcl_pose: # 지도 위 로봇의 현재 정확한 좌표 (필수)
     type: geometry_msgs/msg/PoseWithCovarianceStamped
@@ -43,6 +48,17 @@ topics:
     from_domain: 42
     to_domain: 49
     remap: /tb3_02/imu
+
+  /recognized_text:
+    type: std_msgs/msg/String
+    from_domain: 42
+    to_domain: 49
+    remap: /tb3_02/recognized_text
+    qos:
+      reliability: reliable  
+      durability: volatile
+      history: keep_last
+      depth: 10
 
   # ── DOWNLINK: 관제탑(49)에서 로봇(42)으로 명령 전송 ──
   /tb3_02/cmd_vel: # 비상 정지 및 조이스틱 수동 제어용

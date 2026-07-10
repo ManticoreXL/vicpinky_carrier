@@ -53,6 +53,27 @@ topics:
     qos:
       reliability: reliable
 
+  /tb3_01/cmd_vel:             
+    type: geometry_msgs/msg/TwistStamped
+    from_domain: 40
+    to_domain: 41
+    remap: /cmd_vel
+  /tb3_02/cmd_vel:             
+    type: geometry_msgs/msg/TwistStamped
+    from_domain: 40
+    to_domain: 42
+    remap: /cmd_vel
+  /tb3_03/cmd_vel:             
+    type: geometry_msgs/msg/TwistStamped
+    from_domain: 40
+    to_domain: 43
+    remap: /cmd_vel
+  /tb3_04/cmd_vel:             
+    type: geometry_msgs/msg/TwistStamped
+    from_domain: 40
+    to_domain: 44
+    remap: /cmd_vel
+
 services:
   /vicpinky/run_diagnosis:
     type: std_srvs/srv/Trigger
@@ -64,3 +85,8 @@ actions:
     type: vicpinky_carrier_interfaces/action/RampControl
     from_domain: 49     # 허브(클라이언트) — navigate_to_pose 와 동일 방향
     to_domain: 40       # 로봇(서버, 네임스페이스 없이 /ramp_control 서버)
+
+  /marker_trace:        # 마커 추종 — 터틀봇 번호(bot_num)+동작(Park/Load) 전달
+    type: vicpinky_carrier_interfaces/action/MarkerTrace
+    from_domain: 49     # 허브(클라이언트) — 프론트 MarkerTrace.tsx 가 /marker_trace 로 goal 전송
+    to_domain: 40       # 로봇(서버, 네임스페이스 없이 /marker_trace 서버)
