@@ -19,8 +19,35 @@ class RampControlServer(Node):
     def __init__(self):
         super().__init__("ramp_controller")
 
+        # self.declare_parameter('camera_rotate_ccw90', True)  # 카메라 90도 반시계 보정 on/off
+        # self.parking_id = self.get_parameter('parking_id').value
+
+        self.declare_parameter('closed_angle', 2020)
+        self.declare_parameter('open_angle', 3328)
+
+        self.declare_parameter('ramp_vel', 50)
+        self.declare_parameter('ramp_acc', 3)
+
+        self.declare_parameter('max_load_value', 100)
+        self.declare_parameter('max_load_count', 7)
+
+        self.declare_parameter('motor_id_l', 12)
+        self.declare_parameter('motor_id_r', 13)
+
+        self.closed_angle = self.get_parameter('closed_angle').value
+        self.closed_angle = self.get_parameter('open_angle').value
+
+        self.closed_angle = self.get_parameter('ramp_vel').value
+        self.closed_angle = self.get_parameter('ramp_acc').value
+
+        self.closed_angle = self.get_parameter('max_load_value').value
+        self.closed_angle = self.get_parameter('max_load_count').value
+
+        self.closed_angle = self.get_parameter('motor_id_l').value
+        self.closed_angle = self.get_parameter('motor_id_r').value
+
         self.current_ramp_state = 'Closed'
-        self.current_angle = 2020
+        self.current_angle = self.closed_angle
         self.current_load = 0
         self.is_moving = False
 
@@ -42,9 +69,9 @@ class RampControlServer(Node):
             "ramp_control", self.execute_callback, callback_group=self.action_cb_group
         )
 
-        self.motor=MirrorMotorControl('/dev/open_rb_ramp',12,13)
-        self.motor.set_profile_acc(3)
-        self.motor.set_profile_vel(50)
+        self.motor=MirrorMotorControl('/dev/open_rb_ramp', self.motor_id_l, self.motor_id_r)
+        self.motor.set_profile_acc(self.ramp_acc)
+        self.motor.set_profile_vel(self.ramp_vel)
 
     def timer_callback(self):
         # 타이머 콜백 함수
@@ -65,8 +92,8 @@ class RampControlServer(Node):
                     time.sleep(1)
                     self.motor.set_torque()
                     time.sleep(0.5)
-                    self.motor.set_profile_acc(3)
-                    self.motor.set_profile_vel(50)
+                    self.motor.set_profile_acc(self.ramp_acc)
+                    self.motor.set_profile_vel(self.ramp_vel)
                     self.motor.set_angle(self.goal_angle)
                 # 기존 코드
                 self.current_angle , _ = self.motor.read_angle()
@@ -75,7 +102,7 @@ class RampControlServer(Node):
                     pass
                 else:
                     self.is_moving = False
-                    self.current_ramp_state = 'Closed' if (self.goal_angle == 2048 or self.current_angle < 2700) else 'Open'
+                    self.current_ramp_state = 'Closed' if (self.goal_angle == self.closed_angle or self.current_angle < 2700) else 'Open'
         except Exception as e:
             self.get_logger().error(f"Error while checking motor status: {e}")
 
@@ -103,10 +130,10 @@ class RampControlServer(Node):
 
         # 입력값에 따른 실행 구분
         if goal_state in ['Open', 'open', 'o', 'opened', 'O', 'OPEN']:
-            self.goal_angle = 3328
+            self.goal_angle = self.open_angle
             self.get_logger().info("Opening the ramp!")
         elif goal_state in ['close', 'Close', 'c', 'closed', 'C', 'CLOSE']:
-            self.goal_angle = 2020
+            self.goal_angle = self.closed_angle
             self.current_ramp_state = 'Closed'
             self.get_logger().info("Closing the ramp!")
         else:
@@ -127,9 +154,9 @@ class RampControlServer(Node):
             time.sleep(0.05) 
             feedback_msg.current_angle = self.current_angle
             feedback_msg.current_load = self.current_load
-            if self.current_load > 100:
+            if self.current_load > self.max_load_value:
                 load_count = load_count + 1
-                if load_count > 7 :
+                if load_count > self.max_load_count :
                     self.get_logger().info("Motor overload. Stop motor.")
                     target_angle = self.current_angle
                     self.goal_angle = target_angle-int(self.current_load/2)
