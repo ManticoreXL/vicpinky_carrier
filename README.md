@@ -2,7 +2,7 @@
 > 다중 로봇 협력형 재난 현장 구호활동 조력 로봇 시스템
 
 ## Demo
-[![최종 데모 영상](assets/demos/demo_preview.webp)](assets/demos/final_demo_subtitled.mp4)
+[![최종 데모 영상](https://img.youtube.com/vi/osSID7h3-i8/maxresdefault.jpg)](https://youtu.be/osSID7h3-i8)
 
 ## Overview
 VicPinky Carrier는 건물 붕괴 등 인력 투입이 어려운 협소 공간에 소형 로봇을 다수 투입하여 내부를 수색해 요구조자를 식별하고 구호품 전달이 가능한 구호 로봇 시스템입니다. 
