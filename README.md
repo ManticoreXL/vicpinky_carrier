@@ -2,30 +2,37 @@
 > 다중 로봇 협력형 재난 현장 구호활동 조력 로봇 시스템
 
 ## Demo
-<!--데모 시나리오
-1. 불꺼진 403호로 빅핑키 투입
-2. 빅핑키 경사로 개방
-3. 탐사용 터틀봇 플래시켜고 투입
-4. 자율 탐사 시작 + 관제 화면도 같이
-5. 요구조자 발견
-6. TTS/STT로 의사소통
-7. 빅핑키에서 OMX로 구호품 상차
-8. 관제에서 요구조자 구호품 전달 명령
-9. 요구조자에게 구호품 전달
-10. 터틀봇 전부 빅핑키 앞으로 복귀
-11. 라인트레이싱으로 회수 및 내부 주차
-12. 빅핑키 경사로 폐쇄
-13. 빅핑키 철수 -->
-Coming Soon...
-
+[![최종 데모 영상](assets/demos/demo_preview.webp)](assets/demos/final_demo_subtitled.mp4)
 
 ## Overview
 VicPinky Carrier는 건물 붕괴 등 인력 투입이 어려운 협소 공간에 소형 로봇을 다수 투입하여 내부를 수색해 요구조자를 식별하고 구호품 전달이 가능한 구호 로봇 시스템입니다. 
 
 
 ## System Architecture
-Coming Soon...
+### 전체 시스템 다이어그램
+![전체 시스템 다이어그램](assets/diagrams/system_diagram.drawio.png)
 
+### 로봇 다이어그램
+![로봇 다이어그램](assets/diagrams/robot_diagram.drawio.png)
+
+### 동작 시퀀스
+![전체 시퀀스](assets/diagrams/sequence_full.drawio.png)
+
+<details>
+<summary>파트별 시퀀스 상세 보기</summary>
+#### Part 1
+ 
+![시퀀스 파트 1](assets/diagrams/sequence_part1.drawio.png)
+ 
+#### Part 2
+ 
+![시퀀스 파트 2](assets/diagrams/sequence_part2.drawio.png)
+ 
+#### Part 3
+ 
+![시퀀스 파트 3](assets/diagrams/sequence_part3.drawio.png)
+ 
+</details>
 
 ## Key Features
 ### Turtlebot
@@ -146,7 +153,24 @@ https://github.com/user-attachments/assets/6f7efe83-0220-42bc-89b3-1b40f406feb6
 </div>
 경사로는 장착된 DYNAMIXEL 모터 2개로 개폐하며, 경사로를 내려 터틀봇을 출입시킵니다. 터틀봇을 회수할 때는 경사로에 그어진 라인을 따라 라인트레이싱으로 올라오게 할 수 있습니다. 이렇게 진입한 터틀봇이 내부 카메라에 포착되면 주차 관제가 가능한 상태가 됩니다.
 
-(내부 주차 Webm)
+<div align="center">
+  <table>
+    <tr>
+      <td align="center" width="33%">
+        <img src="assets/features/vicpinky/vicpinky_parking1.webp" width="100%"/><br/>
+        <sub><b>주차 관제 1</b></sub>
+      </td>
+      <td align="center" width="33%">
+        <img src="assets/features/vicpinky/vicpinky_parking2.webp" width="100%"/><br/>
+        <sub><b>주차 관제 2</b></sub>
+      </td>
+      <td align="center" width="33%">
+        <img src="assets/features/vicpinky/vicpinky_parking3.webp" width="100%"/><br/>
+        <sub><b>주차 관제 3</b></sub>
+      </td>
+    </tr>
+  </table>
+</div>
 주차 관제는 OpenCV와 ArUco 마커 인식을 기반으로 터틀봇을 목표 지점까지 정밀 이동시키며, OMX 매니퓰레이터가 구호품을 상차하기 좋은 위치로 이동시킬 수도 있습니다.
 
 ### OMX Manipulator
