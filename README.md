@@ -311,12 +311,12 @@ colcon build
 | 프로필 | 이름 | 담당 역할 |
 |:---:|:---:|---|
 | <img src="https://github.com/Kor-JasonKim.png" width="100"/> | [김권](https://github.com/Kor-JasonKim) | 자율 탐사 알고리즘 및 SLAM 기반 맵 생성 개발 |
-| <img src="https://github.com/0307102bj41-afk.png" width="100"/> | [김동석](https://github.com/0307102bj41-afk) | ArUco 기반 주차 관제 및 자율 상·하차 시스템 개발 |
+| <img src="https://github.com/0307102bj41-afk.png" width="100"/> | [김동석](https://github.com/0307102bj41-afk) | ArUco 기반 주차 관제 및 자율 상하차 시스템 개발 |
 | <img src="https://github.com/kdm111.png" width="100"/> | [박준수](https://github.com/kdm111) | FMS 통합 관제 시스템 설계 및 개발 |
-| <img src="https://github.com/JH010918.png" width="100"/> | [명지훈](https://github.com/JH010918) | OMX 매니퓰레이터 개발 (모방학습 및 추론 파이프라인) |
+| <img src="https://github.com/JH010918.png" width="100"/> | [명지훈](https://github.com/JH010918) | OMX 매니퓰레이터 시스템 개발 (모방학습 및 추론 파이프라인) |
 | <img src="https://github.com/miggh2.png" width="100"/> | [이경환](https://github.com/miggh2) | 로봇 간 협력 제어 시퀀스 설계 및 개발 |
-| <img src="https://github.com/ManticoreXL.png" width="100"/> | [최민석](https://github.com/ManticoreXL) | 프로젝트 매니저 · TurtleBot3 개조 및 하드웨어 제어 개발 |
-| <img src="https://github.com/chiya0123.png" width="100"/> | [최민지](https://github.com/chiya0123) | VicPinky 개조 및 주행 제어 패키지 개발 |
+| <img src="https://github.com/ManticoreXL.png" width="100"/> | [최민석](https://github.com/ManticoreXL) | 프로젝트 매니저, TurtleBot3 개조 및 하드웨어 제어 패키지 개발 |
+| <img src="https://github.com/chiya0123.png" width="100"/> | [최민지](https://github.com/chiya0123) | VicPinky 개조 및 하드웨어 제어 패키지 개발 |
 
 
 ## License
